@@ -1,0 +1,167 @@
+/* The Sync button beside ⚙: pull the sheet in without opening it.
+
+   Two paths. When the script can push to GitHub it republishes data.json and
+   the page reloads that; when it cannot, the entries come back inline and last
+   only for the visit. Both are checked here, plus the duplicate that would
+   otherwise appear once a word of mine comes back as an ordinary entry. */
+const fs = require('fs');
+const path = require('path');
+const vm = require('vm');
+const { read, boot, ok, done, wait, click, addWord, unlockedStore, BACKUP_KEY } = require('./helpers');
+
+const shell = read('docs/index.html');
+const CFG = {
+  sheetUrl: 'https://docs.google.com/spreadsheets/d/ABC/edit',
+  webApp: 'https://script.google.com/macros/s/XYZ/exec',
+  key: 'a-secret-key',
+};
+const REAL = JSON.parse(read('docs/data.json'));
+
+/** A page whose POSTs are answered by `reply`, and whose data.json fetches
+ *  return whatever `dataNow()` currently says. */
+function page(store, posts, reply, dataNow) {
+  return boot({
+    html: shell, full: true, store,
+    url: 'https://nhutrang0209.github.io/EngrowDict/',
+    fetchStub: (url, opts) => {
+      if (opts && opts.method === 'POST') {
+        posts.push({ url, body: JSON.parse(opts.body) });
+        return Promise.resolve({ ok: true, json: () => Promise.resolve(reply()) });
+      }
+      return Promise.resolve({ ok: true, status: 200, url, json: () => Promise.resolve(dataNow()) });
+    },
+  });
+}
+
+(async () => {
+  /* --- hidden until the sync link is configured ------------------------ */
+  const bare = page(unlockedStore(), [], () => ({ ok: true }), () => REAL);
+  await wait(900);
+  ok('no Sync button before the link is set', bare.doc.getElementById('sync-sheet').hidden);
+
+  /* --- the published path ---------------------------------------------- */
+  // the sheet gains one word that the site does not have yet
+  const grown = {
+    entries: REAL.entries.concat([{
+      id: 'sNEW', type: 'word', word: 'zugzwang', pos: 'n', ipa: '/ˈtsuːktsvaŋ/', note: '',
+      senses: [{ def: 'a position in which any move worsens things', eg: [], vi: 'thế bí' }],
+    }]),
+    readings: [],
+  };
+  let served = REAL;
+  const posts = [];
+  const a = page(unlockedStore(CFG), posts,
+    () => ({ ok: true, published: true, entries: grown.entries.length, error: null, data: null }),
+    () => served);
+  await wait(900);
+
+  ok('the Sync button sits next to Settings', (() => {
+    const acts = [...a.doc.querySelectorAll('.acts > *')].map(n => n.id || n.textContent.trim());
+    return acts.indexOf('sync-sheet') === acts.indexOf('settings-btn') - 1;
+  })(), [...a.doc.querySelectorAll('.acts > *')].map(n => n.id || n.textContent.trim()).join(' | '));
+  ok('it shows once the link is set', !a.doc.getElementById('sync-sheet').hidden);
+  ok('the site starts on the old data',
+     a.doc.getElementById('tally').textContent.includes('11,401'),
+     a.doc.getElementById('tally').textContent);
+
+  served = grown;                                  // GitHub now serves the new file
+  click(a.window, a.doc.getElementById('sync-sheet'));
+  await wait(400);
+
+  ok('Sync asks the script to sync', posts.length === 1 && posts[0].body.action === 'sync',
+     JSON.stringify(posts[0] && posts[0].body).slice(0, 60));
+  ok('the request carries the key', posts[0].body.key === CFG.key);
+  ok('the page picks up the republished data',
+     a.doc.getElementById('tally').textContent.includes('11,402'),
+     a.doc.getElementById('tally').textContent);
+  const q = a.doc.getElementById('q');
+  q.value = 'zugzwang';
+  q.dispatchEvent(new a.window.Event('input'));
+  await wait(30);
+  ok('the word added in the sheet is now searchable',
+     a.doc.querySelector('.hit .hw')?.textContent === 'zugzwang',
+     a.doc.querySelector('.hit .hw')?.textContent + ' — ' + a.doc.querySelector('.hit .gloss')?.textContent);
+  ok('the banner is cleared afterwards', a.doc.getElementById('banner').hidden);
+
+  /* --- no duplicate once my word comes back from the sheet ------------- */
+  let served2 = REAL;
+  const posts2 = [];
+  const b = page(unlockedStore(CFG), posts2,
+    () => ({ ok: true, published: true, entries: served2.entries.length, error: null, data: null }),
+    () => served2);
+  await wait(900);
+
+  addWord(b, { word: 'zugzwang', pos: 'n', def: 'a position where any move worsens things', vi: 'thế bí' });
+  await wait(250);
+  ok('my word is stored locally and marked as in the sheet',
+     JSON.parse(b.store[BACKUP_KEY])[0].inSheet === true,
+     b.doc.getElementById('tally').textContent);
+
+  served2 = grown;                                 // the sheet now carries it too
+  click(b.window, b.doc.getElementById('sync-sheet'));
+  await wait(400);
+  ok('after syncing it appears exactly once',
+     b.doc.getElementById('tally').textContent.includes('11,402'),
+     b.doc.getElementById('tally').textContent);
+  ok('  and is dropped from the local list', JSON.parse(b.store[BACKUP_KEY]).length === 0,
+     b.store[BACKUP_KEY]);
+
+  /* --- the fallback path: nothing to push to --------------------------- */
+  const posts3 = [];
+  const c = page(unlockedStore(CFG), posts3, () => ({
+    ok: true, published: false, entries: grown.entries.length,
+    error: 'No GitHub repo set up yet — use EngrowDict → Set up GitHub repo.',
+    data: grown,
+  }), () => REAL);
+  await wait(900);
+  click(c.window, c.doc.getElementById('sync-sheet'));
+  await wait(300);
+  ok('with no repo set up the entries still arrive',
+     c.doc.getElementById('tally').textContent.includes('11,402'),
+     c.doc.getElementById('tally').textContent);
+  ok('  and the page says it only lasts this visit',
+     c.doc.getElementById('banner').textContent.includes('this visit only'),
+     c.doc.getElementById('banner').textContent.slice(0, 90));
+  ok('  and passes on why', c.doc.getElementById('banner').textContent.includes('Set up GitHub repo'));
+
+  /* --- the script side: sync uses the same reader as the menu ---------- */
+  const grids = JSON.parse(fs.readFileSync(path.join(__dirname, 'grids.json'), 'utf8'));
+  const props = { SOTRATU_KEY: CFG.key };          // deliberately no repo or token
+  const sandbox = {
+    SpreadsheetApp: {
+      getActiveSpreadsheet: () => ({
+        getSheetByName: name => grids[name] ? {
+          getLastRow: () => grids[name].length,
+          getLastColumn: () => 4,
+          getRange: () => ({ getDisplayValues: () => grids[name] }),
+        } : null,
+      }),
+    },
+    PropertiesService: { getScriptProperties: () => ({ getProperty: k => props[k] || null }) },
+    LockService: { getScriptLock: () => ({ waitLock: () => {}, releaseLock: () => {} }) },
+    ContentService: { MimeType: { JSON: 'json' }, createTextOutput: t => ({ setMimeType: () => t }) },
+    console,
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(read('sheet-sync.gs') + '\nthis.__doPost = doPost;', sandbox);
+  const res = JSON.parse(sandbox.__doPost({
+    postData: { contents: JSON.stringify({ key: CFG.key, action: 'sync' }) },
+  }));
+
+  ok('doPost handles the sync action', res.ok === true);
+  ok('  reports it could not publish, and why',
+     res.published === false && /GitHub repo/.test(res.error), res.error);
+  ok('  returns the whole sheet inline instead',
+     !!res.data && res.data.entries.length === 11401,
+     res.data ? res.data.entries.length + ' entries' : 'nothing');
+  ok('  with no reading passages in it', res.data.readings.length === 0);
+  ok('  read by the same code as the menu item',
+     res.data.entries[0].word === JSON.parse(read('dataset.json')).entries[0].word,
+     res.data.entries[0].word);
+  ok('a wrong key still gets nothing',
+     JSON.parse(sandbox.__doPost({
+       postData: { contents: JSON.stringify({ key: 'nope', action: 'sync' }) },
+     })).ok === false);
+
+  done(a.errs.concat(b.errs, c.errs, bare.errs));
+})();

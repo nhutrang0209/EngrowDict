@@ -1348,6 +1348,59 @@ a.btn[hidden] { display: none; }
     });
   }
 
+  /* Pull the sheet in. The script republishes data.json and the page reloads
+     it; if the repo is not set up, the entries come back inline instead and
+     only last for this visit. */
+  function syncFromSheet() {
+    if (!canWriteSheet()) { openSettings(true); return; }
+    var b = document.getElementById("sync-sheet");
+    b.disabled = true;
+    banner("Reading the sheet…", null, null);
+    callSheet({ action: "sync" }).then(function (res) {
+      if (res.published) {
+        banner("Sheet read, " + plural(res.entries, "entry", "entries")
+          + " published. Loading the new copy…", null, null);
+        return fetch("data.json?ts=" + Date.now(), { cache: "reload" })
+          .then(function (r) {
+            if (!r.ok) throw new Error("data.json " + r.status);
+            return r.json();
+          })
+          .then(function (fresh) {
+            applySync(fresh, res.entries);
+            document.getElementById("banner").hidden = true;
+            toast("Synced " + plural(res.entries, "entry", "entries") + " from the sheet");
+          }, function () {
+            banner("The sheet was published, but the site is still serving the old copy — "
+              + "GitHub takes up to a minute. Reload the page shortly.", null, null);
+          });
+      }
+      if (res.data && res.data.entries) {
+        applySync(res.data, res.entries);
+        banner("Showing " + plural(res.entries, "entry", "entries")
+          + " read straight from the sheet, for this visit only. " + (res.error || ""),
+          null, null);
+        return;
+      }
+      banner("Could not read the sheet: " + (res.error || "unknown reason"),
+        "Try again", syncFromSheet);
+    }, function (err) {
+      banner("Could not reach the sheet: " + (err && err.message ? err.message : err),
+        "Try again", syncFromSheet);
+    }).then(function () { b.disabled = false; });
+  }
+
+  /* Words of mine that already reached the sheet now arrive as ordinary
+     entries, so drop them from the local list to avoid showing both. */
+  function applySync(fresh, count) {
+    BASE = { entries: fresh.entries, readings: BASE.readings || [] };
+    var before = ADDED.length;
+    ADDED = ADDED.filter(function (e) { return !e.inSheet; });
+    if (ADDED.length !== before) writeBackup(ADDED);
+    selectedId = null;
+    rebuild();
+    refresh();
+  }
+
   function removeEntry(e) {
     if (!window.confirm("Remove “" + e.word + "” from the notebook?")) return;
     var next = ADDED.filter(function (x) { return x.id !== e.id; });
@@ -1514,6 +1567,8 @@ a.btn[hidden] { display: none; }
       push.hidden = !n;
       push.textContent = "Write " + plural(n, "word", "words") + " to sheet";
     }
+    var sync = document.getElementById("sync-sheet");
+    if (sync) sync.hidden = !canWriteSheet();
     var row = document.getElementById("to-sheet-row");
     if (row) row.hidden = !canWriteSheet();
   }
@@ -1594,6 +1649,14 @@ a.btn[hidden] { display: none; }
     exp.type = "button";
     exp.addEventListener("click", exportJson);
     acts.appendChild(exp);
+
+    var sync = el("button", "btn", "Sync from sheet");
+    sync.type = "button";
+    sync.id = "sync-sheet";
+    sync.hidden = true;
+    sync.title = "Read the Google Sheet and refresh this page from it";
+    sync.addEventListener("click", syncFromSheet);
+    acts.appendChild(sync);
 
     var gear = el("button", "btn btn-quiet", "⚙");
     gear.type = "button";

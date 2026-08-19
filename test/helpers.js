@@ -47,7 +47,10 @@ function boot(opts) {
       w.URL.createObjectURL = () => 'blob:fake';
       w.URL.revokeObjectURL = () => {};
       w.scrollTo = () => {};
-      if (opts.dataFile) {
+      // fetch has to exist before the page's own scripts run
+      if (opts.fetchStub) {
+        w.fetch = opts.fetchStub;
+      } else if (opts.dataFile) {
         w.fetch = () => Promise.resolve({
           ok: true,
           status: 200,

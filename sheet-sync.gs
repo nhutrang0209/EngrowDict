@@ -150,6 +150,7 @@ function doPost(e) {
     var key = PropertiesService.getScriptProperties().getProperty(PROP_KEY);
     if (!key || body.key !== key) return out({ ok: false, error: 'Wrong key' });
     if (body.action === 'ping') return out({ ok: true, pong: true });
+    if (body.action === 'sync') return out(syncForWeb());
     if (body.action !== 'add') return out({ ok: false, error: 'Unknown request' });
 
     var lock = LockService.getScriptLock();
@@ -251,37 +252,65 @@ function insertEntry(entry) {
 
 /* ---------------------------------------------------------------- publish */
 
-function syncToWeb() {
-  var ui = SpreadsheetApp.getUi();
+/** Read the sheet and push it to the repo. Shared by the menu item and by the
+ *  Sync button on the web page, so both take exactly the same path. */
+function publishToRepo() {
   var props = PropertiesService.getScriptProperties();
   var repo = props.getProperty(PROP_REPO);
   var token = props.getProperty(PROP_TOKEN);
   var branch = props.getProperty(PROP_BRANCH) || 'main';
-  if (!repo || !token) { setupRepo(); return; }
 
-  SpreadsheetApp.getActiveSpreadsheet().toast('Reading the sheet…', 'EngrowDict', 30);
   var data = buildData();
   if (!data.entries.length) {
-    ui.alert('No entries could be read. Check the tab names.');
-    return;
+    return { ok: false, error: 'No entries could be read. Check the tab names.' };
   }
-  var json = JSON.stringify({ entries: data.entries, readings: [] });
-
-  SpreadsheetApp.getActiveSpreadsheet().toast('Uploading to GitHub…', 'EngrowDict', 60);
+  var payload = { entries: data.entries, readings: [] };
+  if (!repo || !token) {
+    return { ok: true, published: false, entries: data.entries.length, payload: payload,
+             error: 'No GitHub repo set up yet — use EngrowDict → Set up GitHub repo.' };
+  }
+  var json = JSON.stringify(payload);
   var sha = shaOf(repo, token, branch, TARGET);
   var res = ghPut(repo, token, branch, TARGET, json, sha,
     'Sync from Google Sheet: ' + data.entries.length + ' entries');
-
   if (res.code === 200 || res.code === 201) {
+    return { ok: true, published: true, entries: data.entries.length };
+  }
+  return { ok: true, published: false, entries: data.entries.length, payload: payload,
+           error: 'GitHub answered ' + res.code + '. ' + String(res.body).slice(0, 160) };
+}
+
+/** What the web page's Sync button calls. When the push cannot happen, the
+ *  entries come back inline so the page can at least show them right away. */
+function syncForWeb() {
+  var r = publishToRepo();
+  if (!r.ok) return r;
+  return {
+    ok: true,
+    published: !!r.published,
+    entries: r.entries,
+    error: r.error || null,
+    data: r.published ? null : r.payload,
+  };
+}
+
+function syncToWeb() {
+  var ui = SpreadsheetApp.getUi();
+  var props = PropertiesService.getScriptProperties();
+  if (!props.getProperty(PROP_REPO) || !props.getProperty(PROP_TOKEN)) { setupRepo(); return; }
+
+  SpreadsheetApp.getActiveSpreadsheet().toast('Reading the sheet…', 'EngrowDict', 30);
+  var r = publishToRepo();
+  if (!r.ok) { ui.alert(r.error); return; }
+
+  if (r.published) {
     ui.alert('Published',
-      data.entries.length + ' entries are on the web.\n\n'
+      r.entries + ' entries are on the web.\n\n'
       + 'GitHub Pages redeploys in about 30–60 seconds. If the page still looks '
       + 'the same, reload with Ctrl+F5.',
       ui.ButtonSet.OK);
   } else {
-    ui.alert('Upload failed',
-      'GitHub answered ' + res.code + '.\n\n' + String(res.body).slice(0, 400),
-      ui.ButtonSet.OK);
+    ui.alert('Upload failed', r.error, ui.ButtonSet.OK);
   }
 }
 
