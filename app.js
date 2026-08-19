@@ -19,13 +19,15 @@
   var OVERSCAN = 6;
 
   var KINDS = {
-    word:       { label: "Word",         filter: "Words" },
-    phrasal:    { label: "Phrasal verb", filter: "Phrasal" },
-    idiom:      { label: "Idiom",        filter: "Idioms" },
-    expression: { label: "Expression",   filter: "Expressions" },
-    compare:    { label: "Easily mixed up", filter: "Mixed up" }
+    word:       { label: "Word",            filter: "Words" },
+    phrasal:    { label: "Phrasal verb",    filter: "Phrasal" },
+    idiom:      { label: "Idiom",           filter: "Idioms" },
+    expression: { label: "Common",          filter: "Common" },
+    compare:    { label: "Easily mixed up", filter: "" }
   };
   var KIND_ORDER = ["word", "phrasal", "idiom", "expression", "compare"];
+  // the filter row mirrors the sheet's own tabs, and nothing else
+  var CHIP_KINDS = ["word", "phrasal", "idiom", "expression"];
   var ALPHABET = "abcdefghijklmnopqrstuvwxyz".split("");
 
   /* ---- state ------------------------------------------------------------ */
@@ -624,13 +626,44 @@
     return m.wrap;
   }
 
-  /* The Passages toggle, and what the search box says it will search. */
+  /* Two views, two tabs — the dictionary and the passages are separate places
+     rather than a switch on one place. */
+  var TABS = [["vocab", "Dictionary", "tab-dictionary"], ["read", "Passages", "tab-passages"]];
+
+  function buildTabs() {
+    var strip = el("div", "tabs");
+    strip.id = "tabs";
+    strip.setAttribute("role", "tablist");
+    TABS.forEach(function (t) {
+      var b = el("button", "tab", t[1]);
+      b.type = "button";
+      b.id = t[2];
+      b.setAttribute("role", "tab");
+      b.dataset.view = t[0];
+      b.addEventListener("click", function () {
+        if (view === t[0]) return;
+        view = t[0];
+        selectedRead = null;
+        selectedId = null;
+        query = "";
+        if (qInput) qInput.value = "";
+        syncViewButtons();
+        refresh();
+      });
+      strip.appendChild(b);
+    });
+    return strip;
+  }
+
+  /* Which tab is lit, and what the search box says it will search. */
   function syncViewButtons() {
-    var rd = document.getElementById("view-read");
-    if (rd) {
-      rd.hidden = !READINGS.length;
-      rd.setAttribute("aria-pressed", String(view === "read"));
-      rd.className = view === "read" ? "btn btn-primary" : "btn";
+    var strip = document.getElementById("tabs");
+    if (strip) {
+      var bs = strip.querySelectorAll(".tab");
+      for (var i = 0; i < bs.length; i++) {
+        bs[i].setAttribute("aria-selected", String(bs[i].dataset.view === view));
+        bs[i].hidden = bs[i].dataset.view === "read" && !READINGS.length;
+      }
     }
     if (qInput) {
       qInput.placeholder = view === "read"
@@ -1174,9 +1207,6 @@
     drawAlpha();
     drawDetail();
     refreshChrome();
-    document.getElementById("tally").textContent =
-      plural(entries.length, "entry", "entries") + " · " + fmt(senseCount(entries)) + " senses"
-      + (READINGS.length ? " · " + fmt(READINGS.length) + " passages" : "");
   }
 
   function drawCount() {
@@ -1200,8 +1230,7 @@
     var box = document.getElementById("chips");
     box.hidden = view === "read";
     box.textContent = "";
-    var defs = [["all", "All"]].concat(KIND_ORDER.map(function (k) { return [k, KINDS[k].filter]; }));
-    if (counts.mine) defs.push(["mine", "Mine"]);
+    var defs = [["all", "All"]].concat(CHIP_KINDS.map(function (k) { return [k, KINDS[k].filter]; }));
     defs.forEach(function (d) {
       if (d[0] !== "all" && !counts[d[0]]) return;
       var b = el("button", "chip");
@@ -1269,10 +1298,8 @@
     var top = el("header", "top");
     var brand = el("div", "brand");
     brand.appendChild(el("span", "mark", "EngrowDict"));
-    var tally = el("span", "tally");
-    tally.id = "tally";
-    brand.appendChild(tally);
     top.appendChild(brand);
+    top.appendChild(buildTabs());
 
     var back = el("button", "btn btn-quiet back", "← List");
     back.type = "button";
@@ -1297,20 +1324,6 @@
     /* The bar carries what gets used constantly; the rest lives under ⋯, so
        five things sit here rather than eight. */
     var acts = el("div", "acts");
-
-    var rd = el("button", "btn", "Passages");
-    rd.type = "button";
-    rd.id = "view-read";
-    rd.hidden = true;
-    rd.setAttribute("aria-pressed", "false");
-    rd.addEventListener("click", function () {
-      view = view === "read" ? "vocab" : "read";
-      selectedRead = null;
-      selectedId = null;
-      syncViewButtons();
-      refresh();
-    });
-    acts.appendChild(rd);
 
     var add = el("button", "btn btn-primary", "+ Add word");
     add.type = "button";

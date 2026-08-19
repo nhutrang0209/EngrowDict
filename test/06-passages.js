@@ -40,8 +40,8 @@ ok('the shell itself stays light', shell.length < 160000,
   await wait(900);
   const { doc, window: w } = a;
 
-  ok('the Passages button appears', !doc.getElementById('view-read').hidden);
-  click(w, btn(doc, '.acts .btn', 'Passages'));
+  ok('the Passages button appears', !doc.getElementById('tab-passages').hidden);
+  click(w, doc.getElementById('tab-passages'));
   await wait(30);
   ok('switching to passages lists them',
      doc.getElementById('count').textContent.includes('passage'),

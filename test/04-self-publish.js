@@ -41,7 +41,7 @@ const { read, boot, ok, done, wait, click, addWord, unlockedStore,
   await wait(800);
 
   ok('the new version runs', !!b.doc.querySelector('.top .mark'),
-     b.doc.getElementById('tally').textContent);
+     b.doc.getElementById('count').textContent);
   const q = b.doc.getElementById('q');
   q.value = 'kerfuffle';
   q.dispatchEvent(new b.window.Event('input'));

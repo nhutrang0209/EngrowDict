@@ -23,16 +23,16 @@ const mk = () => boot({
 
   ok('no claude runtime here', typeof w.claude === 'undefined');
   ok('it loads and builds', !!doc.querySelector('.top .mark'),
-     doc.getElementById('tally').textContent);
-  ok('all the data arrived', doc.getElementById('tally').textContent.includes('11,401'),
-     doc.getElementById('tally').textContent);
+     doc.getElementById('count').textContent);
+  ok('all the data arrived', doc.getElementById('count').textContent.includes('11,401'),
+     doc.getElementById('count').textContent);
   ok('the add button is available once unlocked',
      doc.getElementById('add-word').textContent === '+ Add word');
   ok('no read-only notice', doc.getElementById('banner').hidden);
   ok('the opening screen says where words are kept',
      [...doc.querySelectorAll('.blank p')].some(p => p.textContent.includes('this browser')));
   ok('the Passages button is offered',
-     !doc.getElementById('view-read').hidden,
+     !doc.getElementById('tab-passages').hidden,
      [...doc.querySelectorAll('.acts .btn')].map(b => b.textContent).join(' | '));
 
   const dlg = addWord(a, {
@@ -50,14 +50,14 @@ const mk = () => boot({
      doc.querySelector('.headword')?.textContent + ' — ' + doc.querySelector('.vi')?.textContent);
   ok('it is written to localStorage', !!store[BACKUP_KEY],
      (store[BACKUP_KEY] || '').slice(0, 58));
-  ok('the total goes up by one', doc.getElementById('tally').textContent.includes('11,402'),
-     doc.getElementById('tally').textContent);
+  ok('the total goes up by one', doc.getElementById('count').textContent.includes('11,402'),
+     doc.getElementById('count').textContent);
 
   const b = mk();
   await wait(900);
   ok('the word survives a page reload',
-     b.doc.getElementById('tally').textContent.includes('11,402'),
-     b.doc.getElementById('tally').textContent);
+     b.doc.getElementById('count').textContent.includes('11,402'),
+     b.doc.getElementById('count').textContent);
   const q = b.doc.getElementById('q');
   q.value = 'mui dat sau mua';
   q.dispatchEvent(new b.window.Event('input'));
@@ -70,8 +70,11 @@ const mk = () => boot({
   b.window.confirm = () => true;
   deleteWord(b);
   await wait(150);
-  ok('deleting works', b.doc.getElementById('tally').textContent.includes('11,401'),
-     b.doc.getElementById('tally').textContent);
+  q.value = '';                       // the count line reports the current filter
+  q.dispatchEvent(new b.window.Event('input'));
+  await wait(30);
+  ok('deleting works', b.doc.getElementById('count').textContent.includes('11,401'),
+     b.doc.getElementById('count').textContent);
   ok('localStorage is empty again', store[BACKUP_KEY] === '[]', store[BACKUP_KEY]);
 
   done(a.errs.concat(b.errs));

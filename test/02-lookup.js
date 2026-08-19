@@ -9,7 +9,7 @@ const { read, boot, ok, done, wait, click, type, btn } = require('./helpers');
   const q = doc.getElementById('q');
 
   ok('page builds', !!doc.querySelector('.top .mark'),
-     doc.getElementById('tally').textContent);
+     doc.getElementById('count').textContent);
   ok('the list has rows', doc.querySelectorAll('.hit').length > 0,
      doc.querySelectorAll('.hit').length + ' rows built, ' +
      doc.getElementById('count').textContent);
@@ -95,7 +95,7 @@ const { read, boot, ok, done, wait, click, type, btn } = require('./helpers');
      'marks ' + [...doc.querySelectorAll('.letter-mark')].map(n => n.textContent).join('') +
      ', e.g. ' + shown.filter(t => t.startsWith('z')).slice(0, 3).join(', '));
 
-  click(w, btn(doc, '.acts .btn', 'Passages'));
+  click(w, doc.getElementById('tab-passages'));
   await wait(20);
   ok('switching to the passages', doc.getElementById('count').textContent.includes('passage'),
      doc.getElementById('count').textContent);

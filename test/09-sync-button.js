@@ -62,8 +62,8 @@ function page(store, posts, reply, dataNow) {
   })(), [...a.doc.querySelectorAll('.acts > *')].map(n => n.id || n.textContent.trim()).join(' | '));
   ok('it shows once the link is set', !a.doc.getElementById('sync-sheet').hidden);
   ok('the site starts on the old data',
-     a.doc.getElementById('tally').textContent.includes('11,401'),
-     a.doc.getElementById('tally').textContent);
+     a.doc.getElementById('count').textContent.includes('11,401'),
+     a.doc.getElementById('count').textContent);
 
   served = grown;                                  // GitHub now serves the new file
   click(a.window, a.doc.getElementById('sync-sheet'));
@@ -73,8 +73,8 @@ function page(store, posts, reply, dataNow) {
      JSON.stringify(posts[0] && posts[0].body).slice(0, 60));
   ok('the request carries the key', posts[0].body.key === CFG.key);
   ok('the page picks up the republished data',
-     a.doc.getElementById('tally').textContent.includes('11,402'),
-     a.doc.getElementById('tally').textContent);
+     a.doc.getElementById('count').textContent.includes('11,402'),
+     a.doc.getElementById('count').textContent);
   const q = a.doc.getElementById('q');
   q.value = 'zugzwang';
   q.dispatchEvent(new a.window.Event('input'));
@@ -96,14 +96,14 @@ function page(store, posts, reply, dataNow) {
   await wait(250);
   ok('my word is stored locally and marked as in the sheet',
      JSON.parse(b.store[BACKUP_KEY])[0].inSheet === true,
-     b.doc.getElementById('tally').textContent);
+     b.doc.getElementById('count').textContent);
 
   served2 = grown;                                 // the sheet now carries it too
   click(b.window, b.doc.getElementById('sync-sheet'));
   await wait(400);
   ok('after syncing it appears exactly once',
-     b.doc.getElementById('tally').textContent.includes('11,402'),
-     b.doc.getElementById('tally').textContent);
+     b.doc.getElementById('count').textContent.includes('11,402'),
+     b.doc.getElementById('count').textContent);
   ok('  and is dropped from the local list', JSON.parse(b.store[BACKUP_KEY]).length === 0,
      b.store[BACKUP_KEY]);
 
@@ -118,8 +118,8 @@ function page(store, posts, reply, dataNow) {
   click(c.window, c.doc.getElementById('sync-sheet'));
   await wait(300);
   ok('with no repo set up the entries still arrive',
-     c.doc.getElementById('tally').textContent.includes('11,402'),
-     c.doc.getElementById('tally').textContent);
+     c.doc.getElementById('count').textContent.includes('11,402'),
+     c.doc.getElementById('count').textContent);
   ok('  and the page says it only lasts this visit',
      c.doc.getElementById('banner').textContent.includes('this visit only'),
      c.doc.getElementById('banner').textContent.slice(0, 90));
