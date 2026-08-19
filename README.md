@@ -51,10 +51,37 @@ lại sau vài chục giây, không phải chạy build gì trên máy.
 **Từ đó về sau:** sửa sheet → **Sổ Tra Từ → Đồng bộ lên web**. Muốn xem thử
 trước thì dùng **Xem thử số liệu (không đẩy)**.
 
-Lưu ý: đồng bộ chỉ chạy một chiều, sheet → web. Từ ai đó thêm trên web nằm trong
-trình duyệt của họ và không tự chảy ngược vào sheet. Bản Artifact cũng không đổi
-theo — muốn cập nhật thì chạy `python parse_sheet.py && python build.py` rồi
-publish lại `so-tra-tu.html`.
+Nút Đồng bộ chỉ cập nhật bản GitHub Pages. Bản Artifact muốn theo kịp thì chạy
+`python parse_sheet.py && python build.py` rồi publish lại `so-tra-tu.html`.
+
+## Thêm từ trên web, ghi thẳng vào sheet
+
+Chiều ngược lại đi qua cùng một Apps Script, nhưng dưới dạng Web App: trang web
+POST từ mới lên, script chèn vào đúng tab, đúng vị trí a→z, đúng định dạng mà
+sheet đang dùng (ô đầu dòng là `từ (từ loại)` xuống dòng `/phiên âm/`, mỗi nghĩa
+một dòng, dòng sau bỏ trống ô đầu).
+
+**Cài một lần**
+
+1. Trong Apps Script: **Triển khai → Bản triển khai mới → Ứng dụng web**,
+   "Người có quyền truy cập" chọn **Bất kỳ ai**, rồi Triển khai.
+2. Về sheet: **Sổ Tra Từ → Link cho web ghi từ vào sheet** — hiện ra link Web App
+   và một mã khoá.
+3. Mở web, bấm nút **⚙** trên thanh đầu trang, dán link sheet, link Web App và mã
+   khoá vào, bấm **Kiểm tra kết nối** rồi **Lưu**.
+
+Từ đó ô **Ghi thẳng vào sheet** hiện trong form thêm từ, mặc định bật. Từ nào
+chưa vào được sheet thì hiện nhãn *Chưa vào sheet*, và thanh đầu trang mọc nút
+**Ghi N từ vào sheet** để đẩy lại.
+
+**Vì sao phải dán thủ công thay vì nhúng sẵn vào trang:** trang web là công khai,
+nhúng link Web App vào đó nghĩa là bất kỳ ai mở trang cũng ghi được vào sheet của
+bạn. Cài đặt chỉ nằm trong `localStorage` của trình duyệt bạn dùng, không nằm
+trong repo, không nằm trong `data.json`. Người khác vẫn tra cứu và thêm từ bình
+thường — từ họ thêm chỉ nằm trong máy họ.
+
+Đường này chỉ chạy ở **bản web tĩnh**. Bản Artifact trên claude.ai bị chặn không
+cho gọi ra ngoài, nên hộp Cài đặt ở đó chỉ nói rõ điều này.
 
 ## Cấu trúc
 
@@ -83,7 +110,7 @@ python parse_sheet.py    # khi source.xlsx đổi (tải lại sheet về dạng
 cd test && npm install && npm test
 ```
 
-87 phép kiểm chạy trên một DOM giả (jsdom), phủ sáu mặt:
+117 phép kiểm chạy trên một DOM giả (jsdom), phủ bảy mặt:
 
 1. dữ liệu bóc ra đủ A–Z, đúng cấu trúc, không sót rác định dạng
 2. tra cứu, lọc, lật chữ cái, đi tới/lui, cuộn ảo
@@ -93,9 +120,16 @@ cd test && npm install && npm test
 5. bản công khai không lọt câu nào của bài đọc
 6. `sheet-sync.gs` và `parse_sheet.py` bóc ra dữ liệu giống hệt nhau từng chữ —
    phép kiểm quan trọng nhất, vì hai bản viết bằng hai ngôn ngữ khác nhau
+7. đường ghi ngược web → sheet: Settings lưu link đúng chỗ, thêm từ gửi đúng nội
+   dung, sheet từ chối thì không mất từ; và phía Apps Script chèn vào đúng tab,
+   đúng vị trí a→z — kiểm bằng cách bóc lại chính sheet đã bị chèn
 
-Phép kiểm số 6 cần `test/grids.json`, do `parse_sheet.py` sinh ra; thiếu tệp đó
-thì nó tự bỏ qua.
+Phép kiểm 6 và 7 cần `test/grids.json`, do `parse_sheet.py` sinh ra; thiếu tệp đó
+thì phép 6 tự bỏ qua.
+
+Google thật không bị đụng tới trong lúc test: `SpreadsheetApp` và `fetch` đều là
+đồ giả. Riêng việc triển khai Web App và chuyện CORS thì phải thử trên máy thật
+bằng nút **Kiểm tra kết nối**.
 
 ## Deploy
 

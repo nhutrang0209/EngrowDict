@@ -327,6 +327,7 @@ body {
   border: 1px solid var(--rule); border-radius: 999px; padding: 2px 8px;
 }
 .kind-mine { color: var(--flag); border-color: var(--flag); }
+.kind-sheet { color: var(--accent-hi); border-color: var(--accent); }
 .note { margin-top: 12px; font-size: 13px; color: var(--muted); font-style: italic; }
 
 .senses { margin-top: 30px; display: flex; flex-direction: column; }
@@ -456,7 +457,21 @@ dialog::backdrop { background: rgba(8, 16, 12, .55); }
 .field input:focus, .field select:focus, .field textarea:focus {
   outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft);
 }
-.field input.mono { font-family: var(--mono); }
+.field input.mono { font-family: var(--mono); font-size: 12.5px; }
+.field .hint { font-size: 11.5px; color: var(--faint); line-height: 1.45; }
+.set-note {
+  font-size: 12.5px; color: var(--muted); line-height: 1.6;
+  padding: 12px 14px; border-radius: 10px;
+  background: var(--ground); border: 1px solid var(--hair);
+}
+.checkrow {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 12.5px; color: var(--muted); cursor: pointer;
+}
+.checkrow[hidden] { display: none; }
+.checkrow input { accent-color: var(--accent); width: 14px; height: 14px; }
+a.btn { text-decoration: none; }
+a.btn[hidden] { display: none; }
 .sense-edit {
   border: 1px solid var(--rule); border-radius: 11px;
   padding: 14px; display: flex; flex-direction: column; gap: 12px; background: var(--ground);
@@ -526,6 +541,7 @@ dialog::backdrop { background: rgba(8, 16, 12, .55); }
 
   var FONT_URL = "https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;450;500;600&display=swap";
   var BACKUP_KEY = "so-tra-tu:added:v1";
+  var SETTINGS_KEY = "so-tra-tu:settings:v1";
   var ROW_H = 58;          // phải khớp .hit trong app.css
   var MARK_H = 26;         // phải khớp .letter-mark
   var OVERSCAN = 6;
@@ -619,6 +635,45 @@ dialog::backdrop { background: rgba(8, 16, 12, .55); }
   }
   function writeBackup(list) {
     try { localStorage.setItem(BACKUP_KEY, JSON.stringify(list)); } catch (err) { /* đầy bộ nhớ */ }
+  }
+
+  /* ---- cài đặt: link sheet + link ghi ngược ----------------------------- */
+  /* Chỉ nằm trong trình duyệt này. Ai mở trang mà không có link thì không
+     ghi được vào sheet — đó là điều giữ cho sheet của bạn không ai sửa được. */
+  var settings = { sheetUrl: "", webApp: "", key: "" };
+
+  function readSettings() {
+    try {
+      var raw = localStorage.getItem(SETTINGS_KEY);
+      if (raw) {
+        var s = JSON.parse(raw);
+        settings.sheetUrl = s.sheetUrl || "";
+        settings.webApp = s.webApp || "";
+        settings.key = s.key || "";
+      }
+    } catch (err) { /* bỏ qua */ }
+  }
+  function writeSettings() {
+    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch (err) { /* bỏ qua */ }
+  }
+  function canWriteSheet() {
+    return MODE === "static" && !!settings.webApp && !!settings.key;
+  }
+
+  /* Apps Script chấp nhận POST không kèm header lạ, nên không phát sinh
+     preflight; gửi chuỗi thường là đủ. */
+  function callSheet(payload) {
+    payload.key = settings.key;
+    return fetch(settings.webApp, {
+      method: "POST",
+      body: JSON.stringify(payload),
+      redirect: "follow"
+    }).then(function (r) {
+      return r.json();
+    }).then(function (res) {
+      if (!res || !res.ok) throw new Error((res && res.error) || "Sheet từ chối yêu cầu");
+      return res;
+    });
   }
 
   /* ---- tự publish lại (chỉ chế độ artifact) ----------------------------- */
@@ -914,6 +969,10 @@ dialog::backdrop { background: rgba(8, 16, 12, .55); }
     if (e.ipa) head.appendChild(el("span", "ipa", e.ipa));
     head.appendChild(el("span", "kind", kindOf(e)));
     if (e.mine) head.appendChild(el("span", "kind kind-mine", "Của tôi"));
+    if (e.mine && canWriteSheet()) {
+      head.appendChild(el("span", "kind" + (e.inSheet ? " kind-sheet" : ""),
+        e.inSheet ? "Đã vào sheet" : "Chưa vào sheet"));
+    }
     art.appendChild(head);
     if (e.note) art.appendChild(el("p", "note", e.note));
 
@@ -1152,22 +1211,72 @@ dialog::backdrop { background: rgba(8, 16, 12, .55); }
     var msg = document.getElementById("form-msg");
     if (got.err) { msg.textContent = got.err; return; }
     var btn = document.getElementById("form-save");
+    var box = document.getElementById("to-sheet");
+    var wantSheet = canWriteSheet() && box && box.checked;
     btn.disabled = true;
-    btn.textContent = "Đang lưu…";
+    btn.textContent = wantSheet ? "Đang ghi vào sheet…" : "Đang lưu…";
     msg.textContent = "";
-    var next = ADDED.concat([got.entry]);
-    persist(next).then(function (res) {
-      btn.disabled = false;
-      btn.textContent = "Lưu từ";
-      document.getElementById("form-dlg").close();
-      if (res.ok && res.reload) { toast("Đã lưu “" + got.entry.word + "”"); return; }
-      ADDED = next;
+
+    var sheetErr = null;
+    var toSheet = wantSheet
+      ? callSheet({ action: "add", entry: got.entry }).then(function () {
+        got.entry.inSheet = true;
+      }, function (err) {
+        sheetErr = err && err.message ? err.message : String(err);
+      })
+      : Promise.resolve();
+
+    toSheet.then(function () {
+      var next = ADDED.concat([got.entry]);
+      return persist(next).then(function (res) {
+        btn.disabled = false;
+        btn.textContent = "Lưu từ";
+        document.getElementById("form-dlg").close();
+        if (res.ok && res.reload) { toast("Đã lưu “" + got.entry.word + "”"); return; }
+        ADDED = next;
+        rebuild();
+        refresh();
+        select(got.entry.id);
+        showDetail();
+        if (!res.ok) { banner(res.msg, "Đồng bộ", syncPending); return; }
+        if (got.entry.inSheet) { toast("Đã ghi “" + got.entry.word + "” vào sheet"); return; }
+        if (sheetErr) {
+          banner("Đã lưu trong trình duyệt, nhưng chưa ghi được vào sheet: " + sheetErr,
+            "Thử lại", pushToSheet);
+          return;
+        }
+        toast("Đã lưu “" + got.entry.word + "” vào trình duyệt này");
+      });
+    });
+  }
+
+  /* Đẩy những từ đã thêm mà chưa vào sheet. */
+  function unsynced() {
+    return ADDED.filter(function (e) { return !e.inSheet; });
+  }
+
+  function pushToSheet() {
+    if (!canWriteSheet()) { openSettings(); return; }
+    var todo = unsynced();
+    if (!todo.length) { toast("Không còn từ nào chờ ghi vào sheet."); return; }
+    banner("Đang ghi " + todo.length + " từ vào sheet…", null, null);
+    var okN = 0, lastErr = null;
+    var chain = Promise.resolve();
+    todo.forEach(function (e) {
+      chain = chain.then(function () {
+        return callSheet({ action: "add", entry: e }).then(function () {
+          e.inSheet = true;
+          okN++;
+        }, function (err) { lastErr = err && err.message ? err.message : String(err); });
+      });
+    });
+    chain.then(function () {
+      writeBackup(ADDED);
       rebuild();
       refresh();
-      select(got.entry.id);
-      showDetail();
-      if (res.ok) { toast("Đã lưu “" + got.entry.word + "” vào trình duyệt này"); return; }
-      banner(res.msg, "Đồng bộ", syncPending);
+      if (okN && !lastErr) { document.getElementById("banner").hidden = true; toast("Đã ghi " + okN + " từ vào sheet"); }
+      else if (okN) banner("Ghi được " + okN + " từ, còn lỗi: " + lastErr, "Thử lại", pushToSheet);
+      else banner("Chưa ghi được vào sheet: " + lastErr, "Thử lại", pushToSheet);
     });
   }
 
@@ -1258,6 +1367,7 @@ dialog::backdrop { background: rgba(8, 16, 12, .55); }
     drawCount();
     drawAlpha();
     drawDetail();
+    refreshChrome();
     document.getElementById("tally").textContent =
       fmt(entries.length) + " mục · " + fmt(senseCount(entries)) + " nghĩa"
       + (READINGS.length ? " · " + fmt(READINGS.length) + " bài đọc" : "");
@@ -1372,10 +1482,35 @@ dialog::backdrop { background: rgba(8, 16, 12, .55); }
     add.dataset.write = "1";
     add.addEventListener("click", function () { openForm(query.trim()); });
     acts.appendChild(add);
+    var push = el("button", "btn", "Ghi vào sheet");
+    push.type = "button";
+    push.id = "push-sheet";
+    push.hidden = true;
+    push.dataset.write = "1";
+    push.addEventListener("click", pushToSheet);
+    acts.appendChild(push);
+
+    var openSheet = document.createElement("a");
+    openSheet.className = "btn btn-quiet";
+    openSheet.id = "open-sheet";
+    openSheet.target = "_blank";
+    openSheet.rel = "noopener";
+    openSheet.textContent = "Mở sheet";
+    openSheet.hidden = true;
+    acts.appendChild(openSheet);
+
     var exp = el("button", "btn btn-quiet", "Sao lưu .json");
     exp.type = "button";
     exp.addEventListener("click", exportJson);
     acts.appendChild(exp);
+
+    var gear = el("button", "btn btn-quiet", "⚙");
+    gear.type = "button";
+    gear.title = "Cài đặt";
+    gear.setAttribute("aria-label", "Cài đặt");
+    gear.addEventListener("click", openSettings);
+    acts.appendChild(gear);
+
     top.appendChild(acts);
     app.appendChild(top);
 
@@ -1418,6 +1553,8 @@ dialog::backdrop { background: rgba(8, 16, 12, .55); }
     t.setAttribute("role", "status");
     app.appendChild(t);
     app.appendChild(buildDialog());
+    app.appendChild(buildSettings());
+    refreshChrome();
 
     scrollBox.addEventListener("scroll", function () { paint(false); }, { passive: true });
     window.addEventListener("resize", function () { paint(true); });
@@ -1496,6 +1633,16 @@ dialog::backdrop { background: rgba(8, 16, 12, .55); }
     dlg.appendChild(body);
 
     var foot = el("div", "dlg-foot");
+    var toSheetRow = el("label", "checkrow");
+    toSheetRow.id = "to-sheet-row";
+    toSheetRow.hidden = true;
+    var cb = el("input");
+    cb.type = "checkbox";
+    cb.id = "to-sheet";
+    cb.checked = true;
+    toSheetRow.appendChild(cb);
+    toSheetRow.appendChild(el("span", null, "Ghi thẳng vào sheet"));
+    foot.appendChild(toSheetRow);
     var msg = el("span", "dlg-msg");
     msg.id = "form-msg";
     foot.appendChild(msg);
@@ -1513,6 +1660,112 @@ dialog::backdrop { background: rgba(8, 16, 12, .55); }
     return dlg;
   }
 
+  function buildSettings() {
+    var dlg = document.createElement("dialog");
+    dlg.id = "set-dlg";
+
+    var head = el("div", "dlg-head");
+    head.appendChild(el("h2", null, "Cài đặt"));
+    head.appendChild(el("p", null, "Chỉ lưu trong trình duyệt này."));
+    dlg.appendChild(head);
+
+    var body = el("div", "dlg-body");
+    body.appendChild(setField("Link Google Sheet", "sheetUrl",
+      "https://docs.google.com/spreadsheets/d/…",
+      "Để hiện nút “Mở sheet” trên thanh đầu trang."));
+    body.appendChild(setField("Link Web App ghi từ", "webApp",
+      "https://script.google.com/macros/s/…/exec",
+      "Lấy trong sheet: menu Sổ Tra Từ → Link cho web ghi từ vào sheet."));
+    body.appendChild(setField("Mã khoá", "key", "", "Lấy cùng chỗ với link trên."));
+
+    var note = el("p", "set-note");
+    note.textContent = MODE === "static"
+      ? "Có đủ link và mã khoá thì mỗi từ bạn thêm sẽ được chèn thẳng vào đúng tab của sheet, đúng thứ tự a→z. Hai thứ này không rời khỏi máy bạn, nên người khác mở trang cũng không ghi được vào sheet."
+      : "Bản Artifact trên claude.ai không được phép gọi ra ngoài, nên đường ghi vào sheet chỉ chạy ở bản web tĩnh (GitHub Pages).";
+    body.appendChild(note);
+    dlg.appendChild(body);
+
+    var foot = el("div", "dlg-foot");
+    var msg = el("span", "dlg-msg");
+    msg.id = "set-msg";
+    foot.appendChild(msg);
+    foot.appendChild(el("span", "spacer2"));
+    var testBtn = el("button", "btn", "Kiểm tra kết nối");
+    testBtn.type = "button";
+    testBtn.addEventListener("click", function () {
+      readForm();
+      if (!settings.webApp || !settings.key) { msg.textContent = "Cần cả link Web App và mã khoá."; return; }
+      msg.textContent = "Đang thử…";
+      callSheet({ action: "ping" }).then(function () {
+        msg.style.color = "var(--accent-hi)";
+        msg.textContent = "Kết nối được.";
+      }, function (err) {
+        msg.style.color = "";
+        msg.textContent = "Không được: " + (err && err.message ? err.message : err);
+      });
+    });
+    foot.appendChild(testBtn);
+    var save = el("button", "btn btn-primary", "Lưu");
+    save.type = "button";
+    save.addEventListener("click", function () {
+      readForm();
+      writeSettings();
+      dlg.close();
+      refreshChrome();
+      toast("Đã lưu cài đặt");
+    });
+    foot.appendChild(save);
+    dlg.appendChild(foot);
+
+    function readForm() {
+      settings.sheetUrl = dlg.querySelector("[name=sheetUrl]").value.trim();
+      settings.webApp = dlg.querySelector("[name=webApp]").value.trim();
+      settings.key = dlg.querySelector("[name=key]").value.trim();
+    }
+    return dlg;
+  }
+
+  function setField(label, name, placeholder, hint) {
+    var f = el("label", "field");
+    f.appendChild(el("span", null, label));
+    var i = el("input", "mono");
+    i.name = name;
+    i.placeholder = placeholder;
+    i.autocomplete = "off";
+    i.spellcheck = false;
+    f.appendChild(i);
+    if (hint) f.appendChild(el("span", "hint", hint));
+    return f;
+  }
+
+  function openSettings() {
+    var dlg = document.getElementById("set-dlg");
+    dlg.querySelector("[name=sheetUrl]").value = settings.sheetUrl;
+    dlg.querySelector("[name=webApp]").value = settings.webApp;
+    dlg.querySelector("[name=key]").value = settings.key;
+    var m = document.getElementById("set-msg");
+    m.textContent = "";
+    m.style.color = "";
+    dlg.showModal();
+  }
+
+  /* Bật/tắt những thứ phụ thuộc vào cài đặt. */
+  function refreshChrome() {
+    var open = document.getElementById("open-sheet");
+    if (open) {
+      open.hidden = !settings.sheetUrl;
+      open.href = settings.sheetUrl || "#";
+    }
+    var push = document.getElementById("push-sheet");
+    if (push) {
+      var n = canWriteSheet() ? unsynced().length : 0;
+      push.hidden = !n;
+      push.textContent = "Ghi " + n + " từ vào sheet";
+    }
+    var row = document.getElementById("to-sheet-row");
+    if (row) row.hidden = !canWriteSheet();
+  }
+
   function field(label, name, placeholder, mono) {
     var f = el("label", "field");
     f.appendChild(el("span", null, label));
@@ -1526,6 +1779,7 @@ dialog::backdrop { background: rgba(8, 16, 12, .55); }
 
   /* ---- khởi động ---------------------------------------------------------- */
   function start(data) {
+    readSettings();
     BASE = data;
     READINGS = data.readings || [];
     READINGS.forEach(function (r, i) {

@@ -18,7 +18,17 @@
 var PROP_REPO = 'SOTRATU_REPO';     // "nhutrang0209/EngrowDict"
 var PROP_TOKEN = 'SOTRATU_TOKEN';   // fine-grained PAT, quyền Contents: Read and write
 var PROP_BRANCH = 'SOTRATU_BRANCH';
+var PROP_KEY = 'SOTRATU_KEY';       // mã khoá cho đường ghi từ web về sheet
 var TARGET = 'docs/data.json';
+
+/** Tab nào ứng với nhóm nào, và ô đầu dòng có mấy cột trước phần nghĩa. */
+var TABS = {
+  word:       { sheet: 'Vocabulary',   headCols: 1 },
+  phrasal:    { sheet: 'Phrasal Verb', headCols: 2 },
+  idiom:      { sheet: 'Idioms',       headCols: 1 },
+  expression: { sheet: 'Common',       headCols: 1 },
+  compare:    { sheet: 'Grammar',      headCols: 2 }
+};
 
 function onOpen() {
   SpreadsheetApp.getUi()
@@ -26,6 +36,7 @@ function onOpen() {
     .addItem('Đồng bộ lên web', 'syncToWeb')
     .addSeparator()
     .addItem('Cài đặt kho GitHub', 'setupRepo')
+    .addItem('Link cho web ghi từ vào sheet', 'showWriteLink')
     .addItem('Xem thử số liệu (không đẩy)', 'previewCounts')
     .addToUi();
 }
@@ -86,6 +97,154 @@ function previewCounts() {
     + '\nDễ nhầm: ' + (n.compare || 0)
     + '\n\nBài đọc không được đẩy lên bản công khai.',
     SpreadsheetApp.getUi().ButtonSet.OK);
+}
+
+/* -------------------------------------------- đường ghi ngược: web -> sheet */
+
+/**
+ * Hiện link để dán vào nút Settings của trang web.
+ * Phải Triển khai (Deploy) → Ứng dụng web → Ai cũng truy cập được, trước đã.
+ */
+function showWriteLink() {
+  var ui = SpreadsheetApp.getUi();
+  var props = PropertiesService.getScriptProperties();
+  var key = props.getProperty(PROP_KEY);
+  if (!key) {
+    key = Utilities.getUuid();
+    props.setProperty(PROP_KEY, key);
+  }
+  var url = '';
+  try { url = ScriptApp.getService().getUrl() || ''; } catch (err) { url = ''; }
+
+  if (!url) {
+    ui.alert('Chưa triển khai',
+      'Vào Triển khai → Bản triển khai mới → chọn loại "Ứng dụng web", '
+      + 'mục "Người có quyền truy cập" chọn "Bất kỳ ai", rồi Triển khai.\n\n'
+      + 'Xong quay lại bấm menu này lần nữa để lấy link.\n\nMã khoá của bạn:\n' + key,
+      ui.ButtonSet.OK);
+    return;
+  }
+  ui.alert('Dán hai dòng này vào nút Settings của trang web',
+    'Link Web App:\n' + url + '\n\nMã khoá:\n' + key
+    + '\n\nHai thứ này chỉ lưu trong trình duyệt của bạn. Ai không có chúng thì '
+    + 'không ghi được vào sheet.',
+    ui.ButtonSet.OK);
+}
+
+/** Cho phép mở link bằng trình duyệt để thử xem đã triển khai đúng chưa. */
+function doGet() {
+  return ContentService
+    .createTextOutput(JSON.stringify({ ok: true, service: 'so-tra-tu', version: 1 }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function doPost(e) {
+  var out = function (obj) {
+    return ContentService.createTextOutput(JSON.stringify(obj))
+      .setMimeType(ContentService.MimeType.JSON);
+  };
+  try {
+    var body = JSON.parse(e.postData.contents);
+    var key = PropertiesService.getScriptProperties().getProperty(PROP_KEY);
+    if (!key || body.key !== key) return out({ ok: false, error: 'Sai mã khoá' });
+    if (body.action === 'ping') return out({ ok: true, pong: true });
+    if (body.action !== 'add') return out({ ok: false, error: 'Không hiểu yêu cầu' });
+
+    var lock = LockService.getScriptLock();
+    lock.waitLock(20000);
+    try {
+      var res = insertEntry(body.entry);
+      return out(res);
+    } finally {
+      lock.releaseLock();
+    }
+  } catch (err) {
+    return out({ ok: false, error: String(err) });
+  }
+}
+
+/** Số cột thật sự dùng tới; các tab đều 3–4 cột. */
+function width(sh) {
+  return Math.max(1, Math.min(4, sh.getMaxColumns ? sh.getMaxColumns() : 4));
+}
+
+/** Nhóm "dễ nhầm" mới thì đánh số tiếp theo số nhóm lớn nhất đang có. */
+function nextGroup(sh) {
+  var last = sh.getLastRow();
+  if (last < 2) return '1';
+  var vals = sh.getRange(1, 1, last, 1).getDisplayValues();
+  var max = 0;
+  for (var i = 1; i < vals.length; i++) {
+    var n = parseInt(txt(vals[i][0]), 10);
+    if (!isNaN(n) && n > max) max = n;
+  }
+  return String(max + 1);
+}
+
+/** Ghép ô đầu dòng theo đúng cách sheet đang viết: từ (từ loại) \n /phiên âm/ */
+function headCell(entry) {
+  var s = txt(entry.word);
+  if (txt(entry.pos)) s += ' (' + txt(entry.pos) + ')';
+  if (txt(entry.ipa)) s += '\n' + txt(entry.ipa);
+  if (txt(entry.note)) s += '\n' + txt(entry.note);
+  return s;
+}
+
+/** Dòng đầu tiên nên chèn trước, để giữ thứ tự a→z của tab. */
+function insertRowFor(sh, sortKey, headCols) {
+  var last = sh.getLastRow();
+  if (last < 2) return last + 1;
+  var vals = sh.getRange(1, 1, last, width(sh)).getDisplayValues();
+  var target = 0;
+  for (var i = 1; i < vals.length; i++) {
+    var a = txt(vals[i][0]);
+    if (!a) continue;                                   // dòng nghĩa tiếp theo
+    var isDivider = a.length <= 2 && !txt(vals[i][1]) && !txt(vals[i][2]);
+    if (isDivider) continue;                            // mốc chữ cái
+    var k = a.split('\n')[0].replace(/\s*\([^()]*\)\s*$/, '').toLowerCase().trim();
+    if (headCols > 1) k = (k + ' ' + txt(vals[i][1])).trim().toLowerCase();
+    if (k > sortKey) { target = i + 1; break; }          // getRange dùng chỉ số từ 1
+  }
+  return target || last + 1;
+}
+
+function insertEntry(entry) {
+  var tab = TABS[entry.type] || TABS.word;
+  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(tab.sheet);
+  if (!sh) return { ok: false, error: 'Không thấy tab ' + tab.sheet };
+
+  var senses = entry.senses || [];
+  if (!senses.length) return { ok: false, error: 'Từ chưa có nghĩa nào' };
+
+  var group = entry.type === 'compare' ? nextGroup(sh) : '';
+  var rowsOut = [];
+  for (var i = 0; i < senses.length; i++) {
+    var def = txt(senses[i].def);
+    var eg = senses[i].eg || [];
+    for (var j = 0; j < eg.length; j++) def += '\n   - ' + txt(eg[j]);
+    if (entry.type === 'phrasal') {
+      rowsOut.push([i === 0 ? txt(entry.verb || entry.word) : '',
+                    i === 0 ? txt(entry.particle) : '', def, txt(senses[i].vi)]);
+    } else if (entry.type === 'compare') {
+      rowsOut.push([i === 0 ? group : '', i === 0 ? txt(entry.word) : '', def, txt(senses[i].vi)]);
+    } else {
+      rowsOut.push([i === 0 ? headCell(entry) : '', def, txt(senses[i].vi), '']);
+    }
+  }
+
+  var sortKey = entry.type === 'phrasal'
+    ? (txt(entry.verb) + ' ' + txt(entry.particle)).trim().toLowerCase()
+    : txt(entry.word).toLowerCase();
+  var at = entry.type === 'compare'
+    ? sh.getLastRow() + 1                       // tab này xếp theo nhóm, không theo a→z
+    : insertRowFor(sh, sortKey, tab.headCols);
+
+  var w = width(sh);
+  if (at <= sh.getLastRow()) sh.insertRowsBefore(at, rowsOut.length);
+  var trimmed = [];
+  for (i = 0; i < rowsOut.length; i++) trimmed.push(rowsOut[i].slice(0, w));
+  sh.getRange(at, 1, trimmed.length, w).setValues(trimmed);
+  return { ok: true, sheet: tab.sheet, row: at, rows: trimmed.length };
 }
 
 /* ------------------------------------------------------------------ đồng bộ */

@@ -323,6 +323,7 @@ body {
   border: 1px solid var(--rule); border-radius: 999px; padding: 2px 8px;
 }
 .kind-mine { color: var(--flag); border-color: var(--flag); }
+.kind-sheet { color: var(--accent-hi); border-color: var(--accent); }
 .note { margin-top: 12px; font-size: 13px; color: var(--muted); font-style: italic; }
 
 .senses { margin-top: 30px; display: flex; flex-direction: column; }
@@ -452,7 +453,21 @@ dialog::backdrop { background: rgba(8, 16, 12, .55); }
 .field input:focus, .field select:focus, .field textarea:focus {
   outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft);
 }
-.field input.mono { font-family: var(--mono); }
+.field input.mono { font-family: var(--mono); font-size: 12.5px; }
+.field .hint { font-size: 11.5px; color: var(--faint); line-height: 1.45; }
+.set-note {
+  font-size: 12.5px; color: var(--muted); line-height: 1.6;
+  padding: 12px 14px; border-radius: 10px;
+  background: var(--ground); border: 1px solid var(--hair);
+}
+.checkrow {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 12.5px; color: var(--muted); cursor: pointer;
+}
+.checkrow[hidden] { display: none; }
+.checkrow input { accent-color: var(--accent); width: 14px; height: 14px; }
+a.btn { text-decoration: none; }
+a.btn[hidden] { display: none; }
 .sense-edit {
   border: 1px solid var(--rule); border-radius: 11px;
   padding: 14px; display: flex; flex-direction: column; gap: 12px; background: var(--ground);
