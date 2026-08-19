@@ -49,8 +49,9 @@ on it — headword, part of speech, phonetics, the Vietnamese meanings — and a
 button through to the full entry.
 
 **Look up** in the top bar (or the `d` key) floats a dictionary window over the
-passage: type to search the whole notebook — same ranking and same marking of
-the matched characters as the list on the Dictionary tab — pick a result to read its senses,
+passage: type to look a word up — headwords only, ranked and marked the way the
+Dictionary tab does it, so what starts with what you typed comes first — pick a
+result to read its senses,
 drag it out of the way, and open the full entry when you want it. Selecting text
 while it is open feeds the selection straight into it rather than opening the
 small card. It stays where you drag it, and closes when you leave the tab.

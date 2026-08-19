@@ -67,13 +67,25 @@ const mk = store => boot({
      wordOf(doc.querySelector('.pd-hit .pd-w')) === 'abate',
      wordOf(doc.querySelector('.pd-hit .pd-w')));
 
+  // a word whose only matches sit late in the alphabet must still rank first
+  typeIn('yi');
+  const yi = [...doc.querySelectorAll('.pd-hit')].map(h => wordOf(h.querySelector('.pd-w')));
+  ok('  a headword starting with the query leads, wherever it sits in the a-z',
+     yi[0] === 'yield' || yi[0] === 'yin', yi.slice(0, 5).join(', '));
+  ok('  both of them before any word that merely contains it',
+     yi.indexOf('yield') < yi.indexOf('be flying blind') &&
+     yi.indexOf('yin') < yi.indexOf('be flying blind'),
+     yi.slice(0, 6).join(', '));
+
+  ok('  it looks up words, not meanings',
+     yi.every(x => x.toLowerCase().includes('yi')),
+     yi.filter(x => !x.toLowerCase().includes('yi')).join(', ') || 'every result contains it');
+
   typeIn('dinh cao');
-  ok('  and Vietnamese without tone marks reaches it too',
-     doc.querySelectorAll('.pd-hit').length > 0,
-     wordOf(doc.querySelector('.pd-hit .pd-w')));
-  ok('  marking the meaning it matched on',
-     !!doc.querySelector('.pd-hit .pd-vi mark'),
-     doc.querySelector('.pd-hit .pd-vi')?.textContent);
+  ok('  so a Vietnamese meaning finds nothing here',
+     doc.querySelectorAll('.pd-hit').length === 0 &&
+     (doc.querySelector('.pd-note')?.textContent || '').includes('Nothing'),
+     doc.querySelector('.pd-note')?.textContent);
 
   typeIn('zenith');
   click(w, doc.querySelector('.pd-hit'));

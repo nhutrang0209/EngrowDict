@@ -1037,21 +1037,22 @@ a.btn[hidden] { display: none; }
     });
   }
 
-  /* Exact word, then prefix, then a word inside a phrase, then anywhere in the
-     headword, then anywhere at all. */
-  function rankEntries(q, src, limit) {
-    var buckets = [[], [], [], [], []], found = 0;
+  /* Exact word, then the headword starting with it, then a word inside a
+     phrase starting with it, then anywhere in the headword, and last — unless
+     asked for headwords only — anywhere in the definitions and meanings.
+     Every entry is scored before anything is ranked: stopping early once
+     enough matches were found made the order depend on where a word sits in
+     the alphabet, which buried "yield" under matches from the letter a. */
+  function rankEntries(q, src, limit, headwordOnly) {
+    var buckets = [[], [], [], [], []];
     for (var i = 0; i < src.length; i++) {
       var e = src[i], w = e._w, s = -1;
       if (w === q) s = 0;
       else if (w.lastIndexOf(q, 0) === 0) s = 1;
       else if (w.indexOf(" " + q) > -1) s = 2;
       else if (w.indexOf(q) > -1) s = 3;
-      else if (e._all.indexOf(q) > -1) s = 4;
-      if (s > -1) {
-        buckets[s].push(e);
-        if (limit && ++found >= limit * 4) break;
-      }
+      else if (!headwordOnly && e._all.indexOf(q) > -1) s = 4;
+      if (s > -1) buckets[s].push(e);
     }
     var out = buckets[0].concat(buckets[1], buckets[2], buckets[3], buckets[4]);
     return limit ? out.slice(0, limit) : out;
@@ -1399,7 +1400,7 @@ a.btn[hidden] { display: none; }
     inp.type = "search";
     inp.autocomplete = "off";
     inp.spellcheck = false;
-    inp.placeholder = "Search the dictionary…";
+    inp.placeholder = "Look a word up…";
     inp.setAttribute("aria-label", "Search the dictionary");
     inp.addEventListener("input", function () { popPicked = null; drawPopDict(); });
     inp.addEventListener("keydown", function (ev) {
@@ -1455,10 +1456,11 @@ a.btn[hidden] { display: none; }
     var q = norm(inp.value.trim());
     if (!q) {
       body.appendChild(el("p", "pd-note",
-        "Type a word, or select one in the passage behind."));
+        "Type a word, or select one in the passage behind. This searches "
+        + "headwords; the Dictionary tab searches the meanings too."));
       return;
     }
-    var found = rankEntries(q, entries, 40);
+    var found = rankEntries(q, entries, 40, true);
     if (!found.length) {
       body.appendChild(el("p", "pd-note", "Nothing in the notebook matches that."));
       return;

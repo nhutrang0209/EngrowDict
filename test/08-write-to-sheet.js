@@ -212,8 +212,7 @@ function page(store, posts, reply) {
   const two = appsScriptSandbox(grids, props2, { [BOOK2]: blank });
   vm.createContext(two);
   vm.runInContext(read('sheet-sync.gs')
-    + '
-this.__doPost = doPost; this.__buildData = buildData;', two);
+    + '\nthis.__doPost = doPost; this.__buildData = buildData;', two);
   const call2 = (payload) =>
     JSON.parse(two.__doPost({ postData: { contents: JSON.stringify(payload) } }));
 
