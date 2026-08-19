@@ -252,5 +252,46 @@ function page(store, posts, reply) {
      !two.books[BOOK2].Vocabulary.grid.some(r => String(r[0]).indexOf('zoetrope') === 0),
      JSON.stringify(plain));
 
+  /* ------------------ D. the window that hands over the link and the key */
+  /* The Web App link is too long to select by hand, so it comes with a Copy
+     button. The window is built as HTML here and clicked in jsdom below. */
+  props2.DEPLOYED_URL = 'https://script.google.com/macros/s/AKfycb-LONG-ID/exec';
+  vm.runInContext('this.__showWriteLink = showWriteLink;', two);
+  two.__showWriteLink();
+  const dlg = two.shown.dialog;
+  ok('the menu item opens a window rather than an alert',
+     !!dlg && !two.shown.alert, dlg ? dlg.title : 'nothing shown');
+
+  const { JSDOM } = require('jsdom');
+  const win = new JSDOM(dlg.out.getContent(), { runScripts: 'dangerously' }).window;
+  const fields = [...win.document.querySelectorAll('input')].map(i => i.value);
+  ok('  it shows the link and the key in full',
+     fields.length === 2 && fields[0] === props2.DEPLOYED_URL &&
+     fields[1] === two.props.SOTRATU_KEY, fields.join(' | '));
+
+  const copies = win.document.querySelectorAll('button.copy');
+  ok('  each of them has its own Copy button', copies.length === 2 &&
+     copies[0].getAttribute('data-for') === 'a' &&
+     copies[1].getAttribute('data-for') === 'b');
+
+  let copied = null;
+  win.document.execCommand = () => { copied = win.document.getElementById('a').value; return true; };
+  copies[0].click();
+  ok('  pressing Copy takes the whole link',
+     copied === props2.DEPLOYED_URL && copies[0].textContent === 'Copied',
+     copies[0].textContent + ' -> ' + String(copied).slice(0, 30) + '…');
+
+  // and before the first deployment there is no link to hand over, only the key
+  const props3 = { SOTRATU_KEY: 'k' };
+  const three = appsScriptSandbox(grids, props3);
+  vm.createContext(three);
+  vm.runInContext(read('sheet-sync.gs') + '\nthis.__showWriteLink = showWriteLink;', three);
+  three.__showWriteLink();
+  const early = new JSDOM(three.shown.dialog.out.getContent()).window.document;
+  ok('  undeployed, it says how to deploy and still gives the key',
+     early.querySelectorAll('input').length === 1 &&
+     /Not deployed yet/.test(early.querySelector('p.lead').textContent),
+     early.querySelector('p.lead').textContent.slice(0, 40));
+
   done(a.errs.concat(b.errs, locked.errs));
 })();

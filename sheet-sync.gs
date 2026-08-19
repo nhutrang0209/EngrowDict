@@ -114,7 +114,6 @@ function previewCounts() {
  * Deploy → New deployment → Web app → "Anyone" must be done first.
  */
 function showWriteLink() {
-  var ui = SpreadsheetApp.getUi();
   var props = PropertiesService.getScriptProperties();
   var key = props.getProperty(PROP_KEY);
   if (!key) {
@@ -124,19 +123,70 @@ function showWriteLink() {
   var url = '';
   try { url = ScriptApp.getService().getUrl() || ''; } catch (err) { url = ''; }
 
-  if (!url) {
-    ui.alert('Not deployed yet',
-      'Go to Deploy → New deployment → pick type "Web app", set '
-      + '"Who has access" to "Anyone", then Deploy.\n\n'
-      + 'Come back and open this menu again to get the link.\n\nYour key:\n' + key,
-      ui.ButtonSet.OK);
-    return;
+  SpreadsheetApp.getUi().showModalDialog(writeLinkDialog(url, key), 'EngrowDict');
+}
+
+function esc(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+/**
+ * A window rather than an alert, because the Web App link is far too long to
+ * drag a cursor across without dropping a character: each value sits in a box
+ * of its own with a Copy button beside it.
+ */
+function writeLinkDialog(url, key) {
+  function field(label, value, id) {
+    return '<label for="' + id + '">' + esc(label) + '</label>'
+      + '<div class="row">'
+      + '<input id="' + id + '" readonly value="' + esc(value) + '">'
+      + '<button class="copy" data-for="' + id + '">Copy</button>'
+      + '</div>';
   }
-  ui.alert('Paste these two into the web page Settings',
-    'Web App link:\n' + url + '\n\nKey:\n' + key
-    + '\n\nBoth stay in your own browser. Anyone without them cannot write to '
-    + 'the sheet.',
-    ui.ButtonSet.OK);
+
+  var lead = url
+    ? 'Paste these two into the web page Settings.'
+    : 'Not deployed yet — Deploy → New deployment → Web app → '
+      + 'Who has access: Anyone → Deploy, then open this menu item again for '
+      + 'the link. The key below is ready either way.';
+
+  var html = '<!DOCTYPE html><html><head><base target="_top"><meta charset="utf-8"><style>'
+    + 'body{font:13px/1.5 Roboto,Arial,sans-serif;color:#202124;margin:0;padding:4px 2px}'
+    + 'p.lead{margin:0 0 16px}'
+    + 'label{display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;'
+    + 'color:#5f6368;margin-bottom:5px}'
+    + '.row{display:flex;gap:8px;margin-bottom:16px}'
+    + 'input{flex:1;min-width:0;font:12px/1.4 "Roboto Mono",Consolas,monospace;'
+    + 'padding:8px 10px;border:1px solid #dadce0;border-radius:4px;background:#f8f9fa;color:#202124}'
+    + 'button.copy{flex:none;padding:8px 14px;border:0;border-radius:4px;background:#1a73e8;'
+    + 'color:#fff;font-weight:500;cursor:pointer}'
+    + 'button.copy:hover{background:#1765cc}'
+    + 'button.copy.done{background:#188038}'
+    + 'p.foot{margin:0;color:#5f6368;font-size:12px}'
+    + '</style></head><body>'
+    + '<p class="lead">' + esc(lead) + '</p>'
+    + (url ? field('Web App link', url, 'a') : '')
+    + field('Key', key, 'b')
+    + '<p class="foot">Both stay in your own browser. Anyone without them cannot '
+    + 'write to the sheet.</p>'
+    + '<script>'
+    + 'var bs=document.querySelectorAll("button.copy");'
+    + 'for(var i=0;i<bs.length;i++){bs[i].addEventListener("click",function(){'
+    + 'var b=this,f=document.getElementById(b.getAttribute("data-for"));'
+    + 'f.focus();f.select();f.setSelectionRange(0,99999);'
+    + 'var done=false;try{done=document.execCommand("copy")}catch(e){}'
+    + 'if(done){say(b,"Copied")}'
+    + 'else if(navigator.clipboard){navigator.clipboard.writeText(f.value)'
+    + '.then(function(){say(b,"Copied")},function(){say(b,"Press Ctrl+C")})}'
+    + 'else{say(b,"Press Ctrl+C")}})}'
+    + 'function say(b,t){var old=b.textContent;b.textContent=t;b.className="copy done";'
+    + 'setTimeout(function(){b.textContent=old;b.className="copy"},1400)}'
+    + '<\/script></body></html>';
+
+  return HtmlService.createHtmlOutput(html)
+    .setWidth(560)
+    .setHeight(url ? 300 : 320);
 }
 
 /** Lets you open the link in a browser to check the deployment. */

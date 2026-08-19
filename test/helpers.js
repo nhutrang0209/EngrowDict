@@ -188,12 +188,34 @@ function appsScriptSandbox(grids, props, others) {
     return b;
   };
 
+  // what the menu functions put on screen, so a test can read it back
+  const shown = { dialog: null, alert: null };
+
   const sandbox = {
     sheets,
     books,
     props,
+    shown,
+    Utilities: {
+      getUuid: () => 'uuid-1111-2222-3333',
+      base64Encode: t => Buffer.from(String(t), 'utf8').toString('base64'),
+      Charset: { UTF_8: 'utf8' },
+    },
+    ScriptApp: { getService: () => ({ getUrl: () => props.DEPLOYED_URL || '' }) },
+    HtmlService: {
+      createHtmlOutput: html => {
+        const out = { html: html, setWidth: () => out, setHeight: () => out,
+                      getContent: () => html };
+        return out;
+      },
+    },
     SpreadsheetApp: {
       getActiveSpreadsheet: () => ({ getSheetByName: n => sheets[n] || null }),
+      getUi: () => ({
+        showModalDialog: (out, title) => { shown.dialog = { out, title }; },
+        alert: function () { shown.alert = [].slice.call(arguments); },
+        ButtonSet: { OK: 'OK', OK_CANCEL: 'OK_CANCEL' },
+      }),
       openById: id => {
         if (!books[id]) throw new Error('No spreadsheet with the id ' + id);
         return { getSheetByName: n => books[id][n] || null };
