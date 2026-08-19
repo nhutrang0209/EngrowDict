@@ -216,7 +216,32 @@ body {
 .banner[hidden] { display: none; }
 
 /* ---- workspace: letter rail | result list | detail pane ----------------- */
-.work { flex: 1; min-height: 0; display: grid; grid-template-columns: var(--rail-w) var(--list-w) 1fr; }
+.work {
+  flex: 1; min-height: 0; display: grid;
+  grid-template-columns: var(--rail-w) var(--list-w) 7px 1fr;
+}
+body[data-list="off"] .work { grid-template-columns: 0 0 7px 1fr; }
+body[data-list="off"] .alpha, body[data-list="off"] .list { display: none; }
+body.resizing { cursor: col-resize; user-select: none; }
+
+/* the divider: drag it, or fold the list away with the chevron */
+.resizer {
+  position: relative; cursor: col-resize;
+  background: var(--rule);
+  transition: background .14s ease;
+}
+.resizer:hover, body.resizing .resizer { background: var(--accent); }
+.resizer:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.fold {
+  position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+  width: 20px; height: 34px; padding: 0;
+  border: 1px solid var(--rule); border-radius: 7px;
+  background: var(--surface); color: var(--muted);
+  font-size: 14px; line-height: 1; cursor: pointer; z-index: 12;
+  box-shadow: var(--lift-1);
+}
+.fold:hover { color: var(--ink); border-color: var(--muted); }
+@media (max-width: 760px) { .resizer { display: none; } }
 
 .alpha {
   display: flex; flex-direction: column; align-items: stretch;
@@ -335,7 +360,14 @@ body {
 
 /* ---- detail pane -------------------------------------------------------- */
 .detail { overflow-y: auto; min-width: 0; background: var(--ground); }
-.detail-inner { padding: 34px 44px 96px; }
+.detail-inner { padding: 34px 44px 96px; max-width: 1240px; margin: 0 auto; }
+.detail-inner.wide {
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 34px;
+  max-width: 1320px;
+}
+@media (min-width: 1180px) {
+  .detail-inner.wide { grid-template-columns: minmax(0, 68ch) minmax(230px, 300px); }
+}
 .entry { max-width: 62ch; }
 
 .entry-nav { display: flex; align-items: center; gap: 7px; margin-bottom: 28px; font-family: var(--mono); font-size: 10.5px; color: var(--faint); }
@@ -446,7 +478,42 @@ body {
 .blank .local-note { margin-top: 24px; font-size: 12.5px; color: var(--faint); line-height: 1.6; }
 
 /* ---- reading passages --------------------------------------------------- */
-.read { max-width: 68ch; }
+.read { max-width: 68ch; min-width: 0; }
+
+/* what the notebook already has, for the passage you are reading */
+.fromtext { min-width: 0; }
+.fromtext h2 {
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: .16em;
+  text-transform: uppercase; color: var(--faint); font-weight: 500;
+  display: flex; align-items: center; gap: 7px;
+}
+.fromtext h2 .n {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0;
+  color: var(--accent-hi); background: var(--accent-soft);
+  border-radius: 999px; padding: 2px 7px;
+}
+.fromtext ul {
+  margin-top: 12px; display: flex; flex-direction: column;
+  background: var(--surface); border: 1px solid var(--rule);
+  border-radius: var(--r-l); overflow: hidden; box-shadow: var(--lift-1);
+}
+.fromtext li + li { border-top: 1px solid var(--hair); }
+.ft-item {
+  display: block; width: 100%; text-align: left;
+  border: 0; background: none; cursor: pointer; padding: 10px 14px;
+}
+.ft-item:hover { background: var(--tint); }
+.ft-w {
+  font-family: var(--serif); font-size: 15px; font-weight: 600;
+  font-variation-settings: "opsz" 24; color: var(--ink);
+  display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ft-w i { font-style: italic; font-size: 11.5px; color: var(--faint); margin-left: 5px; font-weight: 400; }
+.ft-vi {
+  display: block; margin-top: 1px; font-size: 12.5px; color: var(--ink-2);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.fromtext .empty-note { margin-top: 10px; font-size: 12.5px; color: var(--faint); line-height: 1.55; }
 .read h1 {
   font-family: var(--serif); font-size: clamp(27px, 3.6vw, 38px); font-weight: 600;
   line-height: 1.14; letter-spacing: -.024em;
@@ -1117,8 +1184,12 @@ a.btn[hidden] { display: none; }
     hideLookup();
     var host = document.getElementById("detail-inner");
     host.textContent = "";
+    host.className = "detail-inner";
     if (view === "read") {
-      host.appendChild(selectedRead ? readingView(selectedRead) : blankView());
+      if (!selectedRead) { host.appendChild(blankView()); return; }
+      host.className = "detail-inner wide";
+      host.appendChild(readingView(selectedRead));
+      host.appendChild(notebookPanel(selectedRead));
       return;
     }
     var e = byId[selectedId];
@@ -1253,6 +1324,110 @@ a.btn[hidden] { display: none; }
     return m.wrap;
   }
 
+  /* ---- the divider: drag to resize, click the chevron to fold away -------- */
+  var LIST_KEY = "engrowdict:list:v1";
+  var LIST_MIN = 240, LIST_MAX = 620, LIST_DEFAULT = 348;
+
+  function listWidth(px) {
+    document.documentElement.style.setProperty("--list-w", Math.round(px) + "px");
+  }
+
+  function currentListWidth() {
+    return parseInt(getComputedStyle(document.documentElement)
+      .getPropertyValue("--list-w"), 10) || LIST_DEFAULT;
+  }
+
+  function saveListWidth() {
+    try {
+      var s = JSON.parse(localStorage.getItem(LIST_KEY) || "{}");
+      s.w = currentListWidth();
+      localStorage.setItem(LIST_KEY, JSON.stringify(s));
+    } catch (err) { /* ignore */ }
+  }
+
+  function setListOpen(open) {
+    document.body.dataset.list = open ? "on" : "off";
+    var chev = document.getElementById("fold");
+    if (chev) {
+      chev.textContent = open ? "‹" : "›";
+      chev.title = open ? "Hide the list" : "Show the list";
+      chev.setAttribute("aria-label", chev.title);
+      chev.setAttribute("aria-expanded", String(open));
+    }
+    try {
+      var s = JSON.parse(localStorage.getItem(LIST_KEY) || "{}");
+      s.open = open;
+      localStorage.setItem(LIST_KEY, JSON.stringify(s));
+    } catch (err) { /* ignore */ }
+    paint(true);
+  }
+
+  function restoreList() {
+    var s = {};
+    try { s = JSON.parse(localStorage.getItem(LIST_KEY) || "{}"); } catch (err) { s = {}; }
+    listWidth(Math.min(LIST_MAX, Math.max(LIST_MIN, s.w || LIST_DEFAULT)));
+    setListOpen(s.open !== false);
+  }
+
+  function buildResizer() {
+    var bar = el("div", "resizer");
+    bar.id = "resizer";
+    bar.setAttribute("role", "separator");
+    bar.setAttribute("aria-orientation", "vertical");
+
+    var chev = el("button", "fold", "‹");
+    chev.type = "button";
+    chev.id = "fold";
+    chev.addEventListener("click", function (ev) {
+      ev.stopPropagation();
+      setListOpen(document.body.dataset.list === "off");
+    });
+    bar.appendChild(chev);
+
+    var dragging = false;
+    function move(ev) {
+      if (!dragging) return;
+      var work = document.querySelector(".work");
+      var railW = document.querySelector(".alpha").offsetWidth || 30;
+      var x = (ev.touches ? ev.touches[0].clientX : ev.clientX) - work.getBoundingClientRect().left;
+      listWidth(Math.min(LIST_MAX, Math.max(LIST_MIN, x - railW)));
+    }
+    function stop() {
+      if (!dragging) return;
+      dragging = false;
+      document.body.classList.remove("resizing");
+      saveListWidth();
+      paint(true);
+    }
+    bar.addEventListener("mousedown", function (ev) {
+      if (ev.target === chev || document.body.dataset.list === "off") return;
+      dragging = true;
+      document.body.classList.add("resizing");
+      ev.preventDefault();
+    });
+    document.addEventListener("mousemove", move);
+    document.addEventListener("mouseup", stop);
+    bar.addEventListener("touchstart", function (ev) {
+      if (ev.target === chev || document.body.dataset.list === "off") return;
+      dragging = true;
+    }, { passive: true });
+    document.addEventListener("touchmove", move, { passive: true });
+    document.addEventListener("touchend", stop);
+
+    // keyboard: the divider is focusable and moves in steps
+    bar.tabIndex = 0;
+    bar.addEventListener("keydown", function (ev) {
+      var now = currentListWidth();
+      if (ev.key === "ArrowLeft") listWidth(Math.max(LIST_MIN, now - 24));
+      else if (ev.key === "ArrowRight") listWidth(Math.min(LIST_MAX, now + 24));
+      else return;
+      ev.preventDefault();
+      saveListWidth();
+      paint(true);
+    });
+    return bar;
+  }
+
   /* Two views, two tabs — the dictionary and the passages are separate places
      rather than a switch on one place. */
   var TABS = [["vocab", "Dictionary", "tab-dictionary"], ["read", "Passages", "tab-passages"]];
@@ -1344,6 +1519,86 @@ a.btn[hidden] { display: none; }
       }
     }
     return out;
+  }
+
+  /* Which of this passage's words the notebook already holds. This is the
+     point of reading with the notebook open, and it fills the space beside a
+     column of prose that should not itself get any wider. */
+  function notebookIn(r) {
+    var text = " " + norm(r._text) + " ";
+    var seen = {}, out = [], at = {};
+
+    // multi-word entries first, so "make up for" wins over "make"
+    for (var i = 0; i < entries.length; i++) {
+      var e = entries[i];
+      if (e._w.indexOf(" ") < 0) continue;
+      var found = text.indexOf(" " + e._w + " ");
+      if (found > -1 && !seen[e._w]) {
+        seen[e._w] = true;
+        at[e.id] = found;
+        out.push(e);
+      }
+    }
+
+    /* Walk the words with their offsets rather than looking the headword up
+       again afterwards: an entry reached through stemming — "carry" from
+       "carries" — does not appear literally, and searching for it would come
+       back empty and sort the word to the top. */
+    var re = /[a-z0-9'-]+/g, m;
+    while ((m = re.exec(text)) !== null) {
+      var t = m[0];
+      if (t.length < 5) continue;
+      var forms = lemmas(t);
+      for (var k = 0; k < forms.length; k++) {
+        var hit = byWord[forms[k]];
+        if (hit && !seen[hit._w]) {
+          seen[hit._w] = true;
+          at[hit.id] = m.index;
+          out.push(hit);
+          break;
+        }
+      }
+    }
+    // in the order they turn up, so the panel tracks the reading
+    out.sort(function (x, y) { return at[x.id] - at[y.id]; });
+    return out;
+  }
+
+  function notebookPanel(r) {
+    var found = notebookIn(r);
+    var aside = el("aside", "fromtext");
+    var head = el("h2", null, "In your notebook");
+    aside.appendChild(head);
+    if (!found.length) {
+      aside.appendChild(el("p", "empty-note", "None of this passage's words are in the notebook yet."));
+      return aside;
+    }
+    head.appendChild(el("span", "n", String(found.length)));
+    var list = el("ul");
+    found.forEach(function (e) {
+      var li = el("li");
+      var b = el("button", "ft-item");
+      b.type = "button";
+      var line = el("span", "ft-w", e.word);
+      if (e.pos) line.appendChild(el("i", null, e.pos));
+      b.appendChild(line);
+      b.appendChild(el("span", "ft-vi", glossOf(e)));
+      b.addEventListener("click", function () {
+        view = "vocab";
+        selectedId = e.id;
+        selectedRead = null;
+        query = "";
+        if (qInput) qInput.value = "";
+        syncViewButtons();
+        refresh();
+        select(e.id);
+        showDetail();
+      });
+      li.appendChild(b);
+      list.appendChild(li);
+    });
+    aside.appendChild(list);
+    return aside;
   }
 
   function readingView(r) {
@@ -2051,6 +2306,8 @@ a.btn[hidden] { display: none; }
     list.appendChild(scrollBox);
     work.appendChild(list);
 
+    work.appendChild(buildResizer());
+
     var detail = el("section", "detail");
     var inner = el("div", "detail-inner");
     inner.id = "detail-inner";
@@ -2066,6 +2323,7 @@ a.btn[hidden] { display: none; }
     app.appendChild(buildDialog());
     app.appendChild(buildSettings());
     refreshChrome();
+    restoreList();
 
     scrollBox.addEventListener("scroll", function () { paint(false); }, { passive: true });
     window.addEventListener("resize", function () { paint(true); });

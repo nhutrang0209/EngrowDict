@@ -30,12 +30,23 @@ words are still there when it is opened on another machine. The static build has
 no server, so each visitor keeps their own — use **Back up .json** to hold on to
 them.
 
+## Layout
+
+The list column can be dragged wider or narrower by its divider, nudged with the
+arrow keys once the divider has focus, and folded away entirely with the chevron
+on it. Both the width and the folded state are remembered per browser.
+
 ## Reading passages
 
 Both builds carry the 33 passages. Open **Passages** in the top bar, pick one,
 and select any word or phrase in it: a card opens with what the notebook holds
 on it — headword, part of speech, phonetics, the Vietnamese meanings — and a
 button through to the full entry.
+
+Beside the prose sits **In your notebook** — every entry the notebook holds that
+turns up in this passage, in the order it appears, each a click away from its
+full entry. It is what fills the space next to a column of prose that should not
+itself get any wider.
 
 The notebook is advanced vocabulary, so ordinary running words are often not in
 it. When there is no entry, the card falls back to machine translation (English
@@ -146,7 +157,7 @@ python parse_sheet.py    # when source.xlsx changes (download the sheet as .xlsx
 cd test && npm install && npm test
 ```
 
-217 checks against a fake DOM (jsdom), across ten areas:
+255 checks against a fake DOM (jsdom), across eleven areas:
 
 1. the data pulled from the sheet covers a–z, has the right shape, and carries
    no leftover formatting junk
@@ -170,6 +181,8 @@ cd test && npm install && npm test
    entries back for the visit
 10. the styling of rows written into the sheet: merged head cell, linked
     headword, dotted rule between senses, nothing drawn into unused columns
+11. the list column dragging, folding and being remembered, and the notebook
+    panel beside a passage
 
 Checks 7 and 8 need `test/grids.json`, which `parse_sheet.py` writes; without it
 check 7 skips itself.
