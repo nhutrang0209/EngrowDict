@@ -437,7 +437,12 @@ body {
   background: var(--accent-soft); color: var(--accent-hi); font-size: 12.5px;
 }
 .read .prose { margin-top: 26px; display: flex; flex-direction: column; gap: 18px; }
-.read .prose p { font-size: 17px; line-height: 1.78; color: var(--ink-2); }
+.read .prose p {
+  font-size: 17px; line-height: 1.78; color: var(--ink-2);
+  /* justified, with hyphenation so the word spacing does not gape */
+  text-align: justify; text-justify: inter-word;
+  hyphens: auto; -webkit-hyphens: auto;
+}
 .read .prose p::selection, .read .prose ::selection { background: var(--accent-soft); }
 
 /* the little card that opens over a selection */

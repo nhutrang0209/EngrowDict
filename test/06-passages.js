@@ -56,6 +56,9 @@ ok('the shell itself stays light', shell.length < 160000,
      doc.querySelectorAll('.read .prose p').length + ' paragraphs');
   ok('  and says selections can be looked up',
      (doc.querySelector('.read .hint')?.textContent || '').includes('Select any word'));
+  ok('  the prose is justified, with hyphenation to keep the spacing even',
+     /\.read \.prose p \{[^}]*text-align: justify/.test(read('app.css')) &&
+     /\.read \.prose p \{[^}]*hyphens: auto/.test(read('app.css')));
 
   /* --- the selection card ------------------------------------------------ */
   // jsdom has no real selection, so drive the same path the handler uses
