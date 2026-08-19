@@ -2002,6 +2002,12 @@
     var head = el("div", "dlg-head");
     head.appendChild(el("h2", null, "Settings"));
     head.appendChild(el("p", null, "Kept in this browser only."));
+    var x = el("button", "dlg-x", "×");
+    x.type = "button";
+    x.id = "set-x";
+    x.setAttribute("aria-label", "Close");
+    x.addEventListener("click", function () { dlg.close(); });
+    head.appendChild(x);
     dlg.appendChild(head);
 
     var body = el("div", "dlg-body");
@@ -2107,10 +2113,6 @@
       });
     });
     foot.appendChild(testBtn);
-    var close = el("button", "btn", "Close");
-    close.type = "button";
-    close.addEventListener("click", function () { dlg.close(); });
-    foot.appendChild(close);
     var save = el("button", "btn btn-primary", "Save");
     save.type = "button";
     save.id = "set-save";
@@ -2119,6 +2121,7 @@
       writeSettings();
       drawSettings();
       refresh();
+      dlg.close();
       toast("Settings saved");
     });
     foot.appendChild(save);

@@ -73,6 +73,17 @@ const mk = store => boot({
      row.querySelector('input').hidden,
      doc.getElementById('val-sheet').textContent);
   ok('  the Open sheet button appears', !doc.getElementById('open-sheet').hidden);
+  ok('  Save closes the window, so there is no wondering whether it took',
+     !doc.getElementById('set-dlg').open);
+  ok('  closing is an × in the corner, not a button in the footer',
+     !!doc.getElementById('set-x') &&
+     ![...doc.querySelectorAll('#set-dlg .dlg-foot .btn')]
+       .some(b => b.textContent === 'Close'));
+
+  click(w, doc.getElementById('settings-btn'));
+  ok('  and the × shuts it again', doc.getElementById('set-dlg').open &&
+     (click(w, doc.getElementById('set-x')), !doc.getElementById('set-dlg').open));
+  click(w, doc.getElementById('settings-btn'));
 
   // Cancel puts back what was stored
   click(w, edit);
