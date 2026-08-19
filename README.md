@@ -21,7 +21,7 @@ the 11k-entry list is virtualised, so only a few dozen rows are ever in the DOM.
 | --- | --- | --- |
 | Who can see it | anyone with the link | whoever you share it with |
 | Lookup | all 11,401 entries | all 11,401 entries |
-| 33 reading passages | left out | included |
+| 33 reading passages | included | included |
 | Adding / removing words | yes, kept in the visitor's browser | yes, stored on the server |
 | Data | `data.json`, fetched separately | embedded in the file |
 
@@ -30,9 +30,23 @@ words are still there when it is opened on another machine. The static build has
 no server, so each visitor keeps their own — use **Back up .json** to hold on to
 them.
 
-The public build drops the reading passages: they are the verbatim text of
-TED-Ed and BBC articles, which is fine in a private notebook but not on an open
-website. With `readings` empty, the page drops its **Passages** button too.
+## Reading passages
+
+Both builds carry the 33 passages. Open **Passages** in the top bar, pick one,
+and select any word or phrase in it: a card opens with what the notebook holds
+on it — headword, part of speech, phonetics, the Vietnamese meanings — and a
+button through to the full entry.
+
+The notebook is advanced vocabulary, so ordinary running words are often not in
+it. When there is no entry, the card falls back to machine translation (English
+to Vietnamese, via MyMemory) and labels it as such, with a link out to Google
+Translate as well. That fallback needs the open web, so it works on the
+published site and not inside the claude.ai artifact.
+
+The passages are the verbatim text of TED-Ed and BBC articles. They ship in the
+public build at the owner's request; to take them back out, set `public` in
+`build.py` to carry an empty `readings` list and the page drops its **Passages**
+button on its own.
 
 ## The passcode
 
@@ -132,7 +146,7 @@ python parse_sheet.py    # when source.xlsx changes (download the sheet as .xlsx
 cd test && npm install && npm test
 ```
 
-145 checks against a fake DOM (jsdom), across eight areas:
+217 checks against a fake DOM (jsdom), across ten areas:
 
 1. the data pulled from the sheet covers a–z, has the right shape, and carries
    no leftover formatting junk
@@ -142,7 +156,9 @@ cd test && npm install && npm test
    replacement HTML → load it back → the word is still there
 5. the static build fetching `data.json`, saving to `localStorage`, and
    surviving a reload
-6. not one sentence of the reading passages reaching the public build
+6. the passages, and the card that opens over a selection — notebook hit,
+   inflected form, phrasal verb inside a sentence, machine-translation fallback
+   and what happens when the translator cannot be reached
 7. `sheet-sync.gs` and `parse_sheet.py` reading identical data, character for
    character — the most important check, since the two are written in different
    languages
@@ -150,6 +166,10 @@ cd test && npm install && npm test
    body being posted, a refusal not losing the word, and Apps Script inserting
    into the right tab in the right alphabetical place — verified by reading the
    patched sheet back
+9. the Sync button, both when it can republish and when it can only hand the
+   entries back for the visit
+10. the styling of rows written into the sheet: merged head cell, linked
+    headword, dotted rule between senses, nothing drawn into unused columns
 
 Checks 7 and 8 need `test/grids.json`, which `parse_sheet.py` writes; without it
 check 7 skips itself.

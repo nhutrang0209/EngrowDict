@@ -9,7 +9,7 @@ engrowdict.html  — the copy published as an Artifact on claude.ai. The data is
 docs/index.html  — the static copy for GitHub Pages. A light shell that loads
 docs/data.json     data.json from the same folder, which is what lets the Sync
                    button in Google Sheets update the site by overwriting one
-                   file — no build step involved. Reading passages are left out.
+                   file — no build step involved.
 """
 import json
 import os
@@ -20,9 +20,10 @@ BS = chr(92)
 data = json.load(open(os.path.join(HERE, 'dataset.json'), encoding='utf-8'))
 entries, readings = data['entries'], data['readings']
 
-# The public copy drops the reading passages: they are the verbatim text of
-# TED-Ed and BBC articles. Fine in a private notebook, not on an open website.
-public = {'entries': entries, 'readings': []}
+# The reading passages are the verbatim text of TED-Ed and BBC articles. They
+# ship in both copies at the owner's request; if that ever needs undoing, empty
+# the list here and the page drops its Passages tab on its own.
+public = {'entries': entries, 'readings': readings}
 
 
 def dumps(payload):
@@ -88,7 +89,7 @@ open(index, 'w', encoding='utf-8').write(
 kb = lambda p: round(os.path.getsize(p) / 1024)
 print(len(entries), 'entries ·',
       sum(len(e['senses']) for e in entries), 'senses ·',
-      len(readings), 'passages (artifact copy only)')
+      len(readings), 'passages')
 print('engrowdict.html %5d KB  artifact, data embedded' % kb(art))
 print('docs/index.html %5d KB  static shell' % kb(index))
 print('docs/data.json  %5d KB  public data' % kb(dat))

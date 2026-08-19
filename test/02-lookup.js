@@ -69,10 +69,10 @@ const { read, boot, ok, done, wait, click, type, btn } = require('./helpers');
   await wait(20);
   click(w, doc.querySelector('.hit'));
   const firstWord = doc.querySelector('.headword').textContent;
-  click(w, [...doc.querySelectorAll('.iconbtn')][1]);   // →
+  click(w, [...doc.querySelectorAll('.entry-nav .iconbtn')][1]);   // →
   const secondWord = doc.querySelector('.headword').textContent;
   ok('→ moves to the next entry', firstWord !== secondWord, firstWord + ' → ' + secondWord);
-  click(w, [...doc.querySelectorAll('.iconbtn')][0]);   // ←
+  click(w, [...doc.querySelectorAll('.entry-nav .iconbtn')][0]);   // ←
   ok('← moves back', doc.querySelector('.headword').textContent === firstWord,
      doc.querySelector('.headword').textContent);
   ok('position in the result set is shown', !!doc.querySelector('.pos-in-list'),

@@ -31,8 +31,8 @@ const mk = () => boot({
   ok('no read-only notice', doc.getElementById('banner').hidden);
   ok('the opening screen says where words are kept',
      [...doc.querySelectorAll('.blank p')].some(p => p.textContent.includes('this browser')));
-  ok('no Passages button, since the public copy has none',
-     ![...doc.querySelectorAll('.acts .btn')].some(b => b.textContent === 'Passages'),
+  ok('the Passages button is offered',
+     !doc.getElementById('view-read').hidden,
      [...doc.querySelectorAll('.acts .btn')].map(b => b.textContent).join(' | '));
 
   const dlg = addWord(a, {

@@ -14,8 +14,8 @@
   var BACKUP_KEY = "engrowdict:added:v1";
   var SETTINGS_KEY = "engrowdict:settings:v1";
   var DEFAULT_PASSCODE = "229922";
-  var ROW_H = 58;          // must match .hit in app.css
-  var MARK_H = 26;         // must match .letter-mark
+  var ROW_H = 64;          // must match .hit in app.css
+  var MARK_H = 28;         // must match .letter-mark
   var OVERSCAN = 6;
 
   var KINDS = {
@@ -97,6 +97,84 @@
     }
     entries.sort(function (a, b) { return a._w < b._w ? -1 : a._w > b._w ? 1 : 0; });
     for (var j = 0; j < READINGS.length; j++) byId[READINGS[j].id] = READINGS[j];
+
+    byWord = {};
+    for (var k = 0; k < entries.length; k++) {
+      if (!byWord[entries[k]._w]) byWord[entries[k]._w] = entries[k];
+    }
+  }
+
+  /* ---- looking a selection up -------------------------------------------- */
+  var byWord = {};
+
+  /* Crude but serviceable stemming: enough to get from "explained" or
+     "carrying" back to a headword the notebook actually holds. */
+  function lemmas(w) {
+    var out = [w];
+    function add(x) { if (x && x.length > 1 && out.indexOf(x) < 0) out.push(x); }
+    if (/ies$/.test(w)) add(w.replace(/ies$/, "y"));
+    if (/(ches|shes|sses|xes|zes)$/.test(w)) add(w.slice(0, -2));
+    if (/s$/.test(w) && !/ss$/.test(w)) add(w.slice(0, -1));
+    if (/ied$/.test(w)) add(w.replace(/ied$/, "y"));
+    if (/ed$/.test(w)) { add(w.slice(0, -2)); add(w.slice(0, -1)); }
+    if (/ing$/.test(w)) { add(w.slice(0, -3)); add(w.slice(0, -3) + "e"); }
+    if (/([bdfglmnprt])\1(ed|ing)$/.test(w)) add(w.replace(/([bdfglmnprt])\1(ed|ing)$/, "$1"));
+    if (/est$/.test(w)) add(w.slice(0, -3));
+    if (/er$/.test(w)) add(w.slice(0, -2));
+    if (/ly$/.test(w)) add(w.slice(0, -2));
+    return out;
+  }
+
+  /** Best entry for a selected run of text, or null. */
+  function lookupText(text) {
+    var clean = text.replace(/[“”"'’(),.;:!?—–]/g, " ").replace(/\s+/g, " ").trim();
+    if (!clean) return null;
+    var whole = norm(clean);
+    if (byWord[whole]) return byWord[whole];
+
+    var words = whole.split(" ");
+    if (words.length > 1) {
+      // try the longest run that is an entry, e.g. "make up for" inside a line
+      for (var len = Math.min(words.length, 5); len >= 2; len--) {
+        for (var i = 0; i + len <= words.length; i++) {
+          var run = words.slice(i, i + len).join(" ");
+          if (byWord[run]) return byWord[run];
+        }
+      }
+      return null;
+    }
+    var forms = lemmas(whole);
+    for (var j = 0; j < forms.length; j++) {
+      if (byWord[forms[j]]) return byWord[forms[j]];
+    }
+    return null;
+  }
+
+  function translateUrl(text) {
+    return "https://translate.google.com/?sl=en&tl=vi&op=translate&text="
+      + encodeURIComponent(text);
+  }
+
+  /* The notebook holds advanced vocabulary, so most running words in a passage
+     are not in it. Machine translation covers the rest — English to Vietnamese,
+     which is the only direction this is ever used in. It needs the open web, so
+     it works on the published site and not inside the claude.ai artifact. */
+  var mtCache = {};
+  function machineTranslate(text) {
+    var key = text.toLowerCase();
+    if (mtCache[key]) return Promise.resolve(mtCache[key]);
+    if (MODE !== "static" || typeof fetch !== "function") {
+      return Promise.reject(new Error("offline"));
+    }
+    return fetch("https://api.mymemory.translated.net/get?langpair=en%7Cvi&q="
+      + encodeURIComponent(text))
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        var t = d && d.responseData && d.responseData.translatedText;
+        if (!t || /MYMEMORY WARNING|INVALID/i.test(t)) throw new Error("no translation");
+        mtCache[key] = t;
+        return t;
+      });
   }
 
   /* ---- local backup ------------------------------------------------------ */
@@ -407,6 +485,7 @@
 
   /* ---- detail pane -------------------------------------------------------- */
   function drawDetail() {
+    hideLookup();
     var host = document.getElementById("detail-inner");
     host.textContent = "";
     if (view === "read") {
@@ -414,6 +493,7 @@
       return;
     }
     var e = byId[selectedId];
+    if (e && !e.senses) e = null;            // a passage id left over from the other view
     host.appendChild(e ? entryView(e) : blankView());
   }
 
@@ -492,27 +572,18 @@
     return art;
   }
 
-  /* Destructive actions live behind a menu rather than sitting in the entry,
-     where they are one stray click away. */
-  function entryMenu(e) {
+  /* A button that drops a small menu, closing on Escape or a click elsewhere. */
+  function makeMenu(glyph, label) {
     var wrap = el("div", "menu-wrap");
-    var trigger = el("button", "iconbtn", "☰");
+    var trigger = el("button", "iconbtn", glyph);
     trigger.type = "button";
-    trigger.title = "Options for this entry";
-    trigger.setAttribute("aria-label", "Options for this entry");
+    trigger.title = label;
+    trigger.setAttribute("aria-label", label);
     trigger.setAttribute("aria-haspopup", "true");
     trigger.setAttribute("aria-expanded", "false");
 
     var menu = el("div", "menu");
     menu.hidden = true;
-
-    var del = el("button", "menu-item danger", "Delete this word");
-    del.type = "button";
-    del.addEventListener("click", function () {
-      close();
-      removeEntry(e);
-    });
-    menu.appendChild(del);
 
     function close() {
       menu.hidden = true;
@@ -536,7 +607,35 @@
 
     wrap.appendChild(trigger);
     wrap.appendChild(menu);
-    return wrap;
+    return { wrap: wrap, menu: menu, trigger: trigger, close: close };
+  }
+
+  /* Destructive actions live behind a menu rather than sitting in the entry,
+     where they are one stray click away. */
+  function entryMenu(e) {
+    var m = makeMenu("☰", "Options for this entry");
+    var del = el("button", "menu-item danger", "Delete this word");
+    del.type = "button";
+    del.addEventListener("click", function () {
+      m.close();
+      removeEntry(e);
+    });
+    m.menu.appendChild(del);
+    return m.wrap;
+  }
+
+  /* The Passages toggle, and what the search box says it will search. */
+  function syncViewButtons() {
+    var rd = document.getElementById("view-read");
+    if (rd) {
+      rd.hidden = !READINGS.length;
+      rd.setAttribute("aria-pressed", String(view === "read"));
+      rd.className = view === "read" ? "btn btn-primary" : "btn";
+    }
+    if (qInput) {
+      qInput.placeholder = view === "read"
+        ? "Search inside the passages…" : "Search a word, a meaning, or Vietnamese…";
+    }
   }
 
   /* Related entries: the mixed-up group, the same phrasal verb, or same root. */
@@ -576,10 +675,135 @@
     w.appendChild(el("h1", null, r.title));
     var words = r.paras.join(" ").split(/\s+/).length;
     w.appendChild(el("p", "meta", "Passage " + r.index + " · " + fmt(words) + " words"));
+    w.appendChild(el("p", "hint",
+      "Select any word or phrase to see what the notebook has on it — English to Vietnamese."));
     var prose = el("div", "prose");
     r.paras.forEach(function (p) { prose.appendChild(el("p", null, p)); });
+    prose.addEventListener("mouseup", onSelectInProse);
+    prose.addEventListener("touchend", onSelectInProse);
     w.appendChild(prose);
     return w;
+  }
+
+  /* ---- the card that opens over a selection ------------------------------- */
+  var lookupCard = null;
+
+  function onSelectInProse() {
+    // let the browser settle the selection first
+    setTimeout(function () {
+      var sel = window.getSelection && window.getSelection();
+      if (!sel || sel.isCollapsed) { hideLookup(); return; }
+      var text = String(sel).trim();
+      if (!text || text.length > 120) { hideLookup(); return; }
+      var rect = null;
+      try { rect = sel.getRangeAt(0).getBoundingClientRect(); } catch (err) { rect = null; }
+      showLookup(text, rect);
+    }, 0);
+  }
+
+  function hideLookup() {
+    if (lookupCard) lookupCard.hidden = true;
+  }
+
+  function showLookup(text, rect) {
+    if (!lookupCard) {
+      lookupCard = el("div", "lookup");
+      lookupCard.id = "lookup";
+      document.getElementById("app").appendChild(lookupCard);
+      document.addEventListener("keydown", function (ev) {
+        if (ev.key === "Escape") hideLookup();
+      });
+      window.addEventListener("scroll", hideLookup, true);
+    }
+    lookupCard.textContent = "";
+
+    var close = el("button", "x", "×");
+    close.type = "button";
+    close.setAttribute("aria-label", "Close");
+    close.addEventListener("click", hideLookup);
+    lookupCard.appendChild(close);
+
+    var found = lookupText(text);
+    lookupCard.appendChild(el("div", "picked", found ? found.word : text));
+
+    if (found) {
+      var bits = [];
+      if (found.pos) bits.push(found.pos + ".");
+      var sub = el("div", "sub");
+      if (bits.length) sub.appendChild(document.createTextNode(bits.join(" ") + " "));
+      if (found.ipa) sub.appendChild(el("span", "ipa-inline", found.ipa));
+      if (sub.textContent) lookupCard.appendChild(sub);
+
+      var box = el("div", "glosses");
+      found.senses.slice(0, 4).forEach(function (s) {
+        var g = el("div", "g", s.vi || s.def);
+        if (s.vi && s.def) g.appendChild(el("em", null, s.def));
+        box.appendChild(g);
+      });
+      lookupCard.appendChild(box);
+
+      var row = el("div", "row");
+      var open = el("button", "btn", "Open entry");
+      open.type = "button";
+      open.addEventListener("click", function () {
+        hideLookup();
+        view = "vocab";
+        selectedId = found.id;
+        selectedRead = null;
+        query = "";
+        if (qInput) qInput.value = "";
+        syncViewButtons();
+        refresh();
+        select(found.id);
+        showDetail();
+      });
+      row.appendChild(open);
+      lookupCard.appendChild(row);
+    } else {
+      var box2 = el("div", "glosses");
+      var line = el("div", "g", "Translating…");
+      box2.appendChild(line);
+      lookupCard.appendChild(box2);
+
+      var row2 = el("div", "row");
+      var gt = document.createElement("a");
+      gt.className = "btn";
+      gt.target = "_blank";
+      gt.rel = "noopener";
+      gt.href = translateUrl(text);
+      gt.textContent = "Open in Google Translate";
+      row2.appendChild(gt);
+      lookupCard.appendChild(row2);
+
+      machineTranslate(text).then(function (vi) {
+        line.textContent = vi;
+        line.appendChild(el("em", null, "machine translation, not from the notebook"));
+        place(lookupCard, rect);
+      }, function () {
+        line.remove();
+        var none = el("p", "none",
+          "Not in the notebook, and the translator could not be reached.");
+        box2.appendChild(none);
+        place(lookupCard, rect);
+      });
+    }
+
+    lookupCard.hidden = false;
+    place(lookupCard, rect);
+  }
+
+  function place(card, rect) {
+    if (!rect) return;
+    var pad = 10;
+    var w = card.offsetWidth || 320;
+    var h = card.offsetHeight || 160;
+    var vw = window.innerWidth || 1024;
+    var vh = window.innerHeight || 768;
+    var left = Math.min(Math.max(pad, rect.left + rect.width / 2 - w / 2), vw - w - pad);
+    var top = rect.bottom + 8;
+    if (top + h > vh - pad) top = Math.max(pad, rect.top - h - 8);
+    card.style.left = Math.round(left) + "px";
+    card.style.top = Math.round(top) + "px";
   }
 
   function blankView() {
@@ -1030,6 +1254,7 @@
     }
     var sync = document.getElementById("sync-sheet");
     if (sync) sync.hidden = !canWriteSheet();
+    syncViewButtons();
     var row = document.getElementById("to-sheet-row");
     if (row) row.hidden = !canWriteSheet();
   }
@@ -1069,47 +1294,53 @@
     searchBox.appendChild(hk);
     top.appendChild(searchBox);
 
+    /* The bar carries what gets used constantly; the rest lives under ⋯, so
+       five things sit here rather than eight. */
     var acts = el("div", "acts");
-    if (READINGS.length) {
-      var rd = el("button", "btn", "Passages");
-      rd.type = "button";
-      rd.addEventListener("click", function () {
-        view = view === "read" ? "vocab" : "read";
-        rd.setAttribute("aria-pressed", String(view === "read"));
-        rd.className = view === "read" ? "btn btn-primary" : "btn";
-        qInput.placeholder = view === "read"
-          ? "Search inside the passages…" : "Search a word, a meaning, or Vietnamese…";
-        selectedRead = null;
-        refresh();
-      });
-      acts.appendChild(rd);
-    }
+
+    var rd = el("button", "btn", "Passages");
+    rd.type = "button";
+    rd.id = "view-read";
+    rd.hidden = true;
+    rd.setAttribute("aria-pressed", "false");
+    rd.addEventListener("click", function () {
+      view = view === "read" ? "vocab" : "read";
+      selectedRead = null;
+      selectedId = null;
+      syncViewButtons();
+      refresh();
+    });
+    acts.appendChild(rd);
+
     var add = el("button", "btn btn-primary", "+ Add word");
     add.type = "button";
     add.id = "add-word";
     add.addEventListener("click", function () { openForm(query.trim()); });
     acts.appendChild(add);
 
-    var push = el("button", "btn", "Write to sheet");
+    var more = makeMenu("⋯", "More actions");
+    var push = el("button", "menu-item", "Write to sheet");
     push.type = "button";
     push.id = "push-sheet";
     push.hidden = true;
-    push.addEventListener("click", pushToSheet);
-    acts.appendChild(push);
+    push.addEventListener("click", function () { more.close(); pushToSheet(); });
+    more.menu.appendChild(push);
 
     var openSheet = document.createElement("a");
-    openSheet.className = "btn btn-quiet";
+    openSheet.className = "menu-item";
     openSheet.id = "open-sheet";
     openSheet.target = "_blank";
     openSheet.rel = "noopener";
     openSheet.textContent = "Open sheet";
     openSheet.hidden = true;
-    acts.appendChild(openSheet);
+    more.menu.appendChild(openSheet);
 
-    var exp = el("button", "btn btn-quiet", "Back up .json");
+    var exp = el("button", "menu-item", "Back up .json");
     exp.type = "button";
-    exp.addEventListener("click", exportJson);
-    acts.appendChild(exp);
+    exp.id = "backup-json";
+    exp.addEventListener("click", function () { more.close(); exportJson(); });
+    more.menu.appendChild(exp);
+    acts.appendChild(more.wrap);
 
     var sync = el("button", "btn", "Sync from sheet");
     sync.type = "button";
