@@ -48,6 +48,30 @@ const { read, boot, ok, done, wait, click, type, btn } = require('./helpers');
   ok('examples get their own line', doc.querySelectorAll('.eg').length > 0,
      doc.querySelector('.eg')?.textContent);
 
+  // a definition that leads with the form being defined
+  type(w, q, 'better off');
+  await wait(20);
+  click(w, doc.querySelector('.hit'));
+  const term = doc.querySelector('.def .term');
+  ok('the lead-in term is set apart', !!term && term.textContent === 'be better off',
+     term && term.textContent);
+  ok('  and the rest of the definition is left alone',
+     (doc.querySelector('.def')?.textContent || '').startsWith('be better off: to have more money'),
+     doc.querySelector('.def')?.textContent?.slice(0, 52));
+  ok('  in the ochre the sheet uses', /\.def \.term \{[^}]*var\(--term\)/.test(read('app.css')) &&
+     /--term:\s*#bf9000/.test(read('app.css')));
+  ok('  every sense that has one gets it',
+     doc.querySelectorAll('.def .term').length >= 3,
+     doc.querySelectorAll('.def .term').length + ' of ' +
+     doc.querySelectorAll('.def').length + ' senses');
+
+  // a definition with no lead-in must not be carved up
+  type(w, q, 'aardvark');
+  await wait(20);
+  click(w, doc.querySelector('.hit'));
+  ok('a plain definition is left whole', !doc.querySelector('.def .term'),
+     doc.querySelector('.def')?.textContent?.slice(0, 40));
+
   type(w, q, 'mui dat');
   await wait(20);
   ok('Vietnamese without tone marks still finds it',

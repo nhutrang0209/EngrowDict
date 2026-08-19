@@ -539,7 +539,7 @@
       var li = el("li", "sense" + (e.senses.length > 1 ? "" : " solo"));
       if (e.senses.length > 1) li.appendChild(el("span", "num", String(i + 1)));
       var body = el("div", "body");
-      if (s.def) body.appendChild(el("p", "def", s.def));
+      if (s.def) body.appendChild(defNode(s.def));
       if (s.eg && s.eg.length) {
         var egs = el("div", "egs");
         s.eg.forEach(function (x) { egs.appendChild(el("p", "eg", x)); });
@@ -669,6 +669,22 @@
       qInput.placeholder = view === "read"
         ? "Search inside the passages…" : "Search a word, a meaning, or Vietnamese…";
     }
+  }
+
+  /* Many definitions lead with the exact form being defined — "be better off:
+     to have more money…". The sheet sets that lead-in apart, so the page does
+     too. A colon this early is always a lead-in in this data, never a sentence
+     break. */
+  function defNode(text) {
+    var p = el("p", "def");
+    var i = text.indexOf(":");
+    if (i > 0 && i <= 70 && (text.charAt(i + 1) === " " || i === text.length - 1)) {
+      p.appendChild(el("b", "term", text.slice(0, i)));
+      p.appendChild(document.createTextNode(text.slice(i)));
+    } else {
+      p.textContent = text;
+    }
+    return p;
   }
 
   /* Related entries: the mixed-up group, the same phrasal verb, or same root. */

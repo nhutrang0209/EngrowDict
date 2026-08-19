@@ -35,6 +35,7 @@ ol, ul { padding: 0; list-style: none; }
   --accent-line: #0d6b4f;
   --flag:        #b04a2b;
   --flag-soft:   #fbe9e2;
+  --term:        #bf9000;   /* the ochre the sheet uses for lead-in terms */
   --ring:        0 0 0 3px rgba(13, 107, 79, .16);
   --lift-1:      0 1px 2px rgba(16, 22, 19, .05), 0 1px 1px rgba(16, 22, 19, .04);
   --lift-2:      0 2px 6px rgba(16, 22, 19, .06), 0 10px 24px -12px rgba(16, 22, 19, .18);
@@ -68,6 +69,7 @@ ol, ul { padding: 0; list-style: none; }
     --accent-line: #52c396;
     --flag:        #e0906f;
     --flag-soft:   #2c1d17;
+    --term:        #d9a520;
     --ring:        0 0 0 3px rgba(82, 195, 150, .2);
     --lift-1:      0 1px 2px rgba(0, 0, 0, .5);
     --lift-2:      0 2px 6px rgba(0, 0, 0, .5), 0 10px 24px -12px rgba(0, 0, 0, .7);
@@ -92,6 +94,7 @@ ol, ul { padding: 0; list-style: none; }
   --accent-line: #52c396;
   --flag:        #e0906f;
   --flag-soft:   #2c1d17;
+  --term:        #d9a520;
   --ring:        0 0 0 3px rgba(82, 195, 150, .2);
   --lift-1:      0 1px 2px rgba(0, 0, 0, .5);
   --lift-2:      0 2px 6px rgba(0, 0, 0, .5), 0 10px 24px -12px rgba(0, 0, 0, .7);
@@ -372,6 +375,7 @@ body {
 .sense.solo { grid-template-columns: 1fr; }
 .sense.solo .body { grid-column: 1; }
 .def { font-size: 16px; line-height: 1.6; color: var(--ink); }
+.def .term { font-weight: 600; color: var(--term); }
 .vi { margin-top: 10px; padding-left: 13px; border-left: 2px solid var(--accent-line); font-size: 15px; color: var(--ink-2); font-weight: 450; }
 .egs { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
 .eg { font-size: 13.5px; color: var(--muted); font-style: italic; line-height: 1.55; padding-left: 13px; border-left: 1px solid var(--rule); }
@@ -1150,7 +1154,7 @@ a.btn[hidden] { display: none; }
       var li = el("li", "sense" + (e.senses.length > 1 ? "" : " solo"));
       if (e.senses.length > 1) li.appendChild(el("span", "num", String(i + 1)));
       var body = el("div", "body");
-      if (s.def) body.appendChild(el("p", "def", s.def));
+      if (s.def) body.appendChild(defNode(s.def));
       if (s.eg && s.eg.length) {
         var egs = el("div", "egs");
         s.eg.forEach(function (x) { egs.appendChild(el("p", "eg", x)); });
@@ -1280,6 +1284,22 @@ a.btn[hidden] { display: none; }
       qInput.placeholder = view === "read"
         ? "Search inside the passages…" : "Search a word, a meaning, or Vietnamese…";
     }
+  }
+
+  /* Many definitions lead with the exact form being defined — "be better off:
+     to have more money…". The sheet sets that lead-in apart, so the page does
+     too. A colon this early is always a lead-in in this data, never a sentence
+     break. */
+  function defNode(text) {
+    var p = el("p", "def");
+    var i = text.indexOf(":");
+    if (i > 0 && i <= 70 && (text.charAt(i + 1) === " " || i === text.length - 1)) {
+      p.appendChild(el("b", "term", text.slice(0, i)));
+      p.appendChild(document.createTextNode(text.slice(i)));
+    } else {
+      p.textContent = text;
+    }
+    return p;
   }
 
   /* Related entries: the mixed-up group, the same phrasal verb, or same root. */
