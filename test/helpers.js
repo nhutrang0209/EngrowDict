@@ -87,6 +87,17 @@ const type = (w, input, value) => { input.value = value; input.dispatchEvent(new
 const btn = (doc, sel, label) =>
   [...doc.querySelectorAll(sel)].find(b => b.textContent.trim() === label);
 
+/** Open the entry's ☰ menu and press Delete. Returns false if there is none. */
+function deleteWord(g) {
+  const wrap = g.doc.querySelector('.entry-nav .menu-wrap');
+  if (!wrap) return false;
+  click(g.window, wrap.querySelector('.iconbtn'));
+  const item = wrap.querySelector('.menu-item.danger');
+  if (!item || wrap.querySelector('.menu').hidden) return false;
+  click(g.window, item);
+  return true;
+}
+
 /** Fill the add-word dialog and save. Assumes the passcode is already cleared. */
 function addWord(g, fields) {
   click(g.window, g.doc.getElementById('add-word'));
@@ -170,7 +181,7 @@ function appsScriptSandbox(grids, props) {
       getActiveSpreadsheet: () => ({ getSheetByName: n => sheets[n] || null }),
       newTextStyle: textStyle,
       newRichTextValue: richText,
-      BorderStyle: { SOLID: 'SOLID', DASHED: 'DASHED' },
+      BorderStyle: { SOLID: 'SOLID', DASHED: 'DASHED', DOTTED: 'DOTTED' },
     },
     PropertiesService: { getScriptProperties: () => ({ getProperty: k => props[k] || null }) },
     LockService: { getScriptLock: () => ({ waitLock: () => {}, releaseLock: () => {} }) },
@@ -185,6 +196,6 @@ function appsScriptSandbox(grids, props) {
 
 module.exports = {
   ROOT, read, boot, ok, done, wait, click, type, btn, addWord,
-  unlockedStore, SETTINGS_KEY, BACKUP_KEY, PASSCODE,
+  unlockedStore, SETTINGS_KEY, BACKUP_KEY, PASSCODE, deleteWord,
   fakeSheet, appsScriptSandbox,
 };

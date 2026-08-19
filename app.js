@@ -436,6 +436,7 @@
     nav.appendChild(next);
     if (at > -1) nav.appendChild(el("span", "pos-in-list", fmt(at + 1) + " of " + fmt(hits.length)));
     nav.appendChild(el("span", "grow"));
+    if (e.mine && mayAdd()) nav.appendChild(entryMenu(e));
     art.appendChild(nav);
 
     var head = el("div", "entry-head");
@@ -488,15 +489,54 @@
       art.appendChild(box);
     }
 
-    if (e.mine && mayAdd()) {
-      var foot = el("div", "entry-foot");
-      var del = el("button", "btn btn-danger", "Delete this word");
-      del.type = "button";
-      del.addEventListener("click", function () { removeEntry(e); });
-      foot.appendChild(del);
-      art.appendChild(foot);
-    }
     return art;
+  }
+
+  /* Destructive actions live behind a menu rather than sitting in the entry,
+     where they are one stray click away. */
+  function entryMenu(e) {
+    var wrap = el("div", "menu-wrap");
+    var trigger = el("button", "iconbtn", "☰");
+    trigger.type = "button";
+    trigger.title = "Options for this entry";
+    trigger.setAttribute("aria-label", "Options for this entry");
+    trigger.setAttribute("aria-haspopup", "true");
+    trigger.setAttribute("aria-expanded", "false");
+
+    var menu = el("div", "menu");
+    menu.hidden = true;
+
+    var del = el("button", "menu-item danger", "Delete this word");
+    del.type = "button";
+    del.addEventListener("click", function () {
+      close();
+      removeEntry(e);
+    });
+    menu.appendChild(del);
+
+    function close() {
+      menu.hidden = true;
+      trigger.setAttribute("aria-expanded", "false");
+      document.removeEventListener("click", onAway, true);
+      document.removeEventListener("keydown", onKey, true);
+    }
+    function onAway(ev) { if (!wrap.contains(ev.target)) close(); }
+    function onKey(ev) { if (ev.key === "Escape") { close(); trigger.focus(); } }
+
+    trigger.addEventListener("click", function () {
+      if (menu.hidden) {
+        menu.hidden = false;
+        trigger.setAttribute("aria-expanded", "true");
+        document.addEventListener("click", onAway, true);
+        document.addEventListener("keydown", onKey, true);
+      } else {
+        close();
+      }
+    });
+
+    wrap.appendChild(trigger);
+    wrap.appendChild(menu);
+    return wrap;
   }
 
   /* Related entries: the mixed-up group, the same phrasal verb, or same root. */

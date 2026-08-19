@@ -45,7 +45,8 @@ ok('the rich text holds word, part of speech and phonetics',
    rich.text === 'susurrus (n)\n/suːˈsʌr.əs/', JSON.stringify(rich.text));
 ok('the whole cell is reset to plain first',
    rich.styles[0].from === 0 && rich.styles[0].to === rich.text.length &&
-   rich.styles[0].style.bold === false && rich.styles[0].style.underline === false,
+   rich.styles[0].style.bold === false && rich.styles[0].style.underline === false &&
+   rich.styles[0].style.color === '#1f1f1f',
    JSON.stringify(rich.styles[0].style));
 ok('only the word itself is styled',
    rich.styles[1].from === 0 && rich.styles[1].to === 'susurrus'.length,
@@ -66,8 +67,10 @@ ok('the block is outlined solid',
    !!outline && outline.top && outline.left && outline.bottom && outline.right &&
    outline.vertical === true && outline.horizontal === null,
    outline && JSON.stringify({ v: outline.vertical, h: outline.horizontal, c: outline.color }));
-ok('no dashed rule when there is only one sense',
-   !got.borders.some(b => b.style === 'DASHED'));
+ok('no rule between senses when there is only one',
+   !got.borders.some(b => b.style === 'DOTTED'));
+ok('the outline stops at the last column the tab uses',
+   outline.at.nCols === 3, outline.at.nCols + ' columns wide');
 
 /* --- several senses ------------------------------------------------------ */
 m = mark();
@@ -87,14 +90,17 @@ ok('column A is merged across the three rows',
    got.merges[0].nRows === 3 && got.merges[0].nCols === 1,
    JSON.stringify(got.merges));
 
-const dashed = got.borders.find(b => b.style === 'DASHED');
-ok('the rule between senses is dashed', !!dashed && dashed.horizontal === true,
-   dashed && JSON.stringify({ h: dashed.horizontal, col: dashed.at.col, n: dashed.at.nCols }));
+const dotted = got.borders.find(b => b.style === 'DOTTED');
+ok('the rule between senses is the finer dotted one, as elsewhere in the sheet',
+   !!dotted && dotted.horizontal === true,
+   dotted && JSON.stringify({ h: dotted.horizontal, col: dotted.at.col, n: dotted.at.nCols }));
 ok('  and it starts beside the merged head, not through it',
-   dashed.at.col === 2 && dashed.at.nRows === 3, JSON.stringify(dashed.at));
+   dotted.at.col === 2 && dotted.at.nRows === 3, JSON.stringify(dotted.at));
+ok('  reaching only the columns the tab uses',
+   dotted.at.col + dotted.at.nCols - 1 === 3, 'stops at column ' + (dotted.at.col + dotted.at.nCols - 1));
 ok('  while nothing else about it is drawn',
-   dashed.top === null && dashed.left === null &&
-   dashed.bottom === null && dashed.right === null && dashed.vertical === null);
+   dotted.top === null && dotted.left === null &&
+   dotted.bottom === null && dotted.right === null && dotted.vertical === null);
 ok('the outline stays solid', got.borders.some(b => b.style === 'SOLID' && b.top === true));
 
 /* --- reading it back ----------------------------------------------------- */
@@ -125,9 +131,12 @@ ok('both the verb and the particle columns are merged',
    pvLog.merges.slice(-2).every(x => x.nRows === 2) &&
    pvLog.merges.slice(-2).map(x => x.col).join() === '1,2',
    JSON.stringify(pvLog.merges.slice(-2)));
-const pvDashed = pvLog.borders.filter(b => b.style === 'DASHED').pop();
-ok('its dashed rule starts after the particle column', pvDashed.at.col === 3,
-   JSON.stringify(pvDashed.at));
+const pvDotted = pvLog.borders.filter(b => b.style === 'DOTTED').pop();
+ok('its rule starts after the particle column', pvDotted.at.col === 3,
+   JSON.stringify(pvDotted.at));
+ok('  and a phrasal verb does use all four columns',
+   pvDotted.at.col + pvDotted.at.nCols - 1 === 4,
+   'stops at column ' + (pvDotted.at.col + pvDotted.at.nCols - 1));
 
 /* --- odd headwords ------------------------------------------------------- */
 ok('a two-word headword slugs correctly',

@@ -1,6 +1,7 @@
 /* The static build: a light shell that fetches data.json, no window.claude,
    words kept in localStorage and still there on the next visit. */
-const { read, boot, ok, done, wait, click, addWord, unlockedStore, BACKUP_KEY } = require('./helpers');
+const { read, boot, ok, done, wait, click, addWord, unlockedStore, BACKUP_KEY,
+        deleteWord } = require('./helpers');
 
 const shell = read('docs/index.html');
 const store = unlockedStore();
@@ -67,7 +68,7 @@ const mk = () => boot({
 
   click(b.window, b.doc.querySelector('.hit'));
   b.window.confirm = () => true;
-  click(b.window, b.doc.querySelector('.btn-danger'));
+  deleteWord(b);
   await wait(150);
   ok('deleting works', b.doc.getElementById('tally').textContent.includes('11,401'),
      b.doc.getElementById('tally').textContent);

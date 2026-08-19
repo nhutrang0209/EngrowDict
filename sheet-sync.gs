@@ -22,13 +22,18 @@ var PROP_BRANCH = 'SOTRATU_BRANCH';
 var PROP_KEY = 'SOTRATU_KEY';       // shared secret for the web-to-sheet path
 var TARGET = 'docs/data.json';
 
-/** Which tab holds which group, and how many columns precede the senses. */
+/**
+ * Which tab holds which group, how many columns come before the senses, and
+ * how many columns the tab actually uses. `cols` matters: the sheet has blank
+ * columns past the last one in use, and drawing borders into them would leave
+ * rules hanging off the right-hand edge of the table.
+ */
 var TABS = {
-  word:       { sheet: 'Vocabulary',   headCols: 1 },
-  phrasal:    { sheet: 'Phrasal Verb', headCols: 2 },
-  idiom:      { sheet: 'Idioms',       headCols: 1 },
-  expression: { sheet: 'Common',       headCols: 1 },
-  compare:    { sheet: 'Grammar',      headCols: 2 }
+  word:       { sheet: 'Vocabulary',   headCols: 1, cols: 3 },
+  phrasal:    { sheet: 'Phrasal Verb', headCols: 2, cols: 4 },
+  idiom:      { sheet: 'Idioms',       headCols: 1, cols: 3 },
+  expression: { sheet: 'Common',       headCols: 1, cols: 3 },
+  compare:    { sheet: 'Grammar',      headCols: 2, cols: 4 }
 };
 
 function onOpen() {
@@ -166,9 +171,11 @@ function doPost(e) {
   }
 }
 
-/** How many columns are actually in play; every tab uses 3 or 4. */
-function width(sh) {
-  return Math.max(1, Math.min(4, sh.getMaxColumns ? sh.getMaxColumns() : 4));
+/** The tab's own column count, never wider than the sheet really is. */
+function width(sh, tab) {
+  var want = (tab && tab.cols) || 3;
+  var have = sh.getMaxColumns ? sh.getMaxColumns() : want;
+  return Math.max(1, Math.min(want, have));
 }
 
 /** A new mixed-up group takes the next number after the largest in use. */
@@ -185,6 +192,7 @@ function nextGroup(sh) {
 }
 
 var LINK_BLUE = '#1155cc';   // the blue the sheet already uses for headwords
+var TEXT_INK = '#1f1f1f';    // and its near-black for everything under them
 var BORDER_INK = '#000000';
 
 /** Where the headword links to. Cambridge slugs are lowercase, hyphenated. */
@@ -204,7 +212,7 @@ function cambridgeUrl(term) {
 function headRichText(fullText, word, url) {
   var plain = SpreadsheetApp.newTextStyle()
     .setBold(false).setItalic(false).setUnderline(false)
-    .setForegroundColor(BORDER_INK).build();
+    .setForegroundColor(TEXT_INK).build();
   var headline = SpreadsheetApp.newTextStyle()
     .setBold(true).setUnderline(true).setForegroundColor(LINK_BLUE).build();
 
@@ -250,7 +258,7 @@ function formatInserted(sh, at, n, entry, w) {
   // only the rules between senses are dashed, and only beside the merged head
   if (n > 1 && w > headWide) {
     sh.getRange(at, headWide + 1, n, w - headWide).setBorder(
-      null, null, null, null, null, true, BORDER_INK, SpreadsheetApp.BorderStyle.DASHED);
+      null, null, null, null, null, true, BORDER_INK, SpreadsheetApp.BorderStyle.DOTTED);
   }
 }
 
@@ -264,10 +272,10 @@ function headCell(entry) {
 }
 
 /** The first row to insert before, so the tab stays in a→z order. */
-function insertRowFor(sh, sortKey, headCols) {
+function insertRowFor(sh, sortKey, headCols, cols) {
   var last = sh.getLastRow();
   if (last < 2) return last + 1;
-  var vals = sh.getRange(1, 1, last, width(sh)).getDisplayValues();
+  var vals = sh.getRange(1, 1, last, cols).getDisplayValues();
   var target = 0;
   for (var i = 1; i < vals.length; i++) {
     var a = txt(vals[i][0]);
@@ -286,6 +294,7 @@ function insertEntry(entry) {
   var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(tab.sheet);
   if (!sh) return { ok: false, error: 'No tab called ' + tab.sheet };
 
+  var w = width(sh, tab);
   var senses = entry.senses || [];
   if (!senses.length) return { ok: false, error: 'The word has no senses' };
 
@@ -301,7 +310,7 @@ function insertEntry(entry) {
     } else if (entry.type === 'compare') {
       rowsOut.push([i === 0 ? group : '', i === 0 ? txt(entry.word) : '', def, txt(senses[i].vi)]);
     } else {
-      rowsOut.push([i === 0 ? headCell(entry) : '', def, txt(senses[i].vi), '']);
+      rowsOut.push([i === 0 ? headCell(entry) : '', def, txt(senses[i].vi)]);
     }
   }
 
@@ -310,9 +319,9 @@ function insertEntry(entry) {
     : txt(entry.word).toLowerCase();
   var at = entry.type === 'compare'
     ? sh.getLastRow() + 1                       // grouped, not alphabetical
-    : insertRowFor(sh, sortKey, tab.headCols);
+    : insertRowFor(sh, sortKey, tab.headCols, w);
 
-  var w = width(sh);
+
   if (at <= sh.getLastRow()) sh.insertRowsBefore(at, rowsOut.length);
   var trimmed = [];
   for (i = 0; i < rowsOut.length; i++) trimmed.push(rowsOut[i].slice(0, w));

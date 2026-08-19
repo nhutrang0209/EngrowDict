@@ -2,7 +2,8 @@
    -> load that back -> the word is still there and everything still works. */
 const fs = require('fs');
 const path = require('path');
-const { read, boot, ok, done, wait, click, addWord, unlockedStore } = require('./helpers');
+const { read, boot, ok, done, wait, click, addWord, unlockedStore,
+        deleteWord } = require('./helpers');
 
 (async () => {
   const published = [];
@@ -51,7 +52,10 @@ const { read, boot, ok, done, wait, click, addWord, unlockedStore } = require('.
      b.doc.querySelector('.headword')?.textContent + ' ' +
      b.doc.querySelector('.ipa')?.textContent + ' — ' + b.doc.querySelector('.vi')?.textContent);
   ok('it is badged as mine', !!b.doc.querySelector('.kind-mine'));
-  ok('it can be deleted', !!b.doc.querySelector('.btn-danger'));
+  ok('it can be deleted from the entry menu',
+     !!b.doc.querySelector('.entry-nav .menu-wrap .menu-item.danger'));
+  ok('  and that menu starts closed',
+     b.doc.querySelector('.entry-nav .menu-wrap .menu').hidden);
 
   q.value = 'zenith';
   q.dispatchEvent(new b.window.Event('input'));
@@ -65,7 +69,7 @@ const { read, boot, ok, done, wait, click, addWord, unlockedStore } = require('.
   await wait(30);
   click(b.window, b.doc.querySelector('.hit'));
   b.window.confirm = () => true;
-  click(b.window, b.doc.querySelector('.btn-danger'));
+  deleteWord(b);
   await wait(300);
   ok('deleting republishes too', published2.length === 1, published2.length + ' calls');
   ok('the republished copy has an empty added list',
