@@ -148,10 +148,23 @@ function fakeSheet(rows) {
   return sheet;
 }
 
-/** Enough of the Apps Script globals for sheet-sync.gs to run under Node. */
-function appsScriptSandbox(grids, props) {
-  const sheets = {};
-  for (const name of Object.keys(grids)) sheets[name] = fakeSheet(grids[name]);
+/**
+ * Enough of the Apps Script globals for sheet-sync.gs to run under Node.
+ *
+ * `grids` is the workbook the script is attached to. `others`, keyed by
+ * spreadsheet id, are the ones it can only reach by link — which is how the
+ * web page points the same deployment at another sheet.
+ */
+function appsScriptSandbox(grids, props, others) {
+  props = props || {};
+  const tabs = g => {
+    const m = {};
+    for (const name of Object.keys(g)) m[name] = fakeSheet(g[name]);
+    return m;
+  };
+  const sheets = tabs(grids);
+  const books = {};
+  for (const id of Object.keys(others || {})) books[id] = tabs(others[id]);
 
   const textStyle = () => {
     const s = {};
@@ -177,13 +190,24 @@ function appsScriptSandbox(grids, props) {
 
   const sandbox = {
     sheets,
+    books,
+    props,
     SpreadsheetApp: {
       getActiveSpreadsheet: () => ({ getSheetByName: n => sheets[n] || null }),
+      openById: id => {
+        if (!books[id]) throw new Error('No spreadsheet with the id ' + id);
+        return { getSheetByName: n => books[id][n] || null };
+      },
       newTextStyle: textStyle,
       newRichTextValue: richText,
       BorderStyle: { SOLID: 'SOLID', DASHED: 'DASHED', DOTTED: 'DOTTED' },
     },
-    PropertiesService: { getScriptProperties: () => ({ getProperty: k => props[k] || null }) },
+    PropertiesService: {
+      getScriptProperties: () => ({
+        getProperty: k => props[k] || null,
+        setProperty: (k, v) => { props[k] = v; },
+      }),
+    },
     LockService: { getScriptLock: () => ({ waitLock: () => {}, releaseLock: () => {} }) },
     ContentService: {
       MimeType: { JSON: 'json' },

@@ -193,5 +193,65 @@ function page(store, posts, reply) {
      !!pv && pv.verb === 'muddle' && pv.particle === 'sideways' &&
      pv.senses[0].vi === 'xoay xở cho qua', pv ? pv.word : 'not found');
 
+  /* ------------------------- C. pointing the same script at another sheet */
+  /* Changing the Google Sheet link in Settings is the whole move: the same
+     deployment, the same key, a different workbook. */
+
+  ok('every post names the workbook it means', add.body.sheet === CFG.sheetUrl,
+     String(add.body.sheet));
+
+  const BOOK2 = 'second-workbook-id-0123456789';
+  const blank = {
+    Vocabulary: [[' ', 'Meaning', '', '']],
+    'Phrasal Verb': [[' ', '', 'Meaning', '']],
+    Idioms: [[' ', 'Meaning', '', '']],
+    Common: [[' ', 'Meaning', '', '']],
+    Grammar: [[' ', '', 'Meaning', '']],
+  };
+  const props2 = { SOTRATU_KEY: CFG.key };
+  const two = appsScriptSandbox(grids, props2, { [BOOK2]: blank });
+  vm.createContext(two);
+  vm.runInContext(read('sheet-sync.gs')
+    + '
+this.__doPost = doPost; this.__buildData = buildData;', two);
+  const call2 = (payload) =>
+    JSON.parse(two.__doPost({ postData: { contents: JSON.stringify(payload) } }));
+
+  const link2 = 'https://docs.google.com/spreadsheets/d/' + BOOK2 + '/edit#gid=0';
+  const attachedBefore = two.sheets.Vocabulary.grid.length;
+  const r2 = call2({ key: CFG.key, sheet: link2, action: 'add', entry: {
+    type: 'word', word: 'quoll', pos: 'n', ipa: '/kwɒl/', note: '',
+    senses: [{ def: 'a small carnivorous marsupial', eg: [], vi: 'thú quoll' }],
+  } });
+  ok('a word goes to the workbook the link names', r2.ok && r2.sheet === 'Vocabulary',
+     JSON.stringify(r2));
+  ok('  and it really is in that workbook',
+     two.books[BOOK2].Vocabulary.grid.some(r => String(r[0]).indexOf('quoll') === 0),
+     JSON.stringify(two.books[BOOK2].Vocabulary.grid.slice(-1)));
+  ok('  while the workbook the script is attached to is untouched',
+     two.sheets.Vocabulary.grid.length === attachedBefore);
+  ok('  and the link is remembered for a script with no sheet of its own',
+     two.props.SOTRATU_BOOK === BOOK2, String(two.props.SOTRATU_BOOK));
+
+  const synced = call2({ key: CFG.key, sheet: link2, action: 'sync' });
+  ok('Sync reads the named workbook, not the attached one',
+     synced.ok && synced.data && synced.data.entries.length === 1 &&
+     synced.data.entries[0].word === 'quoll',
+     synced.data ? synced.data.entries.length + ' entries' : JSON.stringify(synced));
+
+  const bad = call2({ key: CFG.key, sheet: 'https://docs.google.com/spreadsheets/d/nope/edit',
+                      action: 'ping' });
+  ok('a link that cannot be opened is refused at the ping, not later',
+     bad.ok === false && /cannot be opened/.test(bad.error), JSON.stringify(bad));
+
+  const plain = call2({ key: CFG.key, action: 'add', entry: {
+    type: 'word', word: 'zoetrope', pos: 'n', ipa: '', note: '',
+    senses: [{ def: 'a spinning drum of pictures', eg: [], vi: 'trống quay hình' }],
+  } });
+  ok('a page too old to send a link still writes to the attached workbook',
+     plain.ok && two.sheets.Vocabulary.grid.length > attachedBefore &&
+     !two.books[BOOK2].Vocabulary.grid.some(r => String(r[0]).indexOf('zoetrope') === 0),
+     JSON.stringify(plain));
+
   done(a.errs.concat(b.errs, locked.errs));
 })();

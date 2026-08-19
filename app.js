@@ -220,9 +220,12 @@
     return MODE === "static" && unlocked() && !!settings.webApp && !!settings.key;
   }
 
-  /* Apps Script accepts a plain POST with no custom headers, so no preflight. */
+  /* Apps Script accepts a plain POST with no custom headers, so no preflight.
+     The sheet link rides along: the script writes to the workbook named here,
+     not to whichever one it happens to be attached to. */
   function callSheet(payload) {
     payload.key = settings.key;
+    payload.sheet = settings.sheetUrl;
     return fetch(settings.webApp, {
       method: "POST",
       body: JSON.stringify(payload),
@@ -738,10 +741,14 @@
       var li = el("li");
       var b = el("button", "pd-hit");
       b.type = "button";
-      var line = el("span", "pd-w", e.word);
+      // same marking as the list on the dictionary tab
+      var line = el("span", "pd-w");
+      markUp(line, e.word, q);
       if (e.pos) line.appendChild(el("i", null, e.pos));
       b.appendChild(line);
-      b.appendChild(el("span", "pd-vi", glossOf(e)));
+      var vi = el("span", "pd-vi");
+      markUp(vi, glossOf(e), q);
+      b.appendChild(vi);
       b.addEventListener("click", function () { popPicked = e; drawPopDict(); });
       li.appendChild(b);
       list.appendChild(li);
@@ -1957,7 +1964,7 @@
     links.id = "setgroup";
     links.appendChild(setRow("sheet", "Google Sheet link", "sheetUrl",
       "https://docs.google.com/spreadsheets/d/…",
-      "Adds an Open sheet button to the top bar.", false));
+      "The workbook that Add word and Sync write to, and the Open sheet button.", false));
     links.appendChild(setRow("webapp", "Sync Web App link", "webApp",
       "https://script.google.com/macros/s/…/exec",
       "From the sheet: EngrowDict menu → Link for the web to write words.", false));

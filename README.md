@@ -49,7 +49,8 @@ on it — headword, part of speech, phonetics, the Vietnamese meanings — and a
 button through to the full entry.
 
 **Look up** in the top bar (or the `d` key) floats a dictionary window over the
-passage: type to search the whole notebook, pick a result to read its senses,
+passage: type to search the whole notebook — same ranking and same marking of
+the matched characters as the list on the Dictionary tab — pick a result to read its senses,
 drag it out of the way, and open the full entry when you want it. Selecting text
 while it is open feeds the selection straight into it rather than opening the
 small card. It stays where you drag it, and closes when you leave the tab.
@@ -115,6 +116,15 @@ first cell left empty on the rows that follow.
 3. On the site press **⚙**, unlock with the passcode, press **Edit** beside each
    field, paste the sheet link, the Web App link and the key, then **Test
    connection** and **Save**.
+
+**Moving to another workbook** is only the first of those three: paste the new
+Google Sheet link into **⚙** and Save. Every request carries that link and the
+script writes to the workbook it names, so the deployment, the key and the
+GitHub token — all of which belong to the script project rather than to a sheet
+— stay exactly as they are. The **EngrowDict** menu inside a sheet always means
+the sheet it lives in, whatever the site happens to be pointed at. Opening a
+workbook by link needs a wider permission than opening the one the script is
+attached to, so Google asks to authorise the script once more the first time.
 
 A word written back is styled to match the ones already in the sheet: the
 headword bold, blue and hyperlinked to its Cambridge entry, the part of speech

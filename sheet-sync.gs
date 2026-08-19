@@ -20,6 +20,7 @@ var PROP_REPO = 'SOTRATU_REPO';     // "nhutrang0209/EngrowDict"
 var PROP_TOKEN = 'SOTRATU_TOKEN';   // fine-grained PAT, Contents: Read and write
 var PROP_BRANCH = 'SOTRATU_BRANCH';
 var PROP_KEY = 'SOTRATU_KEY';       // shared secret for the web-to-sheet path
+var PROP_BOOK = 'SOTRATU_BOOK';     // the workbook the web page last pointed at
 var TARGET = 'docs/data.json';
 
 /**
@@ -154,6 +155,20 @@ function doPost(e) {
     var body = JSON.parse(e.postData.contents);
     var key = PropertiesService.getScriptProperties().getProperty(PROP_KEY);
     if (!key || body.key !== key) return out({ ok: false, error: 'Wrong key' });
+
+    // The page sends the same Google Sheet link that sits in its Settings, so
+    // moving the words to another workbook is one field, not another deployment.
+    TARGET_BOOK = null;
+    var id = bookIdFrom(body.sheet);
+    if (id) {
+      try {
+        TARGET_BOOK = SpreadsheetApp.openById(id);
+      } catch (err) {
+        return out({ ok: false, error: 'That sheet link cannot be opened: ' + String(err) });
+      }
+      PropertiesService.getScriptProperties().setProperty(PROP_BOOK, id);
+    }
+
     if (body.action === 'ping') return out({ ok: true, pong: true });
     if (body.action === 'sync') return out(syncForWeb());
     if (body.action !== 'add') return out({ ok: false, error: 'Unknown request' });
@@ -169,6 +184,37 @@ function doPost(e) {
   } catch (err) {
     return out({ ok: false, error: String(err) });
   }
+}
+
+/**
+ * Which workbook this run is about.
+ *
+ * A request over the web names its own, which is what lets the web page swap
+ * sheets on its own. The menu inside a sheet always means the sheet it lives
+ * in. A script with neither — one deployed on its own rather than bound to a
+ * workbook — falls back to whichever sheet the page named last.
+ */
+var TARGET_BOOK = null;
+
+function book() {
+  if (TARGET_BOOK) return TARGET_BOOK;
+  var active = null;
+  try { active = SpreadsheetApp.getActiveSpreadsheet(); } catch (err) { active = null; }
+  if (active) return active;
+  var id = PropertiesService.getScriptProperties().getProperty(PROP_BOOK);
+  if (id) return SpreadsheetApp.openById(id);
+  throw new Error('No sheet to work on. Open this from a spreadsheet, or put the '
+    + 'Google Sheet link in the web page Settings.');
+}
+
+/** The id out of a Google Sheets link, or the id itself if that is what came. */
+function bookIdFrom(text) {
+  var s = txt(text);
+  if (!s) return '';
+  var m = s.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+  if (m) return m[1];
+  // a bare id, not a stray sentence: real ones run to about forty characters
+  return /^[a-zA-Z0-9_-]{20,}$/.test(s) ? s : '';
 }
 
 /** The tab's own column count, never wider than the sheet really is. */
@@ -291,7 +337,7 @@ function insertRowFor(sh, sortKey, headCols, cols) {
 
 function insertEntry(entry) {
   var tab = TABS[entry.type] || TABS.word;
-  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(tab.sheet);
+  var sh = book().getSheetByName(tab.sheet);
   if (!sh) return { ok: false, error: 'No tab called ' + tab.sheet };
 
   var w = width(sh, tab);
@@ -492,7 +538,7 @@ function parseHead(cell) {
 }
 
 function grid(name) {
-  var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(name);
+  var sh = book().getSheetByName(name);
   if (!sh) return [];
   var last = sh.getLastRow();
   if (last < 2) return [];

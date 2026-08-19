@@ -17,6 +17,9 @@ const mk = store => boot({
   const { doc, window: w } = a;
   const btn = () => doc.getElementById('popdict-btn');
   const pop = () => doc.getElementById('popdict');
+  // the headword span also carries the part of speech in an <i>
+  const wordOf = node => [...node.childNodes]
+    .filter(n => n.nodeName !== 'I').map(n => n.textContent).join('').trim();
   const typeIn = v => {
     const i = doc.getElementById('pd-q');
     i.value = v;
@@ -44,21 +47,33 @@ const mk = store => boot({
   typeIn('zen');
   const hits = doc.querySelectorAll('.pd-hit');
   ok('typing searches the whole dictionary, not the passage', hits.length > 0,
-     hits.length + ' results, first: ' + hits[0].querySelector('.pd-w')?.firstChild.textContent);
+     hits.length + ' results, first: ' + wordOf(hits[0].querySelector('.pd-w')));
   ok('  prefixes rank before matches buried in a definition',
-     hits[0].querySelector('.pd-w').firstChild.textContent.trim().startsWith('zen'),
-     hits[0].querySelector('.pd-w').firstChild.textContent);
+     wordOf(hits[0].querySelector('.pd-w')).startsWith('zen'),
+     [...hits].slice(0, 4).map(h => wordOf(h.querySelector('.pd-w'))).join(', '));
   ok('  the list is capped', doc.querySelectorAll('.pd-hit').length <= 40);
+
+  ok('  the matched characters are marked, as on the dictionary tab',
+     hits[0].querySelector('.pd-w mark')?.textContent === 'zen',
+     hits[0].querySelector('.pd-w')?.innerHTML);
+  ok('  and only those characters',
+     wordOf(hits[0].querySelector('.pd-w')).length >
+     hits[0].querySelector('.pd-w mark').textContent.length,
+     hits[0].querySelector('.pd-w mark').textContent + ' of ' +
+     wordOf(hits[0].querySelector('.pd-w')));
 
   typeIn('abate');
   ok('  an exact word wins outright',
-     doc.querySelector('.pd-hit .pd-w').firstChild.textContent.trim() === 'abate',
-     doc.querySelector('.pd-hit .pd-w').firstChild.textContent);
+     wordOf(doc.querySelector('.pd-hit .pd-w')) === 'abate',
+     wordOf(doc.querySelector('.pd-hit .pd-w')));
 
   typeIn('dinh cao');
   ok('  and Vietnamese without tone marks reaches it too',
      doc.querySelectorAll('.pd-hit').length > 0,
-     doc.querySelector('.pd-hit .pd-w')?.firstChild.textContent);
+     wordOf(doc.querySelector('.pd-hit .pd-w')));
+  ok('  marking the meaning it matched on',
+     !!doc.querySelector('.pd-hit .pd-vi mark'),
+     doc.querySelector('.pd-hit .pd-vi')?.textContent);
 
   typeIn('zenith');
   click(w, doc.querySelector('.pd-hit'));
