@@ -190,18 +190,28 @@ function appsScriptSandbox(grids, props, others) {
 
   // what the menu functions put on screen, so a test can read it back
   const shown = { dialog: null, alert: null };
+  // what UrlFetchApp is asked for, and what the test wants it to answer with
+  const net = { calls: [], reply: () => ({ code: 404, body: '' }) };
 
   const sandbox = {
     sheets,
     books,
     props,
     shown,
+    net,
     Utilities: {
       getUuid: () => 'uuid-1111-2222-3333',
       base64Encode: t => Buffer.from(String(t), 'utf8').toString('base64'),
       Charset: { UTF_8: 'utf8' },
     },
     ScriptApp: { getService: () => ({ getUrl: () => props.DEPLOYED_URL || '' }) },
+    UrlFetchApp: {
+      fetchAll: reqs => reqs.map(r => {
+        net.calls.push(r.url);
+        const a = net.reply(r.url);
+        return { getResponseCode: () => a.code, getContentText: () => a.body || '' };
+      }),
+    },
     HtmlService: {
       createHtmlOutput: html => {
         const out = { html: html, setWidth: () => out, setHeight: () => out,

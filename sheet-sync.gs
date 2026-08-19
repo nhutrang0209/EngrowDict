@@ -21,6 +21,7 @@ var PROP_TOKEN = 'SOTRATU_TOKEN';   // fine-grained PAT, Contents: Read and writ
 var PROP_BRANCH = 'SOTRATU_BRANCH';
 var PROP_KEY = 'SOTRATU_KEY';       // shared secret for the web-to-sheet path
 var PROP_BOOK = 'SOTRATU_BOOK';     // the workbook the web page last pointed at
+var PROP_READER = 'SOTRATU_READER'; // optional r.jina.ai key, for a private rate limit
 var TARGET = 'docs/data.json';
 
 /**
@@ -221,6 +222,7 @@ function doPost(e) {
 
     if (body.action === 'ping') return out({ ok: true, pong: true });
     if (body.action === 'sync') return out(syncForWeb());
+    if (body.action === 'draft') return out(draftEntry(body.word));
     if (body.action !== 'add') return out({ ok: false, error: 'Unknown request' });
 
     var lock = LockService.getScriptLock();
@@ -546,6 +548,159 @@ function ghPut(repo, token, branch, path, text, sha, message) {
     muteHttpExceptions: true,
   });
   return { code: r.getResponseCode(), body: r.getContentText() };
+}
+
+/* ------------------------------------- the draft: Cambridge -> the form */
+
+/**
+ * Cambridge answers a plain server-side request with 403 — the entry pages and
+ * robots.txt alike — because Cloudflare wants a browser. r.jina.ai renders the
+ * page and hands back Cambridge's own markup, so what lands in the form is
+ * Cambridge's wording rather than a paraphrase of it.
+ *
+ * Two pages are read at once: the English dictionary for the part of speech,
+ * the phonetics, the definitions and the examples, and the English-Vietnamese
+ * one for the Vietnamese. A word missing from the smaller Vietnamese
+ * dictionary simply comes back with that column empty.
+ */
+var READER = 'https://r.jina.ai/';
+var CAMBRIDGE = 'https://dictionary.cambridge.org/dictionary/';
+
+/** Cambridge slugs: lowercase, hyphenated, nothing else. */
+function slugOf(word) {
+  return txt(word).toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+/** Tags out, entities back, the spacing Cambridge's inline links leave behind
+ *  tidied up. */
+function cText(html) {
+  var s = String(html || '').replace(/<[^>]+>/g, ' ');
+  s = s.replace(/&nbsp;/g, ' ').replace(/&#39;|&rsquo;/g, "'").replace(/&quot;/g, '"')
+       .replace(/&hellip;/g, '…').replace(/&amp;/g, '&').replace(/&lt;/g, '<')
+       .replace(/&gt;/g, '>');
+  s = s.replace(/\s+/g, ' ').trim();
+  s = s.replace(/\s+([,.;:!?])/g, '$1').replace(/\s+'/g, "'").replace(/\(\s+/g, '(')
+       .replace(/\s+\)/g, ')');
+  return s.replace(/:$/, '').trim();
+}
+
+function cFirst(re, html) {
+  var m = String(html).match(re);
+  return m ? cText(m[1]) : '';
+}
+
+/**
+ * One Cambridge page. Only the first entry body is read: the page stacks the
+ * Advanced Learner's, Academic Content and Business dictionaries one after
+ * another, and taking all three would fill the form with the same sense
+ * written three ways.
+ */
+function cParse(html, wantVi) {
+  // the page stacks three dictionaries: keep the Advanced Learner's, which is
+  // the one the sheet has always been written from, and its first entry only
+  var dicts = String(html).split(/class="pr dictionary"/);
+  var e = dicts.length > 1 ? dicts[1] : String(html);
+  var parts = e.split(/class="[^"]*entry-body__el[^"]*"/);
+  if (parts.length > 1) e = parts[1];
+  var ipa = cFirst(/class="ipa dipa[^"]*"[^>]*>([\s\S]*?)<\/span>/, e);
+  var out = {
+    word: cFirst(/class="di-title"[^>]*>([\s\S]*?)<\/div>/, e)
+       || cFirst(/class="hw dhw"[^>]*>([\s\S]*?)<\//, e),
+    pos: cFirst(/class="pos dpos"[^>]*>([\s\S]*?)<\//, e),
+    ipa: ipa ? '/' + ipa + '/' : '',
+    senses: []
+  };
+  var blocks = e.split(/class="def-block ddef_block\s*"/);
+  for (var i = 1; i < blocks.length; i++) {
+    var d = cFirst(/class="def ddef_d db"[^>]*>([\s\S]*?)<\/div>/, blocks[i]);
+    if (!d) continue;
+    var eg = [];
+    var re = /class="eg deg"[^>]*>([\s\S]*?)<\/span>/g, m;
+    while ((m = re.exec(blocks[i])) && eg.length < 2) {
+      var one = cText(m[1]);
+      if (one) eg.push(one);
+    }
+    var sense = { def: d, eg: eg, vi: '' };
+    if (wantVi) sense.vi = cFirst(/class="trans dtrans[^"]*"[^>]*>([\s\S]*?)<\/span>/, blocks[i]);
+    out.senses.push(sense);
+  }
+  return out;
+}
+
+/** Cambridge writes the long form out; the sheet writes the short one. */
+var POS_SHORT = {
+  noun: 'n', verb: 'v', adjective: 'adj', adverb: 'adv', preposition: 'prep',
+  conjunction: 'conj', pronoun: 'pron', determiner: 'det', exclamation: 'exclam',
+  'modal verb': 'v', 'auxiliary verb': 'v'
+};
+
+/**
+ * What the Fill button asks for. Nothing is written anywhere: the entry comes
+ * back for the form to show, and it is the person at the keyboard who decides
+ * whether it is worth keeping.
+ */
+function draftEntry(term) {
+  var slug = slugOf(term);
+  if (!slug) return { ok: false, error: 'No word to look up' };
+
+  var headers = { 'x-return-format': 'html' };
+  var rkey = PropertiesService.getScriptProperties().getProperty(PROP_READER);
+  if (rkey) headers.Authorization = 'Bearer ' + rkey;
+  var opts = { headers: headers, muteHttpExceptions: true, followRedirects: true };
+
+  var res;
+  try {
+    res = UrlFetchApp.fetchAll([
+      { url: READER + CAMBRIDGE + 'english/' + slug, headers: headers,
+        muteHttpExceptions: true, followRedirects: true },
+      { url: READER + CAMBRIDGE + 'english-vietnamese/' + slug, headers: headers,
+        muteHttpExceptions: true, followRedirects: true }
+    ]);
+  } catch (err) {
+    return { ok: false, error: 'Could not reach Cambridge: ' + String(err) };
+  }
+
+  var enCode = res[0].getResponseCode();
+  if (enCode === 429) {
+    return { ok: false, error: 'The reader is busy right now — try again in a moment.' };
+  }
+  if (enCode !== 200) {
+    return { ok: false, error: 'Cambridge answered ' + enCode + ' for "' + slug + '".' };
+  }
+
+  var en = cParse(res[0].getContentText(), false);
+  if (!en.senses.length) {
+    return { ok: false, error: 'Cambridge has no entry for "' + slug + '".' };
+  }
+  if (res[1].getResponseCode() === 200) {
+    var vi = cParse(res[1].getContentText(), true).senses;
+    for (var i = 0; i < en.senses.length && i < vi.length; i++) {
+      en.senses[i].vi = vi[i].vi;
+    }
+  }
+
+  var pos = en.pos.toLowerCase();
+  var word = en.word.replace(/\s+(someone|something|sb|sth)(\/(someone|something|sb|sth))*$/i, '')
+    .trim() || txt(term);
+  var entry = {
+    type: 'word', word: word, verb: '', particle: '',
+    pos: POS_SHORT[pos] || (pos === 'phrasal verb' || pos === 'idiom' ? '' : en.pos),
+    ipa: en.ipa, note: '', senses: en.senses.slice(0, 5)
+  };
+  if (pos === 'phrasal verb') {
+    var bits = word.split(/\s+/);
+    entry.type = 'phrasal';
+    entry.verb = bits.shift();
+    entry.particle = bits.join(' ');
+    entry.ipa = '';                       // the sheet keeps phonetics off these
+  } else if (pos === 'idiom') {
+    entry.type = 'idiom';
+  }
+  return { ok: true, entry: entry, source: 'Cambridge' };
 }
 
 /* ------------------------------- reading the sheet (mirrors parse_sheet.py) */

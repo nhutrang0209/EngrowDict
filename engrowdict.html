@@ -2111,6 +2111,57 @@ a.btn[hidden] { display: none; }
     dlg.querySelector("[name=word]").focus();
   }
 
+  /* Cambridge fills the form in and stops there: nothing is written until you
+     read it over and press Save word yourself. */
+  function fillFromCambridge() {
+    var dlg = document.getElementById("form-dlg");
+    var msg = document.getElementById("form-msg");
+    var word = dlg.querySelector("[name=word]").value.trim();
+    if (!word) { msg.textContent = "Type the word first."; return; }
+    if (!canWriteSheet()) {
+      msg.textContent = "This goes through the sheet's Web App link — set it in Settings first.";
+      return;
+    }
+    var btn = document.getElementById("form-fill");
+    var label = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "Looking up…";
+    msg.textContent = "Reading Cambridge… this takes a few seconds.";
+    callSheet({ action: "draft", word: word }).then(function (res) {
+      applyDraft(res.entry);
+      msg.textContent = "Filled from Cambridge. Check it, then press Save word.";
+    }, function (err) {
+      msg.textContent = (err && err.message) ? err.message : String(err);
+    }).then(function () {
+      btn.disabled = false;
+      btn.textContent = label;
+    });
+  }
+
+  /* One sense per box, the examples under their own definition the way the
+     sheet writes them. */
+  function applyDraft(e) {
+    if (!e) return;
+    var dlg = document.getElementById("form-dlg");
+    dlg.querySelector("[name=word]").value = e.type === "phrasal"
+      ? (e.verb + " " + e.particle).trim() : (e.word || "");
+    dlg.querySelector("[name=pos]").value = e.pos || "";
+    dlg.querySelector("[name=ipa]").value = e.ipa || "";
+    dlg.querySelector("[name=type]").value = e.type || "word";
+    var list = document.getElementById("sense-list");
+    list.textContent = "";
+    (e.senses || []).forEach(function (s, i) {
+      var box = newSenseRow(i + 1);
+      var def = s.def || "";
+      (s.eg || []).forEach(function (x) { def += "\n- " + x; });
+      box.querySelector("[name=def]").value = def;
+      box.querySelector("[name=vi]").value = s.vi || "";
+      list.appendChild(box);
+    });
+    if (!list.children.length) list.appendChild(newSenseRow(1));
+    renumberSenses();
+  }
+
   function collectForm() {
     var dlg = document.getElementById("form-dlg");
     var word = dlg.querySelector("[name=word]").value.trim();
@@ -2123,11 +2174,15 @@ a.btn[hidden] { display: none; }
       if (def || vi) senses.push({ def: def, vi: vi, eg: [] });
     }
     if (!senses.length) return { err: "Add at least one sense — a definition or a Vietnamese meaning." };
+    var type = dlg.querySelector("[name=type]").value;
+    var bits = word.split(/\s+/);
     return {
       entry: {
         id: "u" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-        type: dlg.querySelector("[name=type]").value,
+        type: type,
         word: word,
+        verb: type === "phrasal" && bits.length > 1 ? bits[0] : "",
+        particle: type === "phrasal" && bits.length > 1 ? bits.slice(1).join(" ") : "",
         pos: dlg.querySelector("[name=pos]").value.trim(),
         ipa: dlg.querySelector("[name=ipa]").value.trim(),
         note: dlg.querySelector("[name=note]").value.trim(),
@@ -2670,6 +2725,11 @@ a.btn[hidden] { display: none; }
     toSheetRow.appendChild(cb);
     toSheetRow.appendChild(el("span", null, "Write straight into the sheet"));
     foot.appendChild(toSheetRow);
+    var fill = el("button", "btn", "Fill from Cambridge");
+    fill.type = "button";
+    fill.id = "form-fill";
+    fill.addEventListener("click", fillFromCambridge);
+    foot.appendChild(fill);
     var msg = el("span", "dlg-msg");
     msg.id = "form-msg";
     foot.appendChild(msg);

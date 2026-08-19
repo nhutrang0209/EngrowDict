@@ -145,6 +145,27 @@ From then on the add-word form carries a **Write straight into the sheet** tick,
 on by default. Anything that has not made it into the sheet is badged *Not in
 the sheet*, and the top bar grows a **Write N words to sheet** button.
 
+### Fill from Cambridge
+
+The add-word form has a **Fill from Cambridge** button. Type the word, press it,
+and the part of speech, the phonetics, the definitions, the examples and the
+Vietnamese come back filled in — then you read them over and press **Save word**
+yourself. Nothing is written until you do.
+
+Cambridge answers a plain server-side request with **403** (Cloudflare wants a
+browser — the entry pages and `robots.txt` alike), so the script reads the page
+through `r.jina.ai`, which renders it and returns Cambridge's own markup. Two
+pages per word, fetched together: the English dictionary for everything except
+the last column, and the English–Vietnamese one for that. Only the Advanced
+Learner's entry is read — the page stacks the Academic and Business dictionaries
+underneath, and taking all three would fill the form with the same sense written
+three ways. A word the smaller English–Vietnamese dictionary does not carry
+simply comes back with that column empty.
+
+The reader is free and needs no account. If it starts answering **429**, put a
+key from jina.ai in the script property `SOTRATU_READER` for a private rate
+limit.
+
 **Why the links are pasted rather than shipped:** the site is public, so putting
 the Web App link into the page would let anyone who opens it write to your
 sheet. The settings sit in your browser's `localStorage` only — not in the repo,

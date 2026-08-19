@@ -293,5 +293,118 @@ function page(store, posts, reply) {
      /Not deployed yet/.test(early.querySelector('p.lead').textContent),
      early.querySelector('p.lead').textContent.slice(0, 40));
 
-  done(a.errs.concat(b.errs, locked.errs));
+  /* --------------- E. Fill from Cambridge: a draft, not a saved word */
+  /* Cambridge is behind Cloudflare, so the script reads it through a rendering
+     proxy. What the parser has to get right is that Cambridge's own markup
+     goes in and the sheet's shape comes out. */
+  const CAMB_EN =
+    '<div class="pr dictionary" data-id="cald4">'
+    + '<div class="entry-body__el clrd js-share-holder">'
+    + '<div class="di-title">susurrus</div><span class="pos dpos">noun</span>'
+    + '<span class="ipa dipa lpr-2">ˌsuːˈsʌr.əs</span>'
+    + '<div class="def-block ddef_block ">'
+    + '<div class="def ddef_d db">a soft, low <a class="query" href="#">noise</a> '
+    + 'like someone whispering: </div>'
+    + '<span class="eg deg">the susurrus of the leaves</span>'
+    + '</div></div></div>'
+    + '<div class="pr dictionary" data-id="cacd"><div class="entry-body__el">'
+    + '<div class="def-block ddef_block "><div class="def ddef_d db">a whispering sound'
+    + '</div></div></div></div>';
+  const CAMB_VI =
+    '<div class="pr dictionary" data-id="cald4"><div class="entry-body__el">'
+    + '<div class="def-block ddef_block "><div class="def ddef_d db">a soft, low noise</div>'
+    + '<span class="trans dtrans dtrans-se">tiếng xào xạc</span>'
+    + '</div></div></div>';
+
+  two.net.calls = [];
+  two.net.reply = url => ({ code: 200, body: /english-vietnamese/.test(url) ? CAMB_VI : CAMB_EN });
+  const draft = call2({ key: CFG.key, action: 'draft', word: 'Susurrus ' });
+  ok('a draft comes back for the word asked about',
+     draft.ok && draft.source === 'Cambridge' && draft.entry.word === 'susurrus',
+     JSON.stringify(draft).slice(0, 90));
+  ok('  it reads Cambridge, both the English and the Vietnamese page',
+     two.net.calls.length === 2 &&
+     /dictionary.cambridge.org\/dictionary\/english\/susurrus$/.test(two.net.calls[0]) &&
+     /english-vietnamese\/susurrus$/.test(two.net.calls[1]), two.net.calls.join(' , '));
+  ok('  the part of speech comes back the short way the sheet writes it',
+     draft.entry.pos === 'n', draft.entry.pos);
+  ok('  the phonetics come back inside slashes',
+     draft.entry.ipa === '/ˌsuːˈsʌr.əs/', draft.entry.ipa);
+  ok('  the definition is plain text, no tags and no trailing colon',
+     draft.entry.senses[0].def === 'a soft, low noise like someone whispering',
+     draft.entry.senses[0].def);
+  ok('  the example and the Vietnamese ride along',
+     draft.entry.senses[0].eg[0] === 'the susurrus of the leaves' &&
+     draft.entry.senses[0].senses === undefined &&
+     draft.entry.senses[0].vi === 'tiếng xào xạc',
+     draft.entry.senses[0].vi);
+  ok('  the other dictionaries stacked on the page are left alone',
+     draft.entry.senses.length === 1, draft.entry.senses.length + ' senses');
+  ok('  and nothing was written to any sheet',
+     two.sheets.Vocabulary.grid.every(r => String(r[0]).indexOf('susurrus') !== 0));
+
+  const phrasal = CAMB_EN.replace('>noun<', '>phrasal verb<')
+    .replace('>susurrus<', '>look after<');
+  two.net.reply = url => ({ code: /english-vietnamese/.test(url) ? 404 : 200, body: phrasal });
+  const pvDraft = call2({ key: CFG.key, action: 'draft', word: 'look after' });
+  ok('a phrasal verb is split into its verb and its particle',
+     pvDraft.ok && pvDraft.entry.type === 'phrasal' && pvDraft.entry.verb === 'look' &&
+     pvDraft.entry.particle === 'after' && pvDraft.entry.ipa === '',
+     JSON.stringify(pvDraft.entry).slice(0, 80));
+  ok('  a word the Vietnamese dictionary does not carry still comes back',
+     pvDraft.entry.senses[0].vi === '' && !!pvDraft.entry.senses[0].def);
+
+  two.net.reply = () => ({ code: 404, body: '' });
+  const missing = call2({ key: CFG.key, action: 'draft', word: 'zzzznotaword' });
+  ok('a word Cambridge does not have is said so plainly',
+     missing.ok === false && /no entry|answered 404/i.test(missing.error), missing.error);
+
+  /* ------------------- F. the Fill button, from the browser's side */
+  const postsFill = [];
+  const DRAFT = {
+    ok: true, source: 'Cambridge',
+    entry: { type: 'word', word: 'susurrus', verb: '', particle: '', pos: 'n',
+             ipa: '/suːˈsʌr.əs/', note: '',
+             senses: [{ def: 'a soft murmuring sound', eg: ['the susurrus of the leaves'],
+                        vi: 'tiếng xào xạc' }] },
+  };
+  const f = page(unlockedStore(CFG), postsFill, () => {
+    const last = postsFill[postsFill.length - 1];
+    return last && last.body.action === 'draft' ? DRAFT : { ok: true };
+  });
+  await wait(900);
+  click(f.window, f.doc.getElementById('add-word'));
+  const fdlg = f.doc.getElementById('form-dlg');
+  fdlg.querySelector('[name=word]').value = 'susurrus';
+  click(f.window, f.doc.getElementById('form-fill'));
+  await wait(300);
+
+  ok('Fill asks the sheet for a draft of the word typed in',
+     postsFill.length === 1 && postsFill[0].body.action === 'draft' &&
+     postsFill[0].body.word === 'susurrus', JSON.stringify(postsFill[0] && postsFill[0].body));
+  ok('  the head fields come back filled in',
+     fdlg.querySelector('[name=pos]').value === 'n' &&
+     fdlg.querySelector('[name=ipa]').value === DRAFT.entry.ipa,
+     fdlg.querySelector('[name=pos]').value + ' ' + fdlg.querySelector('[name=ipa]').value);
+  ok('  the example sits under its definition, the way the sheet writes it',
+     f.doc.querySelector('#sense-list [name=def]').value ===
+       'a soft murmuring sound\n- the susurrus of the leaves',
+     JSON.stringify(f.doc.querySelector('#sense-list [name=def]').value));
+  ok('  and the Vietnamese with it',
+     f.doc.querySelector('#sense-list [name=vi]').value === 'tiếng xào xạc');
+  ok('  nothing is saved yet: the form is still open and no word was sent',
+     fdlg.open && !postsFill.some(x => x.body.action === 'add'));
+  ok('  it says where the words came from',
+     /Cambridge/.test(f.doc.getElementById('form-msg').textContent),
+     f.doc.getElementById('form-msg').textContent);
+
+  click(f.window, f.doc.getElementById('form-save'));
+  await wait(300);
+  const sent = postsFill.filter(x => x.body.action === 'add').pop();
+  ok('  pressing Save word is what finally sends it',
+     !!sent && sent.body.entry.word === 'susurrus' && sent.body.entry.pos === 'n' &&
+     sent.body.entry.senses[0].vi === 'tiếng xào xạc',
+     sent ? JSON.stringify(sent.body.entry).slice(0, 80) : 'nothing sent');
+
+  done(a.errs.concat(b.errs, locked.errs, f.errs));
 })();
