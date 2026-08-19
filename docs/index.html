@@ -227,7 +227,10 @@ body {
   flex: 1; min-height: 0; display: grid;
   grid-template-columns: var(--rail-w) var(--list-w) 7px 1fr;
 }
-body[data-list="off"] .work { grid-template-columns: 0 0 7px 1fr; }
+/* Folded, only two children are left in the grid, so the template has to
+   describe two tracks — leaving four would drop the detail pane into a
+   zero-width column and take the page with it. */
+body[data-list="off"] .work { grid-template-columns: 7px 1fr; }
 body[data-list="off"] .alpha, body[data-list="off"] .list { display: none; }
 body.resizing { cursor: col-resize; user-select: none; }
 

@@ -95,13 +95,32 @@ const mk = store => boot({
   ok('  and the letter rail with it',
      /body\[data-list="off"\] \.alpha, body\[data-list="off"\] \.list \{ display: none/
        .test(read('app.css')));
+
+  /* jsdom lays nothing out, so the grid is checked by arithmetic instead: a
+     track count that does not match the number of children still in the flow
+     silently drops the last one into a zero-width column. */
+  const css = read('app.css');
+  function tracks(after) {
+    const i = css.indexOf(after);
+    const j = css.indexOf('grid-template-columns:', i);
+    const k = css.indexOf(';', j);
+    return css.slice(j + 'grid-template-columns:'.length, k).trim().split(/\s+/).length;
+  }
+  const kids = [...c.doc.querySelector('.work').children];
+  ok('open, the grid declares one track per child',
+     tracks('.work {') === kids.length,
+     tracks('.work {') + ' tracks for ' + kids.map(n => n.className).join(', '));
+  ok('folded, it declares one per child still in the flow',
+     tracks('body[data-list="off"] .work') === kids.length - 2,
+     tracks('body[data-list="off"] .work') + ' tracks, ' +
+     (kids.length - 2) + ' children left after the list and rail go');
   ok('  while the passage stays on screen',
      c.doc.querySelector('.read h1')?.textContent === title &&
      c.doc.querySelectorAll('.read .prose p').length > 1,
      c.doc.querySelector('.read h1')?.textContent + ' — ' +
      c.doc.querySelectorAll('.read .prose p').length + ' paragraphs');
-  ok('  and the detail column is the only one left with width',
-     /body\[data-list="off"\] \.work \{ grid-template-columns: 0 0 7px 1fr/
+  ok('  and the detail pane is the track that grows',
+     /body\[data-list="off"\] \.work \{ grid-template-columns: 7px 1fr/
        .test(read('app.css')));
 
   done(a.errs.concat(b.errs, c.errs));
