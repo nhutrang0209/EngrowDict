@@ -1,57 +1,81 @@
 # Sổ Tra Từ
 
-Trang tra từ vựng Anh–Việt dựng từ sổ từ vựng cá nhân: **1.395 mục · 2.183 nghĩa · 425 ví dụ · 33 bài đọc**.
+Trang tra từ vựng Anh–Việt dựng từ sổ từ vựng cá nhân trên Google Sheet:
+**11.401 mục · 21.050 nghĩa · 2.340 ví dụ · 33 bài đọc**.
 
-Gõ tiếng Anh hoặc tiếng Việt — trang tìm trong cả từ, phiên âm, definition và nghĩa,
-và tiếng Việt không dấu vẫn ra (`thoai vi` → *abdicate*).
+Gõ tiếng Anh hoặc tiếng Việt — trang tìm trong cả từ, phiên âm, definition và
+nghĩa, và tiếng Việt không dấu vẫn ra (`mui dat` → *petrichor*). Không có
+framework, không phụ thuộc ngoài; danh sách 11 nghìn mục dựng theo kiểu cuộn ảo
+nên chỉ vài chục dòng nằm trong DOM một lúc.
 
 | Phím | Việc |
 | --- | --- |
 | `/` | nhảy vào ô tìm kiếm |
 | `↑` `↓` | đi trong danh sách |
-| `Enter` | mở mục đang chọn |
+| `←` `→` | mục trước / mục sau |
 | `Esc` | xoá ô tìm kiếm |
 
 ## Hai bản, khác nhau ở chỗ lưu từ mới
 
-| | `docs/index.html` (GitHub Pages) | `so-tra-tu.html` (Artifact claude.ai) |
+| | `docs/` (GitHub Pages) | `so-tra-tu.html` (Artifact claude.ai) |
 | --- | --- | --- |
 | Ai xem được | bất kỳ ai có link | người bạn chia sẻ |
-| Tra cứu | 1.395 mục đầy đủ | 1.395 mục đầy đủ |
+| Tra cứu | 11.401 mục đầy đủ | 11.401 mục đầy đủ |
 | 33 bài đọc | không kèm | có |
 | Thêm / xoá từ | được, lưu trong trình duyệt người xem | được, lưu lên máy chủ cho mọi người |
-| Sao lưu `.json` | được | được |
+| Dữ liệu | `data.json` tải riêng | nhúng sẵn trong tệp |
 
-Bản Artifact tự publish lại chính nó mỗi lần thêm hoặc xoá từ, nên từ mới còn nguyên
-khi mở ở máy khác. Bản tĩnh không có máy chủ, nên từ ai người nấy giữ — dùng nút
-**Sao lưu .json** nếu muốn giữ lâu dài.
+Bản Artifact tự publish lại chính nó mỗi lần thêm hoặc xoá từ, nên từ mới còn
+nguyên khi mở ở máy khác. Bản tĩnh không có máy chủ, nên từ ai người nấy giữ —
+dùng nút **Sao lưu .json** nếu muốn giữ lâu dài.
 
-Bản công khai bỏ hẳn phần bài đọc: đó là nguyên văn bài của TED-Ed và BBC, giữ trong
-sổ riêng thì được nhưng đăng lên web mở thì thành phát tán lại nội dung có bản quyền.
-Khi `readings` rỗng, trang tự bỏ luôn tab **Bài đọc**.
+Bản công khai bỏ hẳn phần bài đọc: đó là nguyên văn bài của TED-Ed và BBC, giữ
+trong sổ riêng thì được nhưng đăng lên web mở thì thành phát tán lại nội dung có
+bản quyền. Khi `readings` rỗng, trang tự bỏ luôn nút **Bài đọc**.
+
+## Đồng bộ từ Google Sheet bằng một nút
+
+`sheet-sync.gs` là Apps Script gắn vào chính file sheet. Nó đọc cả sheet, dựng
+lại `docs/data.json` và ghi đè thẳng vào repo qua GitHub API — GitHub Pages dựng
+lại sau vài chục giây, không phải chạy build gì trên máy.
+
+**Cài một lần**
+
+1. Mở sheet → **Tiện ích mở rộng → Apps Script**, xoá nội dung mẫu, dán toàn bộ
+   `sheet-sync.gs` vào, bấm lưu.
+2. Tạo token tại **github.com/settings/personal-access-tokens** → *Fine-grained*,
+   chọn đúng repo này, quyền **Contents: Read and write**.
+3. Tải lại sheet. Menu **Sổ Tra Từ** hiện ra → **Cài đặt kho GitHub**, dán
+   `chu-tai-khoan/ten-repo` và token.
+
+**Từ đó về sau:** sửa sheet → **Sổ Tra Từ → Đồng bộ lên web**. Muốn xem thử
+trước thì dùng **Xem thử số liệu (không đẩy)**.
+
+Lưu ý: đồng bộ chỉ chạy một chiều, sheet → web. Từ ai đó thêm trên web nằm trong
+trình duyệt của họ và không tự chảy ngược vào sheet. Bản Artifact cũng không đổi
+theo — muốn cập nhật thì chạy `python parse_sheet.py && python build.py` rồi
+publish lại `so-tra-tu.html`.
 
 ## Cấu trúc
 
 ```
+source.xlsx      bản tải về của Google Sheet — nguồn gốc
+parse_sheet.py   source.xlsx  ->  dataset.json
+build.py         dataset.json + app.css + app.js  ->  hai bản trang
 app.css          giao diện
-app.js           toàn bộ ứng dụng (không framework, không phụ thuộc ngoài)
-dataset.json     dữ liệu đã bóc từ Google Sheet
-parse_sheet.py   bản xuất Google Sheet  ->  dataset.json
-build.py         dataset.json + app.css + app.js  ->  hai trang hoàn chỉnh
-docs/index.html  bản web tĩnh, GitHub Pages phục vụ thư mục này
+app.js           toàn bộ ứng dụng
+sheet-sync.gs    Apps Script: sheet  ->  docs/data.json (bản JS của parse_sheet.py)
+docs/            thư mục GitHub Pages phục vụ
+  index.html       vỏ trang, ~60 KB
+  data.json        dữ liệu công khai, ~3,9 MB
 ```
-
-Mỗi trang là **một tệp HTML duy nhất** — dữ liệu, CSS và JS nhúng sẵn bên trong.
-Không có bước bundling, không tải gì từ ngoài trừ font Google.
 
 ## Dựng lại
 
 ```sh
 python build.py          # sau khi sửa app.css hoặc app.js
-python parse_sheet.py    # chỉ khi sheet gốc đổi (cần bản xuất mới của sheet)
+python parse_sheet.py    # khi source.xlsx đổi (tải lại sheet về dạng .xlsx)
 ```
-
-`build.py` chỉ đọc `dataset.json`, nên sửa giao diện xong chạy một lệnh là xong.
 
 ## Kiểm tra
 
@@ -59,12 +83,22 @@ python parse_sheet.py    # chỉ khi sheet gốc đổi (cần bản xuất mớ
 cd test && npm install && npm test
 ```
 
-57 phép kiểm chạy trên một DOM giả (jsdom), phủ bốn mặt: tra cứu và bàn phím,
-vòng tự-publish của bản Artifact (thêm từ → trang tự sinh HTML thay thế → nạp lại
-→ từ vẫn còn), bản tĩnh lưu vào `localStorage` và sống sót qua lần tải sau, và
-bản công khai không lọt câu nào của bài đọc. Chạy sau mỗi lần `python build.py`.
+87 phép kiểm chạy trên một DOM giả (jsdom), phủ sáu mặt:
+
+1. dữ liệu bóc ra đủ A–Z, đúng cấu trúc, không sót rác định dạng
+2. tra cứu, lọc, lật chữ cái, đi tới/lui, cuộn ảo
+3. vòng tự-publish của bản Artifact: thêm từ → trang tự sinh HTML thay thế →
+   nạp lại → từ vẫn còn
+4. bản tĩnh tải `data.json`, lưu vào `localStorage`, sống sót qua lần tải sau
+5. bản công khai không lọt câu nào của bài đọc
+6. `sheet-sync.gs` và `parse_sheet.py` bóc ra dữ liệu giống hệt nhau từng chữ —
+   phép kiểm quan trọng nhất, vì hai bản viết bằng hai ngôn ngữ khác nhau
+
+Phép kiểm số 6 cần `test/grids.json`, do `parse_sheet.py` sinh ra; thiếu tệp đó
+thì nó tự bỏ qua.
 
 ## Deploy
 
-GitHub Pages đọc thẳng thư mục `docs/` trên nhánh `main` — không cần build trên CI.
-Sửa xong thì `python build.py`, commit, push, vài chục giây sau trang đã đổi.
+GitHub Pages đọc thẳng thư mục `docs/` trên nhánh `main` — không cần CI. Sửa
+xong thì `python build.py`, commit, push. Còn khi chỉ đổi nội dung sheet thì
+dùng nút Đồng bộ, khỏi đụng tới repo.
