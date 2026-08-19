@@ -22,13 +22,18 @@ ok('the shell itself stays light', shell.length < 160000,
 /* --- and they work in the page ------------------------------------------ */
 (async () => {
   // one stub serves data.json and stands in for the translator
-  let translatorUp = true;
+  let googleUp = true, memoryUp = true;
   const a = boot({
     html: shell, full: true,
     url: 'https://nhutrang0209.github.io/EngrowDict/',
     fetchStub: url => {
+      if (String(url).includes('translate.googleapis.com')) {
+        return googleUp
+          ? Promise.resolve({ ok: true, json: () => Promise.resolve([[['bỏ tù', 'imprisonment']]]) })
+          : Promise.reject(new Error('offline'));
+      }
       if (String(url).includes('mymemory')) {
-        return translatorUp
+        return memoryUp
           ? Promise.resolve({ ok: true, json: () => Promise.resolve({
               responseData: { translatedText: 'bàn phím thử' } }) })
           : Promise.reject(new Error('offline'));
@@ -140,14 +145,23 @@ ok('the shell itself stays light', shell.length < 160000,
      gt.href.includes('qwertyuiop'),
      gt && gt.href.slice(0, 78));
   await wait(60);
-  ok('  and shows the machine translation inline',
-     (card().querySelector('.g')?.textContent || '').includes('bàn phím thử'),
+  ok('  and shows the translation inline',
+     (card().querySelector('.g')?.textContent || '').includes('bỏ tù'),
      card().querySelector('.g')?.textContent);
-  ok('  labelled as machine translation, not as notebook content',
-     (card().querySelector('.g em')?.textContent || '').includes('machine translation'),
+  ok('  naming its source, so it is not mistaken for the notebook',
+     (card().querySelector('.g em')?.textContent || '')
+       .includes('Google Translate, not from the notebook'),
      card().querySelector('.g em')?.textContent);
 
-  translatorUp = false;
+  // Google is undocumented and may stop answering; MyMemory stands behind it
+  googleUp = false;
+  await selectText('poiuytrewq');
+  await wait(60);
+  ok('  if Google will not answer, the other source is tried',
+     (card().querySelector('.g em')?.textContent || '').includes('MyMemory'),
+     card().querySelector('.g')?.textContent);
+
+  memoryUp = false;
   await selectText('zxcvbnm');
   await wait(60);
   ok('when the translator cannot be reached it says so',

@@ -58,6 +58,23 @@
     if (text != null) n.textContent = text;
     return n;
   }
+  /* A link to one of this project's own files, worked out from the address the
+     page is served from, so nothing has to be hard-coded. Falls back to plain
+     text off GitHub Pages, where there is no repo to point at. */
+  function repoFileLink(name) {
+    var host = location.hostname || "";
+    if (host.slice(-10) === ".github.io") {
+      var owner = host.slice(0, -10);
+      var seg = location.pathname.split("/").filter(Boolean)[0];
+      var a = el("a", "filelink", name);
+      a.href = "https://github.com/" + owner + "/" + (seg || host) + "/blob/main/" + name;
+      a.target = "_blank";
+      a.rel = "noopener";
+      return a;
+    }
+    return el("code", "filelink", name);
+  }
+
   function fmt(n) { return n.toLocaleString("en-US"); }
   function plural(n, one, many) { return fmt(n) + " " + (n === 1 ? one : many); }
   function glossOf(e) {
@@ -159,24 +176,56 @@
 
   /* The notebook holds advanced vocabulary, so most running words in a passage
      are not in it. Machine translation covers the rest — English to Vietnamese,
-     which is the only direction this is ever used in. It needs the open web, so
-     it works on the published site and not inside the claude.ai artifact. */
+     the only direction this is ever used in. It needs the open web, so it works
+     on the published site and not inside the claude.ai artifact.
+
+     Two sources, tried in order. Google's is what people mean by "translate
+     this word"; it is an undocumented endpoint, so it may change without
+     notice, which is why MyMemory stands behind it and the card always offers
+     a link out. MyMemory alone was the first version of this and was wrong in
+     a way worth remembering: it is a translation memory, not a translator, so
+     asking it for one word returns the closest segment some human once
+     translated — "imprisonment" came back as "sợ bỏ tù", the fear of it. */
   var mtCache = {};
-  function machineTranslate(text) {
-    var key = text.toLowerCase();
-    if (mtCache[key]) return Promise.resolve(mtCache[key]);
-    if (MODE !== "static" || typeof fetch !== "function") {
-      return Promise.reject(new Error("offline"));
-    }
+
+  function gTranslate(text) {
+    return fetch("https://translate.googleapis.com/translate_a/single"
+      + "?client=gtx&sl=en&tl=vi&dt=t&q=" + encodeURIComponent(text))
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d || !d[0] || !d[0].length) throw new Error("unexpected shape");
+        var out = "";
+        for (var i = 0; i < d[0].length; i++) {
+          if (d[0][i] && d[0][i][0]) out += d[0][i][0];
+        }
+        if (!out.trim()) throw new Error("empty");
+        return { text: out.trim(), via: "Google Translate" };
+      });
+  }
+
+  function memoryTranslate(text) {
     return fetch("https://api.mymemory.translated.net/get?langpair=en%7Cvi&q="
       + encodeURIComponent(text))
       .then(function (r) { return r.json(); })
       .then(function (d) {
         var t = d && d.responseData && d.responseData.translatedText;
         if (!t || /MYMEMORY WARNING|INVALID/i.test(t)) throw new Error("no translation");
-        mtCache[key] = t;
-        return t;
+        return { text: t, via: "MyMemory" };
       });
+  }
+
+  function machineTranslate(text) {
+    var key = text.toLowerCase();
+    if (mtCache[key]) return Promise.resolve(mtCache[key]);
+    if (MODE !== "static" || typeof fetch !== "function") {
+      return Promise.reject(new Error("offline"));
+    }
+    return gTranslate(text).catch(function () {
+      return memoryTranslate(text);
+    }).then(function (got) {
+      mtCache[key] = got;
+      return got;
+    });
   }
 
   /* ---- local backup ------------------------------------------------------ */
@@ -1143,9 +1192,9 @@
       row2.appendChild(gt);
       lookupCard.appendChild(row2);
 
-      machineTranslate(text).then(function (vi) {
-        line.textContent = vi;
-        line.appendChild(el("em", null, "machine translation, not from the notebook"));
+      machineTranslate(text).then(function (got) {
+        line.textContent = got.text;
+        line.appendChild(el("em", null, got.via + ", not from the notebook"));
         place(lookupCard, rect);
       }, function () {
         line.remove();
@@ -1988,10 +2037,45 @@
     inner.appendChild(steps);
 
     inner.appendChild(el("p", "setfold-note",
-      "The Web App link and the key stay as they are — they belong to the Apps "
-      + "Script project, not to any one sheet, and so do the GitHub repo and token. "
-      + "Only the very first time: paste sheet-sync.gs into that project, run a "
-      + "function once to authorise it, then Deploy → Manage deployments → New version."));
+      "The other two fields stay as they are: the Web App link and the key belong "
+      + "to the Apps Script project, not to any one workbook, and so do the GitHub "
+      + "repo and token it publishes with."));
+
+    /* Where those two come from, for whoever has not set them up before. */
+    var first = el("details", "setfold sub");
+    first.id = "first-fold";
+    var fsum = el("summary", "setfold-head");
+    fsum.appendChild(el("span", "setfold-title", "Where the link and key come from"));
+    fsum.appendChild(el("span", "setfold-state", "once, ever"));
+    first.appendChild(fsum);
+
+    var fbody = el("div", "setfold-body");
+    fbody.appendChild(el("p", "setfold-lede",
+      "The sheet hands you both. You never have to invent the key."));
+
+    var fsteps = el("ol", "steps");
+    var li1 = el("li", null, "In the workbook: Extensions → Apps Script. If the project "
+      + "is empty, paste in the whole of ");
+    var file = repoFileLink("sheet-sync.gs");
+    li1.appendChild(file);
+    li1.appendChild(document.createTextNode(" and Save."));
+    fsteps.appendChild(li1);
+    [
+      "Deploy → New deployment → pick the type Web app → Who has access: Anyone "
+        + "→ Deploy, and allow the permissions it asks for. If a deployment is "
+        + "already there, use Manage deployments → ✏️ → Version: New version instead, "
+        + "which keeps the same link.",
+      "Reload the workbook. An EngrowDict menu appears beside Help → Link for the "
+        + "web to write words. It shows the Web App link and the key together.",
+      "Copy those two into the fields below, press Test connection, then Save.",
+    ].forEach(function (t) { fsteps.appendChild(el("li", null, t)); });
+    fbody.appendChild(fsteps);
+
+    fbody.appendChild(el("p", "setfold-note",
+      "Done once, this covers every workbook afterwards — a new sheet only needs "
+      + "the first field above."));
+    first.appendChild(fbody);
+    inner.appendChild(first);
 
     var links = el("div", "setgroup");
     links.id = "setgroup";
@@ -2000,9 +2084,9 @@
       "The workbook that Add word and Sync write to, and the Open sheet button.", false));
     links.appendChild(setRow("webapp", "Sync Web App link", "webApp",
       "https://script.google.com/macros/s/…/exec",
-      "From the sheet: EngrowDict menu → Link for the web to write words.", false));
+      "In the sheet: EngrowDict menu → Link for the web to write words.", false));
     links.appendChild(setRow("key", "Sync key", "key", "",
-      "Comes with the link above.", true));
+      "Shown by that same menu item, right under the link.", true));
     inner.appendChild(links);
 
     fold.appendChild(inner);

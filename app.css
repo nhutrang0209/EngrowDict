@@ -605,6 +605,14 @@ dialog::backdrop { background: rgba(8, 14, 11, .5); backdrop-filter: blur(2px); 
 .steps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 7px; font-size: 12.5px; color: var(--muted); line-height: 1.55; }
 .steps li::marker { color: var(--faint); font-family: var(--mono); font-size: 11px; }
 .setfold .setgroup { margin-top: 2px; }
+.setfold.sub { background: var(--tint); }
+.setfold.sub[open] { background: var(--tint); }
+.setfold.sub > summary { padding: 10px 13px; }
+.setfold.sub .setfold-title { color: var(--muted); }
+.setfold.sub .setfold-body { padding: 12px 13px 13px; }
+.setfold.sub .setfold-state { font-style: normal; font-family: var(--mono); font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; }
+.filelink { font-family: var(--mono); font-size: 11.5px; color: var(--accent-hi); }
+a.filelink { text-decoration: underline; text-underline-offset: 2px; }
 
 .setgroup { display: flex; flex-direction: column; gap: 15px; }
 .setgroup.disabled { opacity: .5; }

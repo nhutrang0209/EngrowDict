@@ -57,9 +57,16 @@ while it is open feeds the selection straight into it rather than opening the
 small card. It stays where you drag it, and closes when you leave the tab.
 
 The notebook is advanced vocabulary, so ordinary running words are often not in
-it. When there is no entry, the card falls back to machine translation (English
-to Vietnamese, via MyMemory) and labels it as such, with a link out to Google
-Translate as well. That fallback needs the open web, so it works on the
+it. When there is no entry, the card falls back to machine translation, English
+to Vietnamese, and names the source it used so it is never mistaken for your own
+material. Google's endpoint is tried first and MyMemory stands behind it; a link
+out to Google Translate is always offered as well.
+
+MyMemory was the only source at first and it was the wrong choice: it is a
+translation memory rather than a translator, so a single word comes back as the
+nearest segment some human once translated — *imprisonment* returned *sợ bỏ tù*,
+the fear of it. Google's `translate_a/single` is undocumented and may stop
+answering without notice, which is why the fallback and the link are kept. That fallback needs the open web, so it works on the
 published site and not inside the claude.ai artifact.
 
 The passages are the verbatim text of TED-Ed and BBC articles. They ship in the

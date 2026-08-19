@@ -118,6 +118,49 @@ const mk = store => boot({
   await wait(60);
   ok('  the new one does', doc.getElementById('add-word').textContent === '+ Add word');
 
+  // --- the sheet section folds, and says how to swap workbooks -----------
+  const fold = a.doc.getElementById('sheet-fold');
+  ok('the three links live in one collapsible section',
+     !!fold && fold.querySelectorAll('.setrow').length === 3 &&
+     a.doc.querySelectorAll('#setgroup .edit-btn').length === 3);
+  ok('  it opens itself while anything is still missing', fold.open,
+     'webApp is not set here');
+  const steps = [...a.doc.querySelectorAll('#sheet-fold > .setfold-body > .steps > li')]
+    .map(li => li.textContent);
+  ok('  the steps for changing workbook are spelled out there',
+     steps.length === 3 && /Test connection and Save/.test(steps[0]) &&
+     /Sync/.test(steps[1]), steps.length + ' steps');
+  ok('  and the note says the Web App link and key stay put',
+     /stay as they are/.test(
+       a.doc.querySelector('#sheet-fold > .setfold-body > .setfold-note').textContent));
+
+  // where the link and the key come from, for a first-time set-up
+  const first = a.doc.getElementById('first-fold');
+  const fsteps = [...first.querySelectorAll('.steps > li')].map(li => li.textContent);
+  ok('  a nested section says where the link and key come from',
+     !!first && first.open === false && fsteps.length === 4);
+  ok('    it names the file to paste, and links to it in the repo',
+     /sheet-sync\.gs/.test(fsteps[0]) &&
+     first.querySelector('a.filelink').href ===
+       'https://github.com/nhutrang0209/EngrowDict/blob/main/sheet-sync.gs',
+     first.querySelector('a.filelink').href);
+  ok('    it says to deploy as a Web app open to Anyone',
+     /Web app/.test(fsteps[1]) && /Anyone/.test(fsteps[1]));
+  ok('    and names the menu item that shows both',
+     /Link for the web to write words/.test(fsteps[2]), fsteps[2]);
+
+  const c = mk({ [SETTINGS_KEY]: JSON.stringify({
+    sheetUrl: 'https://docs.google.com/spreadsheets/d/ABC/edit',
+    webApp: 'https://script.google.com/macros/s/XYZ/exec',
+    key: 'a-secret-key', code: PASSCODE, unlocked: true }) });
+  await wait(900);
+  click(c.window, c.doc.getElementById('settings-btn'));
+  ok('once it is all linked the section stays folded away',
+     c.doc.getElementById('sheet-fold').open === false);
+  ok('  and the summary says so',
+     c.doc.getElementById('sheet-fold-state').textContent === 'linked',
+     c.doc.getElementById('sheet-fold-state').textContent);
+
   // --- a fresh visitor is locked again, with the default -----------------
   const b = mk();
   await wait(900);
@@ -125,5 +168,5 @@ const mk = store => boot({
      b.doc.getElementById('add-word').textContent === 'Unlock to add');
   ok('  and sees no link of yours', b.doc.getElementById('open-sheet').hidden);
 
-  done(a.errs.concat(b.errs));
+  done(a.errs.concat(b.errs, c.errs));
 })();
