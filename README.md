@@ -48,6 +48,12 @@ and select any word or phrase in it: a card opens with what the notebook holds
 on it — headword, part of speech, phonetics, the Vietnamese meanings — and a
 button through to the full entry.
 
+**Look up** in the top bar (or the `d` key) floats a dictionary window over the
+passage: type to search the whole notebook, pick a result to read its senses,
+drag it out of the way, and open the full entry when you want it. Selecting text
+while it is open feeds the selection straight into it rather than opening the
+small card. It stays where you drag it, and closes when you leave the tab.
+
 The notebook is advanced vocabulary, so ordinary running words are often not in
 it. When there is no entry, the card falls back to machine translation (English
 to Vietnamese, via MyMemory) and labels it as such, with a link out to Google
@@ -157,7 +163,7 @@ python parse_sheet.py    # when source.xlsx changes (download the sheet as .xlsx
 cd test && npm install && npm test
 ```
 
-254 checks against a fake DOM (jsdom), across eleven areas:
+283 checks against a fake DOM (jsdom), across twelve areas:
 
 1. the data pulled from the sheet covers a–z, has the right shape, and carries
    no leftover formatting junk
@@ -183,6 +189,8 @@ cd test && npm install && npm test
     headword, dotted rule between senses, nothing drawn into unused columns
 11. the list column dragging, folding and being remembered, and a passage
     keeping the full width while folded
+12. the floating dictionary: searching, ranking, the selection feeding it,
+    dragging, and it belonging to the reading tab
 
 Checks 7 and 8 need `test/grids.json`, which `parse_sheet.py` writes; without it
 check 7 skips itself.

@@ -647,3 +647,72 @@ a.btn[hidden] { display: none; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+/* ---- the floating dictionary, for use while reading --------------------- */
+.popdict {
+  position: fixed; right: 26px; top: 96px; z-index: 65;
+  width: min(360px, calc(100vw - 24px));
+  max-height: min(560px, calc(100vh - 130px));
+  display: flex; flex-direction: column;
+  background: var(--raised); border: 1px solid var(--rule);
+  border-radius: var(--r-m); box-shadow: var(--lift-3);
+  overflow: hidden;
+}
+.popdict[hidden] { display: none; }
+.pd-head {
+  flex: none; display: flex; align-items: center; gap: 8px;
+  padding: 10px 10px 10px 14px; cursor: move;
+  background: var(--tint); border-bottom: 1px solid var(--rule);
+}
+.pd-title {
+  flex: 1; font-family: var(--mono); font-size: 9.5px;
+  letter-spacing: .16em; text-transform: uppercase; color: var(--muted);
+}
+.pd-x {
+  border: 0; background: none; cursor: pointer; color: var(--faint);
+  width: 22px; height: 22px; border-radius: 6px; font-size: 16px; line-height: 1;
+}
+.pd-x:hover { background: var(--sunk); color: var(--ink); }
+.pd-search { flex: none; padding: 11px 12px; border-bottom: 1px solid var(--hair); }
+.pd-search input {
+  width: 100%; height: 34px; padding: 0 11px;
+  border: 1px solid var(--rule); border-radius: var(--r-s);
+  background: var(--tint); color: var(--ink); font-size: 14px;
+}
+.pd-search input:focus {
+  outline: none; border-color: var(--accent); box-shadow: var(--ring); background: var(--surface);
+}
+.pd-body { flex: 1; overflow-y: auto; overscroll-behavior: contain; }
+.pd-note { padding: 18px 14px; font-size: 12.5px; color: var(--faint); line-height: 1.55; }
+
+.pd-hits { display: flex; flex-direction: column; }
+.pd-hits li + li { border-top: 1px solid var(--hair); }
+.pd-hit { display: block; width: 100%; text-align: left; border: 0; background: none; cursor: pointer; padding: 9px 14px; }
+.pd-hit:hover { background: var(--tint); }
+.pd-w {
+  font-family: var(--serif); font-size: 15px; font-weight: 600;
+  font-variation-settings: "opsz" 24; color: var(--ink);
+  display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pd-w i { font-style: italic; font-size: 11.5px; color: var(--faint); margin-left: 5px; font-weight: 400; }
+.pd-vi { display: block; margin-top: 1px; font-size: 12.5px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.pd-back {
+  border: 0; background: none; cursor: pointer; color: var(--muted);
+  font-family: var(--mono); font-size: 10.5px; padding: 10px 14px 4px;
+}
+.pd-back:hover { color: var(--ink); }
+.pd-entry { padding: 4px 14px 16px; }
+.pd-head-word { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+.pd-hw { font-family: var(--serif); font-size: 22px; font-weight: 700; font-variation-settings: "opsz" 40; letter-spacing: -.02em; }
+.pd-pos { font-family: var(--serif); font-style: italic; font-size: 13px; color: var(--muted); }
+.pd-ipa { font-family: var(--mono); font-size: 11.5px; color: var(--accent-hi); background: var(--accent-soft); border-radius: 999px; padding: 2px 8px; }
+.pd-sense { display: grid; grid-template-columns: 20px 1fr; gap: 0 4px; margin-top: 13px; }
+.pd-sense .pd-num { font-family: var(--mono); font-size: 10.5px; font-weight: 600; color: var(--accent); padding-top: 3px; }
+.pd-sense .def { font-size: 13.5px; line-height: 1.55; }
+.pd-sense .vi { margin-top: 6px; padding-left: 10px; font-size: 13px; }
+.pd-entry .btn { margin-top: 16px; width: 100%; justify-content: center; }
+
+@media (max-width: 760px) {
+  .popdict { right: 8px; left: 8px; top: auto; bottom: 8px; width: auto; max-height: 60vh; }
+}

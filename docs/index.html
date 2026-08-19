@@ -658,6 +658,75 @@ a.btn[hidden] { display: none; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+/* ---- the floating dictionary, for use while reading --------------------- */
+.popdict {
+  position: fixed; right: 26px; top: 96px; z-index: 65;
+  width: min(360px, calc(100vw - 24px));
+  max-height: min(560px, calc(100vh - 130px));
+  display: flex; flex-direction: column;
+  background: var(--raised); border: 1px solid var(--rule);
+  border-radius: var(--r-m); box-shadow: var(--lift-3);
+  overflow: hidden;
+}
+.popdict[hidden] { display: none; }
+.pd-head {
+  flex: none; display: flex; align-items: center; gap: 8px;
+  padding: 10px 10px 10px 14px; cursor: move;
+  background: var(--tint); border-bottom: 1px solid var(--rule);
+}
+.pd-title {
+  flex: 1; font-family: var(--mono); font-size: 9.5px;
+  letter-spacing: .16em; text-transform: uppercase; color: var(--muted);
+}
+.pd-x {
+  border: 0; background: none; cursor: pointer; color: var(--faint);
+  width: 22px; height: 22px; border-radius: 6px; font-size: 16px; line-height: 1;
+}
+.pd-x:hover { background: var(--sunk); color: var(--ink); }
+.pd-search { flex: none; padding: 11px 12px; border-bottom: 1px solid var(--hair); }
+.pd-search input {
+  width: 100%; height: 34px; padding: 0 11px;
+  border: 1px solid var(--rule); border-radius: var(--r-s);
+  background: var(--tint); color: var(--ink); font-size: 14px;
+}
+.pd-search input:focus {
+  outline: none; border-color: var(--accent); box-shadow: var(--ring); background: var(--surface);
+}
+.pd-body { flex: 1; overflow-y: auto; overscroll-behavior: contain; }
+.pd-note { padding: 18px 14px; font-size: 12.5px; color: var(--faint); line-height: 1.55; }
+
+.pd-hits { display: flex; flex-direction: column; }
+.pd-hits li + li { border-top: 1px solid var(--hair); }
+.pd-hit { display: block; width: 100%; text-align: left; border: 0; background: none; cursor: pointer; padding: 9px 14px; }
+.pd-hit:hover { background: var(--tint); }
+.pd-w {
+  font-family: var(--serif); font-size: 15px; font-weight: 600;
+  font-variation-settings: "opsz" 24; color: var(--ink);
+  display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pd-w i { font-style: italic; font-size: 11.5px; color: var(--faint); margin-left: 5px; font-weight: 400; }
+.pd-vi { display: block; margin-top: 1px; font-size: 12.5px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.pd-back {
+  border: 0; background: none; cursor: pointer; color: var(--muted);
+  font-family: var(--mono); font-size: 10.5px; padding: 10px 14px 4px;
+}
+.pd-back:hover { color: var(--ink); }
+.pd-entry { padding: 4px 14px 16px; }
+.pd-head-word { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+.pd-hw { font-family: var(--serif); font-size: 22px; font-weight: 700; font-variation-settings: "opsz" 40; letter-spacing: -.02em; }
+.pd-pos { font-family: var(--serif); font-style: italic; font-size: 13px; color: var(--muted); }
+.pd-ipa { font-family: var(--mono); font-size: 11.5px; color: var(--accent-hi); background: var(--accent-soft); border-radius: 999px; padding: 2px 8px; }
+.pd-sense { display: grid; grid-template-columns: 20px 1fr; gap: 0 4px; margin-top: 13px; }
+.pd-sense .pd-num { font-family: var(--mono); font-size: 10.5px; font-weight: 600; color: var(--accent); padding-top: 3px; }
+.pd-sense .def { font-size: 13.5px; line-height: 1.55; }
+.pd-sense .vi { margin-top: 6px; padding-left: 10px; font-size: 13px; }
+.pd-entry .btn { margin-top: 16px; width: 100%; justify-content: center; }
+
+@media (max-width: 760px) {
+  .popdict { right: 8px; left: 8px; top: auto; bottom: 8px; width: auto; max-height: 60vh; }
+}
 </style>
 </head>
 <body>
@@ -973,11 +1042,10 @@ a.btn[hidden] { display: none; }
     });
   }
 
-  function search() {
-    var q = norm(query.trim());
-    var src = pool();
-    if (!q) { hits = src; return; }
-    var buckets = [[], [], [], [], []];
+  /* Exact word, then prefix, then a word inside a phrase, then anywhere in the
+     headword, then anywhere at all. */
+  function rankEntries(q, src, limit) {
+    var buckets = [[], [], [], [], []], found = 0;
     for (var i = 0; i < src.length; i++) {
       var e = src[i], w = e._w, s = -1;
       if (w === q) s = 0;
@@ -985,9 +1053,20 @@ a.btn[hidden] { display: none; }
       else if (w.indexOf(" " + q) > -1) s = 2;
       else if (w.indexOf(q) > -1) s = 3;
       else if (e._all.indexOf(q) > -1) s = 4;
-      if (s > -1) buckets[s].push(e);
+      if (s > -1) {
+        buckets[s].push(e);
+        if (limit && ++found >= limit * 4) break;
+      }
     }
-    hits = buckets[0].concat(buckets[1], buckets[2], buckets[3], buckets[4]);
+    var out = buckets[0].concat(buckets[1], buckets[2], buckets[3], buckets[4]);
+    return limit ? out.slice(0, limit) : out;
+  }
+
+  function search() {
+    var q = norm(query.trim());
+    var src = pool();
+    if (!q) { hits = src; return; }
+    hits = rankEntries(q, src, 0);
   }
 
   /* With no query, letter marks are woven in so browsing feels like flipping
@@ -1296,6 +1375,180 @@ a.btn[hidden] { display: none; }
     return m.wrap;
   }
 
+  /* ---- a dictionary you can keep open while reading ---------------------- */
+  /* On the Passages tab the search box searches the passages, so looking a
+     word up used to mean leaving what you were reading. This floats over it
+     instead: type, pick, read, drag it out of the way. */
+  var POP_KEY = "engrowdict:pop:v1";
+  var popEl = null, popPicked = null;
+
+  function popOpen() { return !!popEl && !popEl.hidden; }
+
+  function buildPopDict() {
+    var w = el("div", "popdict");
+    w.id = "popdict";
+    w.hidden = true;
+
+    var head = el("div", "pd-head");
+    head.appendChild(el("span", "pd-title", "Look up"));
+    var x = el("button", "pd-x", "×");
+    x.type = "button";
+    x.setAttribute("aria-label", "Close");
+    x.addEventListener("click", closePopDict);
+    head.appendChild(x);
+    w.appendChild(head);
+
+    var sbox = el("div", "pd-search");
+    var inp = el("input");
+    inp.id = "pd-q";
+    inp.type = "search";
+    inp.autocomplete = "off";
+    inp.spellcheck = false;
+    inp.placeholder = "Search the dictionary…";
+    inp.setAttribute("aria-label", "Search the dictionary");
+    inp.addEventListener("input", function () { popPicked = null; drawPopDict(); });
+    inp.addEventListener("keydown", function (ev) {
+      if (ev.key === "Escape") { ev.stopPropagation(); closePopDict(); }
+    });
+    sbox.appendChild(inp);
+    w.appendChild(sbox);
+
+    var body = el("div", "pd-body");
+    body.id = "pd-body";
+    w.appendChild(body);
+
+    // dragged by its header, and it stays where you put it
+    var drag = null;
+    head.addEventListener("mousedown", function (ev) {
+      if (ev.target === x) return;
+      drag = { x: ev.clientX - w.offsetLeft, y: ev.clientY - w.offsetTop };
+      ev.preventDefault();
+    });
+    document.addEventListener("mousemove", function (ev) {
+      if (!drag) return;
+      var maxL = (window.innerWidth || 1200) - w.offsetWidth - 6;
+      var maxT = (window.innerHeight || 800) - 40;
+      w.style.left = Math.min(Math.max(6, ev.clientX - drag.x), Math.max(6, maxL)) + "px";
+      w.style.top = Math.min(Math.max(6, ev.clientY - drag.y), Math.max(6, maxT)) + "px";
+      w.style.right = "auto";
+      w.style.bottom = "auto";
+    });
+    document.addEventListener("mouseup", function () {
+      if (!drag) return;
+      drag = null;
+      try {
+        localStorage.setItem(POP_KEY, JSON.stringify({ left: w.style.left, top: w.style.top }));
+      } catch (err) { /* ignore */ }
+    });
+    return w;
+  }
+
+  function drawPopDict() {
+    var body = document.getElementById("pd-body");
+    var inp = document.getElementById("pd-q");
+    body.textContent = "";
+
+    if (popPicked) {
+      var back = el("button", "pd-back", "‹ results");
+      back.type = "button";
+      back.addEventListener("click", function () { popPicked = null; drawPopDict(); });
+      body.appendChild(back);
+      body.appendChild(popEntry(popPicked));
+      return;
+    }
+
+    var q = norm(inp.value.trim());
+    if (!q) {
+      body.appendChild(el("p", "pd-note",
+        "Type a word, or select one in the passage behind."));
+      return;
+    }
+    var found = rankEntries(q, entries, 40);
+    if (!found.length) {
+      body.appendChild(el("p", "pd-note", "Nothing in the notebook matches that."));
+      return;
+    }
+    var list = el("ul", "pd-hits");
+    found.forEach(function (e) {
+      var li = el("li");
+      var b = el("button", "pd-hit");
+      b.type = "button";
+      var line = el("span", "pd-w", e.word);
+      if (e.pos) line.appendChild(el("i", null, e.pos));
+      b.appendChild(line);
+      b.appendChild(el("span", "pd-vi", glossOf(e)));
+      b.addEventListener("click", function () { popPicked = e; drawPopDict(); });
+      li.appendChild(b);
+      list.appendChild(li);
+    });
+    body.appendChild(list);
+  }
+
+  function popEntry(e) {
+    var box = el("div", "pd-entry");
+    var h = el("div", "pd-head-word");
+    h.appendChild(el("span", "pd-hw", e.word));
+    if (e.pos) h.appendChild(el("span", "pd-pos", e.pos + "."));
+    if (e.ipa) h.appendChild(el("span", "pd-ipa", e.ipa));
+    box.appendChild(h);
+    e.senses.forEach(function (sn, i) {
+      var s = el("div", "pd-sense");
+      if (e.senses.length > 1) s.appendChild(el("span", "pd-num", String(i + 1)));
+      var col = el("div");
+      if (sn.def) col.appendChild(defNode(sn.def));
+      if (sn.vi) col.appendChild(el("p", "vi", sn.vi));
+      s.appendChild(col);
+      box.appendChild(s);
+    });
+    var full = el("button", "btn", "Open in the dictionary");
+    full.type = "button";
+    full.addEventListener("click", function () {
+      closePopDict();
+      view = "vocab";
+      selectedId = e.id;
+      selectedRead = null;
+      query = "";
+      if (qInput) qInput.value = "";
+      syncViewButtons();
+      refresh();
+      select(e.id);
+      showDetail();
+    });
+    box.appendChild(full);
+    return box;
+  }
+
+  function openPopDict(prefill) {
+    if (!popEl) {
+      popEl = buildPopDict();
+      document.getElementById("app").appendChild(popEl);
+      try {
+        var s = JSON.parse(localStorage.getItem(POP_KEY) || "{}");
+        if (s.left) { popEl.style.left = s.left; popEl.style.top = s.top; popEl.style.right = "auto"; }
+      } catch (err) { /* ignore */ }
+    }
+    popEl.hidden = false;
+    var inp = document.getElementById("pd-q");
+    if (prefill != null) { inp.value = prefill; popPicked = null; }
+    drawPopDict();
+    inp.focus();
+    inp.select();
+    syncPopButton();
+  }
+
+  function closePopDict() {
+    if (popEl) popEl.hidden = true;
+    syncPopButton();
+  }
+
+  function syncPopButton() {
+    var b = document.getElementById("popdict-btn");
+    if (!b) return;
+    b.hidden = view !== "read";
+    b.setAttribute("aria-pressed", String(popOpen()));
+    b.className = popOpen() ? "btn btn-primary" : "btn";
+  }
+
   /* ---- the divider: drag to resize, click the chevron to fold away -------- */
   var LIST_KEY = "engrowdict:list:v1";
   var LIST_MIN = 240, LIST_MAX = 620, LIST_DEFAULT = 348;
@@ -1443,6 +1696,8 @@ a.btn[hidden] { display: none; }
       qInput.placeholder = view === "read"
         ? "Search inside the passages…" : "Search a word, a meaning, or Vietnamese…";
     }
+    if (view !== "read") closePopDict();
+    syncPopButton();
   }
 
   /* Many definitions lead with the exact form being defined — "be better off:
@@ -1528,6 +1783,13 @@ a.btn[hidden] { display: none; }
       if (!text || text.length > 120) { hideLookup(); return; }
       var rect = null;
       try { rect = sel.getRangeAt(0).getBoundingClientRect(); } catch (err) { rect = null; }
+      if (popOpen()) {
+        var inp = document.getElementById("pd-q");
+        inp.value = text;
+        popPicked = lookupText(text);
+        drawPopDict();
+        return;
+      }
       showLookup(text, rect);
     }, 0);
   }
@@ -2123,6 +2385,16 @@ a.btn[hidden] { display: none; }
        five things sit here rather than eight. */
     var acts = el("div", "acts");
 
+    var pop = el("button", "btn", "Look up");
+    pop.type = "button";
+    pop.id = "popdict-btn";
+    pop.hidden = true;
+    pop.title = "A dictionary window you can keep open while reading (d)";
+    pop.addEventListener("click", function () {
+      if (popOpen()) closePopDict(); else openPopDict("");
+    });
+    acts.appendChild(pop);
+
     var add = el("button", "btn btn-primary", "+ Add word");
     add.type = "button";
     add.id = "add-word";
@@ -2234,6 +2506,10 @@ a.btn[hidden] { display: none; }
     document.addEventListener("keydown", function (ev) {
       if (isTyping(ev.target)) return;
       if (ev.key === "/") { ev.preventDefault(); qInput.focus(); qInput.select(); }
+      else if (ev.key === "d" && view === "read") {
+        ev.preventDefault();
+        if (popOpen()) closePopDict(); else openPopDict("");
+      }
       else if (ev.key === "ArrowLeft") step(-1);
       else if (ev.key === "ArrowRight") step(1);
       else if (ev.key === "ArrowDown") { ev.preventDefault(); step(1); }
