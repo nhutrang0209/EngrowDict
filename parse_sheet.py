@@ -1,9 +1,10 @@
-"""Bóc source.xlsx (bản tải về của Google Sheet) thành dataset.json.
+"""Turn source.xlsx (a download of the Google Sheet) into dataset.json.
 
     python parse_sheet.py
 
-Chỉ cần chạy lại khi sheet gốc đổi. Ô bị gộp trong Excel chỉ mang giá trị ở
-dòng đầu, nên dòng có ô đầu trống được hiểu là nghĩa tiếp theo của mục trên.
+Only needs rerunning when the sheet itself changes. A merged cell in Excel
+carries its value on the first row only, so a row with an empty first cell is
+read as another sense of the entry above it.
 """
 import json
 import os
@@ -20,6 +21,7 @@ EG_SPLIT = re.compile(r'\n\s*[-–—]\s*')
 
 
 def txt(v):
+    """Cell value as clean text, with line endings normalised."""
     return '' if v is None else str(v).replace('\r\n', '\n').replace('\r', '\n').strip()
 
 
@@ -28,7 +30,7 @@ def flat(s):
 
 
 def sense(def_cell, vi_cell):
-    """Tách ví dụ (dòng bắt đầu bằng gạch đầu dòng) khỏi phần định nghĩa."""
+    """Split examples (lines starting with a dash) off from the definition."""
     parts = EG_SPLIT.split(txt(def_cell))
     return {
         'def': flat(parts[0]),
@@ -70,8 +72,8 @@ def add(**kw):
 
 
 def blocks(ws, key_cols, skip_header=1):
-    """Gom các dòng liền nhau thành một mục: dòng có ô khoá trống là nghĩa
-    tiếp theo của mục ngay trên (dấu vết của ô gộp trong Excel)."""
+    """Group consecutive rows into one entry: a row whose key cell is empty is
+    another sense of the entry above it (the trace of a merged cell)."""
     cur, buf = None, []
     for n, row in enumerate(ws.iter_rows(values_only=True)):
         if n < skip_header:
@@ -92,19 +94,20 @@ def blocks(ws, key_cols, skip_header=1):
 
 wb = openpyxl.load_workbook(SRC, read_only=True, data_only=True)
 
-# --- Vocabulary: A = từ (+ từ loại + phiên âm), B = definition, C = nghĩa ---
+# --- Vocabulary: A = word (+ pos + phonetics), B = definition, C = meaning ---
 for key, rows in blocks(wb['Vocabulary'], [0], skip_header=1):
     head = rows[0]
-    # dòng chia mục theo chữ cái: chỉ có một chữ ở cột A, không định nghĩa
+    # letter divider row: a single letter in column A and no definition
     if not txt(head[1]) and not txt(head[2]) and len(txt(head[0])) <= 2:
         continue
     word, pos, ipa, note = parse_head(head[0])
     add(type='word', word=word, pos=pos, ipa=ipa, note=note,
         senses=[sense(r[1], r[2]) for r in rows])
 
-# --- Phrasal Verb: A = động từ, B = giới từ, C = explain, D = nghĩa ---
-# Ô động từ gộp qua tất cả giới từ của nó, nên phải nhớ động từ đang xét:
-# có giới từ mới = mục mới, cả hai ô trống = nghĩa tiếp theo của mục hiện tại.
+# --- Phrasal Verb: A = verb, B = particle, C = explain, D = meaning ---
+# The verb cell is merged across all of its particles, so the current verb has
+# to be carried forward: a new particle starts a new entry, both cells empty
+# means another sense of the entry in progress.
 def flush_phrasal(verb, part, rows):
     if rows and verb:
         add(type='phrasal', word=flat(verb + ' ' + part), verb=flat(verb), particle=flat(part),
@@ -129,14 +132,14 @@ for n, row in enumerate(wb['Phrasal Verb'].iter_rows(values_only=True)):
         buf.append(row)
 flush_phrasal(cur_verb, cur_part, buf)
 
-# --- Idioms / Common: A = mục từ, B = explain, C = nghĩa ---
+# --- Idioms / Common: A = headword, B = explain, C = meaning ---
 for sheet, kind in (('Idioms', 'idiom'), ('Common', 'expression')):
     for key, rows in blocks(wb[sheet], [0], skip_header=1):
         word, pos, ipa, note = parse_head(rows[0][0])
         add(type=kind, word=word, pos=pos, ipa=ipa, note=note,
             senses=[sense(r[1], r[2]) for r in rows])
 
-# --- Grammar: A = số nhóm, B = từ, C = explain, D = nghĩa (nhóm dễ nhầm) ---
+# --- Grammar: A = group number, B = word, C = explain, D = meaning ---
 group = ''
 for n, row in enumerate(wb['Grammar'].iter_rows(values_only=True)):
     if n < 1:
@@ -148,7 +151,7 @@ for n, row in enumerate(wb['Grammar'].iter_rows(values_only=True)):
         add(type='compare', word=flat(txt(row[1])), group=group,
             senses=[sense(row[2], row[3])])
 
-# --- Reading Passage: mỗi bài hai dòng, tiêu đề rồi nội dung ---
+# --- Reading Passage: two rows per piece, the title then the body ---
 pend = None
 for n, row in enumerate(wb['Reading Passage'].iter_rows(values_only=True)):
     if n < 1:
@@ -171,8 +174,8 @@ data = {'entries': entries, 'readings': readings}
 json.dump(data, open(os.path.join(HERE, 'dataset.json'), 'w', encoding='utf-8'),
           ensure_ascii=False, separators=(',', ':'))
 
-# Ảnh chụp thô của từng tab, để test đối chiếu bản bóc bằng Apps Script
-# (sheet-sync.gs) với bản bóc bằng Python này. Tệp phái sinh, không commit.
+# A raw snapshot of each tab, so the tests can compare what Apps Script
+# (sheet-sync.gs) reads against what this script reads. Derived, not committed.
 grids = {}
 for name in ('Vocabulary', 'Phrasal Verb', 'Idioms', 'Common', 'Grammar'):
     ws = wb[name]
@@ -187,8 +190,8 @@ if os.path.isdir(test_dir):
 
 from collections import Counter
 print(Counter(e['type'] for e in entries))
-print('mục', len(entries),
-      '· nghĩa', sum(len(e['senses']) for e in entries),
-      '· ví dụ', sum(len(s['eg']) for e in entries for s in e['senses']),
-      '· bài đọc', len(readings))
+print(len(entries), 'entries ·',
+      sum(len(e['senses']) for e in entries), 'senses ·',
+      sum(len(s['eg']) for e in entries for s in e['senses']), 'examples ·',
+      len(readings), 'passages')
 print('dataset.json', round(os.path.getsize(os.path.join(HERE, 'dataset.json')) / 1024), 'KB')

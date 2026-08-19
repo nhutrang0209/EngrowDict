@@ -1,27 +1,28 @@
 /**
- * Sổ Tra Từ — đồng bộ Google Sheet lên web bằng một nút bấm.
+ * EngrowDict — publish this Google Sheet to the web with one button.
  *
- * Dán toàn bộ tệp này vào Apps Script của chính file sheet
- * (Tiện ích mở rộng → Apps Script), lưu, rồi tải lại sheet.
- * Menu "Sổ Tra Từ" sẽ hiện ra cạnh menu Trợ giúp.
+ * Paste this whole file into the sheet's own Apps Script project
+ * (Extensions → Apps Script), save, then reload the sheet. An "EngrowDict"
+ * menu appears next to Help.
  *
- * Lần đầu: Sổ Tra Từ → Cài đặt kho GitHub, dán repo và token.
- * Sau đó:  Sổ Tra Từ → Đồng bộ lên web.
+ * First time: EngrowDict → Set up GitHub repo, then paste the repo and token.
+ * After that: EngrowDict → Publish to the web.
  *
- * Script đọc cả sheet, dựng lại data.json y hệt parse_sheet.py, rồi ghi đè
- * docs/data.json trong repo. GitHub Pages tự dựng lại sau vài chục giây —
- * không cần chạy build gì trên máy.
+ * The script reads the whole workbook, rebuilds data.json exactly the way
+ * parse_sheet.py does, and overwrites docs/data.json in the repo. GitHub Pages
+ * redeploys within a minute — nothing has to be built on your machine.
  *
- * Bài đọc KHÔNG được đẩy lên: đó là nguyên văn bài của TED-Ed và BBC.
+ * Reading passages are NOT published: they are the verbatim text of TED-Ed and
+ * BBC articles.
  */
 
 var PROP_REPO = 'SOTRATU_REPO';     // "nhutrang0209/EngrowDict"
-var PROP_TOKEN = 'SOTRATU_TOKEN';   // fine-grained PAT, quyền Contents: Read and write
+var PROP_TOKEN = 'SOTRATU_TOKEN';   // fine-grained PAT, Contents: Read and write
 var PROP_BRANCH = 'SOTRATU_BRANCH';
-var PROP_KEY = 'SOTRATU_KEY';       // mã khoá cho đường ghi từ web về sheet
+var PROP_KEY = 'SOTRATU_KEY';       // shared secret for the web-to-sheet path
 var TARGET = 'docs/data.json';
 
-/** Tab nào ứng với nhóm nào, và ô đầu dòng có mấy cột trước phần nghĩa. */
+/** Which tab holds which group, and how many columns precede the senses. */
 var TABS = {
   word:       { sheet: 'Vocabulary',   headCols: 1 },
   phrasal:    { sheet: 'Phrasal Verb', headCols: 2 },
@@ -32,40 +33,40 @@ var TABS = {
 
 function onOpen() {
   SpreadsheetApp.getUi()
-    .createMenu('Sổ Tra Từ')
-    .addItem('Đồng bộ lên web', 'syncToWeb')
+    .createMenu('EngrowDict')
+    .addItem('Publish to the web', 'syncToWeb')
     .addSeparator()
-    .addItem('Cài đặt kho GitHub', 'setupRepo')
-    .addItem('Link cho web ghi từ vào sheet', 'showWriteLink')
-    .addItem('Xem thử số liệu (không đẩy)', 'previewCounts')
+    .addItem('Set up GitHub repo', 'setupRepo')
+    .addItem('Link for the web to write words', 'showWriteLink')
+    .addItem('Preview the counts (no upload)', 'previewCounts')
     .addToUi();
 }
 
-/* ---------------------------------------------------------------- cài đặt */
+/* ------------------------------------------------------------------ setup */
 
 function setupRepo() {
   var ui = SpreadsheetApp.getUi();
   var props = PropertiesService.getScriptProperties();
 
-  var r = ui.prompt('Kho GitHub',
-    'Dạng chu-tai-khoan/ten-repo, ví dụ nhutrang0209/EngrowDict:',
+  var r = ui.prompt('GitHub repo',
+    'In the form owner/name, for example nhutrang0209/EngrowDict:',
     ui.ButtonSet.OK_CANCEL);
   if (r.getSelectedButton() !== ui.Button.OK) return;
   var repo = r.getResponseText().trim().replace(/^https?:\/\/github\.com\//, '').replace(/\.git$/, '');
   if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) {
-    ui.alert('Chưa đúng dạng. Cần chu-tai-khoan/ten-repo.');
+    ui.alert('That is not the right shape. It should be owner/name.');
     return;
   }
 
-  var t = ui.prompt('Token GitHub',
-    'Dán fine-grained personal access token có quyền Contents: Read and write '
-    + 'trên đúng repo đó.\n\nTạo tại github.com/settings/personal-access-tokens',
+  var t = ui.prompt('GitHub token',
+    'Paste a fine-grained personal access token with Contents: Read and write '
+    + 'on that repo.\n\nCreate one at github.com/settings/personal-access-tokens',
     ui.ButtonSet.OK_CANCEL);
   if (t.getSelectedButton() !== ui.Button.OK) return;
   var token = t.getResponseText().trim();
-  if (!token) { ui.alert('Chưa nhập token.'); return; }
+  if (!token) { ui.alert('No token entered.'); return; }
 
-  var b = ui.prompt('Nhánh', 'Để trống là dùng main:', ui.ButtonSet.OK_CANCEL);
+  var b = ui.prompt('Branch', 'Leave blank to use main:', ui.ButtonSet.OK_CANCEL);
   var branch = b.getSelectedButton() === ui.Button.OK && b.getResponseText().trim()
     ? b.getResponseText().trim() : 'main';
 
@@ -75,11 +76,12 @@ function setupRepo() {
 
   var check = ghGet(repo, token, branch, 'docs');
   if (check.code === 200 || check.code === 404) {
-    ui.alert('Xong', 'Đã lưu. Giờ dùng Sổ Tra Từ → Đồng bộ lên web.', ui.ButtonSet.OK);
+    ui.alert('Done', 'Saved. Now use EngrowDict → Publish to the web.', ui.ButtonSet.OK);
   } else {
-    ui.alert('Chưa vào được kho',
-      'GitHub trả về ' + check.code + '.\n\n' + String(check.body).slice(0, 300)
-      + '\n\nKiểm tra lại tên repo, quyền của token, và token đã được cấp cho repo này chưa.',
+    ui.alert('Cannot reach the repo',
+      'GitHub answered ' + check.code + '.\n\n' + String(check.body).slice(0, 300)
+      + '\n\nCheck the repo name, the token permissions, and that the token was '
+      + 'granted access to this repo.',
       ui.ButtonSet.OK);
   }
 }
@@ -90,20 +92,20 @@ function previewCounts() {
   for (var i = 0; i < d.entries.length; i++) n[d.entries[i].type] = (n[d.entries[i].type] || 0) + 1;
   var senses = 0;
   for (i = 0; i < d.entries.length; i++) senses += d.entries[i].senses.length;
-  SpreadsheetApp.getUi().alert('Đọc được từ sheet',
-    d.entries.length + ' mục · ' + senses + ' nghĩa\n\n'
-    + 'Từ: ' + (n.word || 0) + '\nPhrasal verb: ' + (n.phrasal || 0)
-    + '\nThành ngữ: ' + (n.idiom || 0) + '\nCụm từ: ' + (n.expression || 0)
-    + '\nDễ nhầm: ' + (n.compare || 0)
-    + '\n\nBài đọc không được đẩy lên bản công khai.',
+  SpreadsheetApp.getUi().alert('Read from the sheet',
+    d.entries.length + ' entries · ' + senses + ' senses\n\n'
+    + 'Words: ' + (n.word || 0) + '\nPhrasal verbs: ' + (n.phrasal || 0)
+    + '\nIdioms: ' + (n.idiom || 0) + '\nExpressions: ' + (n.expression || 0)
+    + '\nEasily mixed up: ' + (n.compare || 0)
+    + '\n\nReading passages are left out of the public copy.',
     SpreadsheetApp.getUi().ButtonSet.OK);
 }
 
-/* -------------------------------------------- đường ghi ngược: web -> sheet */
+/* ------------------------------------------- the way back: web -> sheet */
 
 /**
- * Hiện link để dán vào nút Settings của trang web.
- * Phải Triển khai (Deploy) → Ứng dụng web → Ai cũng truy cập được, trước đã.
+ * Show the link to paste into the web page's Settings.
+ * Deploy → New deployment → Web app → "Anyone" must be done first.
  */
 function showWriteLink() {
   var ui = SpreadsheetApp.getUi();
@@ -117,24 +119,24 @@ function showWriteLink() {
   try { url = ScriptApp.getService().getUrl() || ''; } catch (err) { url = ''; }
 
   if (!url) {
-    ui.alert('Chưa triển khai',
-      'Vào Triển khai → Bản triển khai mới → chọn loại "Ứng dụng web", '
-      + 'mục "Người có quyền truy cập" chọn "Bất kỳ ai", rồi Triển khai.\n\n'
-      + 'Xong quay lại bấm menu này lần nữa để lấy link.\n\nMã khoá của bạn:\n' + key,
+    ui.alert('Not deployed yet',
+      'Go to Deploy → New deployment → pick type "Web app", set '
+      + '"Who has access" to "Anyone", then Deploy.\n\n'
+      + 'Come back and open this menu again to get the link.\n\nYour key:\n' + key,
       ui.ButtonSet.OK);
     return;
   }
-  ui.alert('Dán hai dòng này vào nút Settings của trang web',
-    'Link Web App:\n' + url + '\n\nMã khoá:\n' + key
-    + '\n\nHai thứ này chỉ lưu trong trình duyệt của bạn. Ai không có chúng thì '
-    + 'không ghi được vào sheet.',
+  ui.alert('Paste these two into the web page Settings',
+    'Web App link:\n' + url + '\n\nKey:\n' + key
+    + '\n\nBoth stay in your own browser. Anyone without them cannot write to '
+    + 'the sheet.',
     ui.ButtonSet.OK);
 }
 
-/** Cho phép mở link bằng trình duyệt để thử xem đã triển khai đúng chưa. */
+/** Lets you open the link in a browser to check the deployment. */
 function doGet() {
   return ContentService
-    .createTextOutput(JSON.stringify({ ok: true, service: 'so-tra-tu', version: 1 }))
+    .createTextOutput(JSON.stringify({ ok: true, service: 'engrowdict', version: 1 }))
     .setMimeType(ContentService.MimeType.JSON);
 }
 
@@ -146,9 +148,9 @@ function doPost(e) {
   try {
     var body = JSON.parse(e.postData.contents);
     var key = PropertiesService.getScriptProperties().getProperty(PROP_KEY);
-    if (!key || body.key !== key) return out({ ok: false, error: 'Sai mã khoá' });
+    if (!key || body.key !== key) return out({ ok: false, error: 'Wrong key' });
     if (body.action === 'ping') return out({ ok: true, pong: true });
-    if (body.action !== 'add') return out({ ok: false, error: 'Không hiểu yêu cầu' });
+    if (body.action !== 'add') return out({ ok: false, error: 'Unknown request' });
 
     var lock = LockService.getScriptLock();
     lock.waitLock(20000);
@@ -163,12 +165,12 @@ function doPost(e) {
   }
 }
 
-/** Số cột thật sự dùng tới; các tab đều 3–4 cột. */
+/** How many columns are actually in play; every tab uses 3 or 4. */
 function width(sh) {
   return Math.max(1, Math.min(4, sh.getMaxColumns ? sh.getMaxColumns() : 4));
 }
 
-/** Nhóm "dễ nhầm" mới thì đánh số tiếp theo số nhóm lớn nhất đang có. */
+/** A new mixed-up group takes the next number after the largest in use. */
 function nextGroup(sh) {
   var last = sh.getLastRow();
   if (last < 2) return '1';
@@ -181,7 +183,7 @@ function nextGroup(sh) {
   return String(max + 1);
 }
 
-/** Ghép ô đầu dòng theo đúng cách sheet đang viết: từ (từ loại) \n /phiên âm/ */
+/** Build the head cell the way the sheet writes it: word (pos) \n /ipa/ */
 function headCell(entry) {
   var s = txt(entry.word);
   if (txt(entry.pos)) s += ' (' + txt(entry.pos) + ')';
@@ -190,7 +192,7 @@ function headCell(entry) {
   return s;
 }
 
-/** Dòng đầu tiên nên chèn trước, để giữ thứ tự a→z của tab. */
+/** The first row to insert before, so the tab stays in a→z order. */
 function insertRowFor(sh, sortKey, headCols) {
   var last = sh.getLastRow();
   if (last < 2) return last + 1;
@@ -198,12 +200,12 @@ function insertRowFor(sh, sortKey, headCols) {
   var target = 0;
   for (var i = 1; i < vals.length; i++) {
     var a = txt(vals[i][0]);
-    if (!a) continue;                                   // dòng nghĩa tiếp theo
+    if (!a) continue;                                   // a following sense
     var isDivider = a.length <= 2 && !txt(vals[i][1]) && !txt(vals[i][2]);
-    if (isDivider) continue;                            // mốc chữ cái
+    if (isDivider) continue;                            // letter divider
     var k = a.split('\n')[0].replace(/\s*\([^()]*\)\s*$/, '').toLowerCase().trim();
     if (headCols > 1) k = (k + ' ' + txt(vals[i][1])).trim().toLowerCase();
-    if (k > sortKey) { target = i + 1; break; }          // getRange dùng chỉ số từ 1
+    if (k > sortKey) { target = i + 1; break; }          // getRange is 1-based
   }
   return target || last + 1;
 }
@@ -211,10 +213,10 @@ function insertRowFor(sh, sortKey, headCols) {
 function insertEntry(entry) {
   var tab = TABS[entry.type] || TABS.word;
   var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(tab.sheet);
-  if (!sh) return { ok: false, error: 'Không thấy tab ' + tab.sheet };
+  if (!sh) return { ok: false, error: 'No tab called ' + tab.sheet };
 
   var senses = entry.senses || [];
-  if (!senses.length) return { ok: false, error: 'Từ chưa có nghĩa nào' };
+  if (!senses.length) return { ok: false, error: 'The word has no senses' };
 
   var group = entry.type === 'compare' ? nextGroup(sh) : '';
   var rowsOut = [];
@@ -236,7 +238,7 @@ function insertEntry(entry) {
     ? (txt(entry.verb) + ' ' + txt(entry.particle)).trim().toLowerCase()
     : txt(entry.word).toLowerCase();
   var at = entry.type === 'compare'
-    ? sh.getLastRow() + 1                       // tab này xếp theo nhóm, không theo a→z
+    ? sh.getLastRow() + 1                       // grouped, not alphabetical
     : insertRowFor(sh, sortKey, tab.headCols);
 
   var w = width(sh);
@@ -247,7 +249,7 @@ function insertEntry(entry) {
   return { ok: true, sheet: tab.sheet, row: at, rows: trimmed.length };
 }
 
-/* ------------------------------------------------------------------ đồng bộ */
+/* ---------------------------------------------------------------- publish */
 
 function syncToWeb() {
   var ui = SpreadsheetApp.getUi();
@@ -257,33 +259,33 @@ function syncToWeb() {
   var branch = props.getProperty(PROP_BRANCH) || 'main';
   if (!repo || !token) { setupRepo(); return; }
 
-  SpreadsheetApp.getActiveSpreadsheet().toast('Đang đọc sheet…', 'Sổ Tra Từ', 30);
+  SpreadsheetApp.getActiveSpreadsheet().toast('Reading the sheet…', 'EngrowDict', 30);
   var data = buildData();
   if (!data.entries.length) {
-    ui.alert('Không đọc được mục nào từ sheet. Kiểm tra lại tên các tab.');
+    ui.alert('No entries could be read. Check the tab names.');
     return;
   }
   var json = JSON.stringify({ entries: data.entries, readings: [] });
 
-  SpreadsheetApp.getActiveSpreadsheet().toast('Đang đẩy lên GitHub…', 'Sổ Tra Từ', 60);
+  SpreadsheetApp.getActiveSpreadsheet().toast('Uploading to GitHub…', 'EngrowDict', 60);
   var sha = shaOf(repo, token, branch, TARGET);
   var res = ghPut(repo, token, branch, TARGET, json, sha,
-    'Đồng bộ từ Google Sheet: ' + data.entries.length + ' mục');
+    'Sync from Google Sheet: ' + data.entries.length + ' entries');
 
   if (res.code === 200 || res.code === 201) {
-    ui.alert('Đã đồng bộ',
-      data.entries.length + ' mục đã lên web.\n\n'
-      + 'GitHub Pages dựng lại sau khoảng 30–60 giây. Nếu mở trang mà chưa thấy đổi, '
-      + 'tải lại bằng Ctrl+F5.',
+    ui.alert('Published',
+      data.entries.length + ' entries are on the web.\n\n'
+      + 'GitHub Pages redeploys in about 30–60 seconds. If the page still looks '
+      + 'the same, reload with Ctrl+F5.',
       ui.ButtonSet.OK);
   } else {
-    ui.alert('Đẩy không thành công',
-      'GitHub trả về ' + res.code + '.\n\n' + String(res.body).slice(0, 400),
+    ui.alert('Upload failed',
+      'GitHub answered ' + res.code + '.\n\n' + String(res.body).slice(0, 400),
       ui.ButtonSet.OK);
   }
 }
 
-/* ------------------------------------------------------------- gọi GitHub */
+/* -------------------------------------------------------- talking to GitHub */
 
 function ghHeaders(token) {
   return {
@@ -302,7 +304,8 @@ function ghGet(repo, token, branch, path) {
   return { code: r.getResponseCode(), body: r.getContentText() };
 }
 
-/** Lấy sha của tệp đích qua danh sách thư mục, để khỏi tải về cả tệp 4 MB. */
+/** Get the target file's sha from the directory listing, to avoid
+ *  downloading the whole 4 MB file. */
 function shaOf(repo, token, branch, path) {
   var dir = path.indexOf('/') > -1 ? path.slice(0, path.lastIndexOf('/')) : '';
   var name = path.slice(path.lastIndexOf('/') + 1);
@@ -332,7 +335,7 @@ function ghPut(repo, token, branch, path, text, sha, message) {
   return { code: r.getResponseCode(), body: r.getContentText() };
 }
 
-/* ------------------------------------------------- bóc sheet (giống parse_sheet.py) */
+/* ------------------------------- reading the sheet (mirrors parse_sheet.py) */
 
 function txt(v) {
   if (v === null || v === undefined) return '';
@@ -403,7 +406,7 @@ function buildData() {
     if (txt(r[0])) {
       if (buf) add(buf);
       buf = null;
-      if (!txt(r[1]) && !txt(r[2]) && txt(r[0]).length <= 2) continue;   // mốc chữ cái
+      if (!txt(r[1]) && !txt(r[2]) && txt(r[0]).length <= 2) continue;   // letter divider
       h = parseHead(r[0]);
       buf = { type: 'word', word: h.word, pos: h.pos, ipa: h.ipa, note: h.note, senses: [] };
     }
@@ -411,7 +414,7 @@ function buildData() {
   }
   if (buf) add(buf);
 
-  // --- Phrasal Verb: ô động từ gộp qua nhiều dòng giới từ ---
+  // --- Phrasal Verb: the verb cell is merged across its particle rows ---
   rows = grid('Phrasal Verb');
   var verb = '';
   buf = null;
@@ -447,7 +450,7 @@ function buildData() {
     if (buf) add(buf);
   }
 
-  // --- Grammar: nhóm từ dễ nhầm ---
+  // --- Grammar: groups of easily mixed-up words ---
   rows = grid('Grammar');
   var group = '';
   for (i = 1; i < rows.length; i++) {

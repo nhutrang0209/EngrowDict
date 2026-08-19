@@ -1,138 +1,158 @@
-# Sổ Tra Từ
+# EngrowDict
 
-Trang tra từ vựng Anh–Việt dựng từ sổ từ vựng cá nhân trên Google Sheet:
-**11.401 mục · 21.050 nghĩa · 2.340 ví dụ · 33 bài đọc**.
+An English–Vietnamese vocabulary notebook built from a personal Google Sheet:
+**11,401 entries · 21,050 senses · 2,340 examples · 33 reading passages**.
 
-Gõ tiếng Anh hoặc tiếng Việt — trang tìm trong cả từ, phiên âm, definition và
-nghĩa, và tiếng Việt không dấu vẫn ra (`mui dat` → *petrichor*). Không có
-framework, không phụ thuộc ngoài; danh sách 11 nghìn mục dựng theo kiểu cuộn ảo
-nên chỉ vài chục dòng nằm trong DOM một lúc.
+Type English or Vietnamese — the search covers the word, its phonetics, the
+English definition and the Vietnamese meaning, and Vietnamese without tone marks
+works too (`mui dat` finds *petrichor*). No framework, no outside dependencies;
+the 11k-entry list is virtualised, so only a few dozen rows are ever in the DOM.
 
-| Phím | Việc |
+| Key | Does |
 | --- | --- |
-| `/` | nhảy vào ô tìm kiếm |
-| `↑` `↓` | đi trong danh sách |
-| `←` `→` | mục trước / mục sau |
-| `Esc` | xoá ô tìm kiếm |
+| `/` | jump to the search box |
+| `↑` `↓` | move through the list |
+| `←` `→` | previous / next entry |
+| `Esc` | clear the search box |
 
-## Hai bản, khác nhau ở chỗ lưu từ mới
+## Two builds, differing in where new words go
 
-| | `docs/` (GitHub Pages) | `so-tra-tu.html` (Artifact claude.ai) |
+| | `docs/` (GitHub Pages) | `engrowdict.html` (claude.ai Artifact) |
 | --- | --- | --- |
-| Ai xem được | bất kỳ ai có link | người bạn chia sẻ |
-| Tra cứu | 11.401 mục đầy đủ | 11.401 mục đầy đủ |
-| 33 bài đọc | không kèm | có |
-| Thêm / xoá từ | được, lưu trong trình duyệt người xem | được, lưu lên máy chủ cho mọi người |
-| Dữ liệu | `data.json` tải riêng | nhúng sẵn trong tệp |
+| Who can see it | anyone with the link | whoever you share it with |
+| Lookup | all 11,401 entries | all 11,401 entries |
+| 33 reading passages | left out | included |
+| Adding / removing words | yes, kept in the visitor's browser | yes, stored on the server |
+| Data | `data.json`, fetched separately | embedded in the file |
 
-Bản Artifact tự publish lại chính nó mỗi lần thêm hoặc xoá từ, nên từ mới còn
-nguyên khi mở ở máy khác. Bản tĩnh không có máy chủ, nên từ ai người nấy giữ —
-dùng nút **Sao lưu .json** nếu muốn giữ lâu dài.
+The artifact republishes itself whenever a word is added or removed, so new
+words are still there when it is opened on another machine. The static build has
+no server, so each visitor keeps their own — use **Back up .json** to hold on to
+them.
 
-Bản công khai bỏ hẳn phần bài đọc: đó là nguyên văn bài của TED-Ed và BBC, giữ
-trong sổ riêng thì được nhưng đăng lên web mở thì thành phát tán lại nội dung có
-bản quyền. Khi `readings` rỗng, trang tự bỏ luôn nút **Bài đọc**.
+The public build drops the reading passages: they are the verbatim text of
+TED-Ed and BBC articles, which is fine in a private notebook but not on an open
+website. With `readings` empty, the page drops its **Passages** button too.
 
-## Đồng bộ từ Google Sheet bằng một nút
+## The passcode
 
-`sheet-sync.gs` là Apps Script gắn vào chính file sheet. Nó đọc cả sheet, dựng
-lại `docs/data.json` và ghi đè thẳng vào repo qua GitHub API — GitHub Pages dựng
-lại sau vài chục giây, không phải chạy build gì trên máy.
+Adding words is behind a passcode, **229922** by default. Enter it under **⚙ →
+Unlock**; once unlocked you can change it, and **Lock again** puts it back. The
+unlocked state and the passcode live in that browser's `localStorage`, so every
+new visitor starts locked with the default.
 
-**Cài một lần**
+This guards the interface, not the data — anyone who reads the page source can
+find the default passcode. What actually protects the sheet is that the sync
+link and key below never ship inside the page.
 
-1. Mở sheet → **Tiện ích mở rộng → Apps Script**, xoá nội dung mẫu, dán toàn bộ
-   `sheet-sync.gs` vào, bấm lưu.
-2. Tạo token tại **github.com/settings/personal-access-tokens** → *Fine-grained*,
-   chọn đúng repo này, quyền **Contents: Read and write**.
-3. Tải lại sheet. Menu **Sổ Tra Từ** hiện ra → **Cài đặt kho GitHub**, dán
-   `chu-tai-khoan/ten-repo` và token.
+## Publishing the sheet to the web with one button
 
-**Từ đó về sau:** sửa sheet → **Sổ Tra Từ → Đồng bộ lên web**. Muốn xem thử
-trước thì dùng **Xem thử số liệu (không đẩy)**.
+`sheet-sync.gs` is an Apps Script attached to the sheet itself. It reads the
+whole workbook, rebuilds `docs/data.json` and writes it straight into the repo
+through the GitHub API — GitHub Pages redeploys within a minute, with no build
+step on your machine.
 
-Nút Đồng bộ chỉ cập nhật bản GitHub Pages. Bản Artifact muốn theo kịp thì chạy
-`python parse_sheet.py && python build.py` rồi publish lại `so-tra-tu.html`.
+**Set up once**
 
-## Thêm từ trên web, ghi thẳng vào sheet
+1. In the sheet: **Extensions → Apps Script**, clear the sample, paste all of
+   `sheet-sync.gs` in, save.
+2. Create a token at **github.com/settings/personal-access-tokens** →
+   *Fine-grained*, pick this repo, permission **Contents: Read and write**.
+3. Reload the sheet. An **EngrowDict** menu appears → **Set up GitHub repo**,
+   then paste `owner/name` and the token.
 
-Chiều ngược lại đi qua cùng một Apps Script, nhưng dưới dạng Web App: trang web
-POST từ mới lên, script chèn vào đúng tab, đúng vị trí a→z, đúng định dạng mà
-sheet đang dùng (ô đầu dòng là `từ (từ loại)` xuống dòng `/phiên âm/`, mỗi nghĩa
-một dòng, dòng sau bỏ trống ô đầu).
+**From then on:** edit the sheet → **EngrowDict → Publish to the web**. To look
+before you leap, use **Preview the counts (no upload)**.
 
-**Cài một lần**
+This only updates the GitHub Pages build. To bring the artifact up to date, run
+`python parse_sheet.py && python build.py` and publish `engrowdict.html` again.
 
-1. Trong Apps Script: **Triển khai → Bản triển khai mới → Ứng dụng web**,
-   "Người có quyền truy cập" chọn **Bất kỳ ai**, rồi Triển khai.
-2. Về sheet: **Sổ Tra Từ → Link cho web ghi từ vào sheet** — hiện ra link Web App
-   và một mã khoá.
-3. Mở web, bấm nút **⚙** trên thanh đầu trang, dán link sheet, link Web App và mã
-   khoá vào, bấm **Kiểm tra kết nối** rồi **Lưu**.
+## Adding words on the web, straight into the sheet
 
-Từ đó ô **Ghi thẳng vào sheet** hiện trong form thêm từ, mặc định bật. Từ nào
-chưa vào được sheet thì hiện nhãn *Chưa vào sheet*, và thanh đầu trang mọc nút
-**Ghi N từ vào sheet** để đẩy lại.
+The other direction goes through the same Apps Script, deployed as a Web App:
+the page posts the new word up, and the script inserts it into the right tab, in
+alphabetical order, in the format the sheet already uses — the head cell being
+`word (pos)` then `/phonetics/` on the next line, one row per sense, with the
+first cell left empty on the rows that follow.
 
-**Vì sao phải dán thủ công thay vì nhúng sẵn vào trang:** trang web là công khai,
-nhúng link Web App vào đó nghĩa là bất kỳ ai mở trang cũng ghi được vào sheet của
-bạn. Cài đặt chỉ nằm trong `localStorage` của trình duyệt bạn dùng, không nằm
-trong repo, không nằm trong `data.json`. Người khác vẫn tra cứu và thêm từ bình
-thường — từ họ thêm chỉ nằm trong máy họ.
+**Set up once**
 
-Đường này chỉ chạy ở **bản web tĩnh**. Bản Artifact trên claude.ai bị chặn không
-cho gọi ra ngoài, nên hộp Cài đặt ở đó chỉ nói rõ điều này.
+1. In Apps Script: **Deploy → New deployment → Web app**, "Who has access" set
+   to **Anyone**, then Deploy.
+2. Back in the sheet: **EngrowDict → Link for the web to write words** — it
+   shows the Web App link and a key.
+3. On the site press **⚙**, unlock with the passcode, press **Edit** beside each
+   field, paste the sheet link, the Web App link and the key, then **Test
+   connection** and **Save**.
 
-## Cấu trúc
+From then on the add-word form carries a **Write straight into the sheet** tick,
+on by default. Anything that has not made it into the sheet is badged *Not in
+the sheet*, and the top bar grows a **Write N words to sheet** button.
+
+**Why the links are pasted rather than shipped:** the site is public, so putting
+the Web App link into the page would let anyone who opens it write to your
+sheet. The settings sit in your browser's `localStorage` only — not in the repo,
+not in `data.json`. Everyone else can still look words up and add their own;
+theirs simply stay on their own machine.
+
+This path only works on the **static build**. The claude.ai artifact is not
+allowed to call out to other sites, and its Settings box says so.
+
+## Layout
 
 ```
-source.xlsx      bản tải về của Google Sheet — nguồn gốc
+source.xlsx      the Google Sheet, downloaded — the origin of everything
 parse_sheet.py   source.xlsx  ->  dataset.json
-build.py         dataset.json + app.css + app.js  ->  hai bản trang
-app.css          giao diện
-app.js           toàn bộ ứng dụng
-sheet-sync.gs    Apps Script: sheet  ->  docs/data.json (bản JS của parse_sheet.py)
-docs/            thư mục GitHub Pages phục vụ
-  index.html       vỏ trang, ~60 KB
-  data.json        dữ liệu công khai, ~3,9 MB
+build.py         dataset.json + app.css + app.js  ->  both builds
+app.css          the interface
+app.js           the whole application
+sheet-sync.gs    Apps Script: sheet -> docs/data.json, and web -> sheet
+docs/            what GitHub Pages serves
+  index.html       the shell, ~78 KB
+  data.json        the public data, ~3.9 MB
 ```
 
-## Dựng lại
+## Rebuilding
 
 ```sh
-python build.py          # sau khi sửa app.css hoặc app.js
-python parse_sheet.py    # khi source.xlsx đổi (tải lại sheet về dạng .xlsx)
+python build.py          # after editing app.css or app.js
+python parse_sheet.py    # when source.xlsx changes (download the sheet as .xlsx)
 ```
 
-## Kiểm tra
+## Tests
 
 ```sh
 cd test && npm install && npm test
 ```
 
-117 phép kiểm chạy trên một DOM giả (jsdom), phủ bảy mặt:
+145 checks against a fake DOM (jsdom), across eight areas:
 
-1. dữ liệu bóc ra đủ A–Z, đúng cấu trúc, không sót rác định dạng
-2. tra cứu, lọc, lật chữ cái, đi tới/lui, cuộn ảo
-3. vòng tự-publish của bản Artifact: thêm từ → trang tự sinh HTML thay thế →
-   nạp lại → từ vẫn còn
-4. bản tĩnh tải `data.json`, lưu vào `localStorage`, sống sót qua lần tải sau
-5. bản công khai không lọt câu nào của bài đọc
-6. `sheet-sync.gs` và `parse_sheet.py` bóc ra dữ liệu giống hệt nhau từng chữ —
-   phép kiểm quan trọng nhất, vì hai bản viết bằng hai ngôn ngữ khác nhau
-7. đường ghi ngược web → sheet: Settings lưu link đúng chỗ, thêm từ gửi đúng nội
-   dung, sheet từ chối thì không mất từ; và phía Apps Script chèn vào đúng tab,
-   đúng vị trí a→z — kiểm bằng cách bóc lại chính sheet đã bị chèn
+1. the data pulled from the sheet covers a–z, has the right shape, and carries
+   no leftover formatting junk
+2. search, filters, the letter rail, prev/next, and the virtual list
+3. the passcode gate and the Edit buttons in Settings
+4. the artifact's self-publish loop: add a word → the page writes its own
+   replacement HTML → load it back → the word is still there
+5. the static build fetching `data.json`, saving to `localStorage`, and
+   surviving a reload
+6. not one sentence of the reading passages reaching the public build
+7. `sheet-sync.gs` and `parse_sheet.py` reading identical data, character for
+   character — the most important check, since the two are written in different
+   languages
+8. the web → sheet path from both ends: Settings holding the link, the right
+   body being posted, a refusal not losing the word, and Apps Script inserting
+   into the right tab in the right alphabetical place — verified by reading the
+   patched sheet back
 
-Phép kiểm 6 và 7 cần `test/grids.json`, do `parse_sheet.py` sinh ra; thiếu tệp đó
-thì phép 6 tự bỏ qua.
+Checks 7 and 8 need `test/grids.json`, which `parse_sheet.py` writes; without it
+check 7 skips itself.
 
-Google thật không bị đụng tới trong lúc test: `SpreadsheetApp` và `fetch` đều là
-đồ giả. Riêng việc triển khai Web App và chuyện CORS thì phải thử trên máy thật
-bằng nút **Kiểm tra kết nối**.
+Google is never touched while testing: `SpreadsheetApp` and `fetch` are both
+stand-ins. Deploying the Web App, and CORS, can only be confirmed on the real
+thing — that is what the **Test connection** button is for.
 
-## Deploy
+## Deploying
 
-GitHub Pages đọc thẳng thư mục `docs/` trên nhánh `main` — không cần CI. Sửa
-xong thì `python build.py`, commit, push. Còn khi chỉ đổi nội dung sheet thì
-dùng nút Đồng bộ, khỏi đụng tới repo.
+GitHub Pages serves `docs/` on the `main` branch directly — no CI. After editing,
+run `python build.py`, commit and push. When only the sheet's contents change,
+the Publish button handles it without touching the repo.

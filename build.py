@@ -1,14 +1,15 @@
-"""Ghép dataset.json + app.css + app.js thành trang hoàn chỉnh.
+"""Assemble dataset.json + app.css + app.js into the finished pages.
 
     python build.py
 
-so-tra-tu.html   — bản publish làm Artifact trên claude.ai. Dữ liệu nhúng
-                   thẳng trong tệp vì artifact không được phép tải gì từ ngoài;
-                   trang tự publish lại chính nó nên từ mới lưu lên máy chủ.
-docs/index.html  — bản web tĩnh cho GitHub Pages. Nhẹ, tải dữ liệu từ
-docs/data.json     data.json cùng thư mục — nhờ vậy nút Đồng bộ trong Google
-                   Sheet chỉ cần ghi đè data.json là web đổi theo, không cần
-                   build lại gì cả. Bản này không kèm bài đọc.
+engrowdict.html  — the copy published as an Artifact on claude.ai. The data is
+                   embedded because an artifact may not fetch anything from
+                   outside; the page republishes itself, so added words land on
+                   the server.
+docs/index.html  — the static copy for GitHub Pages. A light shell that loads
+docs/data.json     data.json from the same folder, which is what lets the Sync
+                   button in Google Sheets update the site by overwriting one
+                   file — no build step involved. Reading passages are left out.
 """
 import json
 import os
@@ -19,8 +20,8 @@ BS = chr(92)
 data = json.load(open(os.path.join(HERE, 'dataset.json'), encoding='utf-8'))
 entries, readings = data['entries'], data['readings']
 
-# Bản công khai bỏ phần bài đọc: đó là nguyên văn bài của TED-Ed và BBC, giữ
-# trong sổ riêng thì được, đăng lên web mở thì thành phát tán lại có bản quyền.
+# The public copy drops the reading passages: they are the verbatim text of
+# TED-Ed and BBC articles. Fine in a private notebook, not on an open website.
 public = {'entries': entries, 'readings': []}
 
 
@@ -32,14 +33,14 @@ css = open(os.path.join(HERE, 'app.css'), encoding='utf-8').read()
 js = open(os.path.join(HERE, 'app.js'), encoding='utf-8').read()
 for name, text in (('app.css', css), ('app.js', js)):
     for bad in ('</style', '</script'):
-        assert bad not in text, name + ' chứa ' + bad
+        assert bad not in text, name + ' contains ' + bad
 
 FONTS = ("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700"
          "&amp;family=IBM+Plex+Mono:wght@400;500;600"
          "&amp;family=IBM+Plex+Sans:wght@400;450;500;600&amp;display=swap")
 
 HEAD = (
-    '<title>Sổ Tra Từ</title>\n'
+    '<title>EngrowDict</title>\n'
     '<link rel="preconnect" href="https://fonts.googleapis.com">\n'
     '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n'
     '<link rel="stylesheet" href="' + FONTS + '">\n'
@@ -48,7 +49,7 @@ HEAD = (
 
 
 def body(mode, embedded):
-    """embedded = None nghĩa là trang sẽ tự tải data.json khi mở."""
+    """embedded=None means the page fetches data.json when it opens."""
     out = ['<div id="app"></div>\n',
            '<script type="application/json" id="mode">"' + mode + '"</script>\n']
     if embedded is not None:
@@ -60,11 +61,11 @@ def body(mode, embedded):
     return ''.join(out)
 
 
-# --- bản Artifact: khung <head> do claude.ai bọc, chỉ cần phần thân ---
-art = os.path.join(HERE, 'so-tra-tu.html')
+# --- artifact copy: claude.ai wraps the <head>, so only the body is needed ---
+art = os.path.join(HERE, 'engrowdict.html')
 open(art, 'w', encoding='utf-8').write(HEAD + body('artifact', data))
 
-# --- bản web tĩnh ---
+# --- static copy ---
 site = os.path.join(HERE, 'docs')
 if not os.path.isdir(site):
     os.mkdir(site)
@@ -75,18 +76,19 @@ open(dat, 'w', encoding='utf-8').write(dumps(public))
 
 index = os.path.join(site, 'index.html')
 open(index, 'w', encoding='utf-8').write(
-    '<!doctype html>\n<html lang="vi">\n<head>\n<meta charset="utf-8">\n'
+    '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n'
     '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
-    '<meta name="description" content="Tra ' + '{:,}'.format(len(entries)).replace(',', '.')
-    + ' mục từ Anh-Việt: phiên âm, định nghĩa tiếng Anh, nghĩa tiếng Việt.">\n'
+    '<meta name="description" content="Look up ' + '{:,}'.format(len(entries))
+    + ' English-Vietnamese entries: phonetics, English definitions, '
+      'Vietnamese meanings.">\n'
     '<link rel="preload" href="data.json" as="fetch" crossorigin>\n'
     + HEAD
     + '</head>\n<body>\n' + body('static', None) + '</body>\n</html>\n')
 
 kb = lambda p: round(os.path.getsize(p) / 1024)
-print('mục', len(entries),
-      '· nghĩa', sum(len(e['senses']) for e in entries),
-      '· bài đọc', len(readings), '(chỉ trong bản artifact)')
-print('so-tra-tu.html  %5d KB  artifact, dữ liệu nhúng sẵn' % kb(art))
-print('docs/index.html %5d KB  web tĩnh, vỏ trang' % kb(index))
-print('docs/data.json  %5d KB  dữ liệu công khai' % kb(dat))
+print(len(entries), 'entries ·',
+      sum(len(e['senses']) for e in entries), 'senses ·',
+      len(readings), 'passages (artifact copy only)')
+print('engrowdict.html %5d KB  artifact, data embedded' % kb(art))
+print('docs/index.html %5d KB  static shell' % kb(index))
+print('docs/data.json  %5d KB  public data' % kb(dat))

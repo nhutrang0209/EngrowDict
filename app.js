@@ -1,34 +1,34 @@
-/* Sổ Tra Từ — tra cứu & bổ sung từ vựng Anh–Việt.
+/* EngrowDict — an English–Vietnamese vocabulary notebook.
 
-   Hai chế độ, quyết định lúc build:
-   - "artifact": dữ liệu nhúng sẵn trong trang; mỗi lần thêm/xoá từ, trang tự
-     publish lại chính nó nên từ mới lưu lên máy chủ.
-   - "static":  vỏ trang nhẹ, tải data.json cùng thư mục; từ mới lưu trong
-     localStorage của từng người xem.
+   Two build modes:
+   - "artifact": data is embedded in the page; adding or removing a word makes
+     the page republish itself, so new words are stored on the server.
+   - "static":  a light shell that fetches data.json from the same folder; new
+     words live in each visitor's own localStorage.
 
-   Danh sách kết quả dựng theo kiểu cuộn ảo — 11 nghìn mục thì không thể đổ
-   hết vào DOM. */
+   The result list is virtualised — 11k entries cannot all live in the DOM. */
 (function () {
   "use strict";
 
   var FONT_URL = "https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;450;500;600&display=swap";
-  var BACKUP_KEY = "so-tra-tu:added:v1";
-  var SETTINGS_KEY = "so-tra-tu:settings:v1";
-  var ROW_H = 58;          // phải khớp .hit trong app.css
-  var MARK_H = 26;         // phải khớp .letter-mark
+  var BACKUP_KEY = "engrowdict:added:v1";
+  var SETTINGS_KEY = "engrowdict:settings:v1";
+  var DEFAULT_PASSCODE = "229922";
+  var ROW_H = 58;          // must match .hit in app.css
+  var MARK_H = 26;         // must match .letter-mark
   var OVERSCAN = 6;
 
   var KINDS = {
-    word:       { label: "Từ",           filter: "Từ" },
+    word:       { label: "Word",         filter: "Words" },
     phrasal:    { label: "Phrasal verb", filter: "Phrasal" },
-    idiom:      { label: "Thành ngữ",    filter: "Thành ngữ" },
-    expression: { label: "Cụm từ",       filter: "Cụm từ" },
-    compare:    { label: "Dễ nhầm",      filter: "Dễ nhầm" }
+    idiom:      { label: "Idiom",        filter: "Idioms" },
+    expression: { label: "Expression",   filter: "Expressions" },
+    compare:    { label: "Easily mixed up", filter: "Mixed up" }
   };
   var KIND_ORDER = ["word", "phrasal", "idiom", "expression", "compare"];
   var ALPHABET = "abcdefghijklmnopqrstuvwxyz".split("");
 
-  /* ---- trạng thái ------------------------------------------------------ */
+  /* ---- state ------------------------------------------------------------ */
   var MODE = JSON.parse(document.getElementById("mode").textContent);
   var BASE = null;
   var ADDED = JSON.parse(document.getElementById("added").textContent);
@@ -39,13 +39,13 @@
   var view = "vocab";        // vocab | read
   var kindFilter = "all";
   var query = "";
-  var rows = [];             // {kind:"mark"|"hit", ...} — nguồn của cuộn ảo
-  var hits = [];             // chỉ các mục, để đi tới/lui
+  var rows = [];             // rows feeding the virtual list
+  var hits = [];             // matching entries, for prev/next
   var counts = {};
   var selectedId = null;
   var selectedRead = null;
 
-  /* ---- tiện ích -------------------------------------------------------- */
+  /* ---- helpers ---------------------------------------------------------- */
   function norm(s) {
     return (s || "").toLowerCase().normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "").replace(/\u0111/g, "d");
@@ -56,7 +56,8 @@
     if (text != null) n.textContent = text;
     return n;
   }
-  function fmt(n) { return n.toLocaleString("vi-VN"); }
+  function fmt(n) { return n.toLocaleString("en-US"); }
+  function plural(n, one, many) { return fmt(n) + " " + (n === 1 ? one : many); }
   function glossOf(e) {
     var s = e.senses && e.senses[0];
     return s ? (s.vi || s.def || "") : "";
@@ -98,7 +99,7 @@
     for (var j = 0; j < READINGS.length; j++) byId[READINGS[j].id] = READINGS[j];
   }
 
-  /* ---- sao lưu cục bộ --------------------------------------------------- */
+  /* ---- local backup ------------------------------------------------------ */
   function readBackup() {
     try {
       var raw = localStorage.getItem(BACKUP_KEY);
@@ -106,13 +107,16 @@
     } catch (err) { return []; }
   }
   function writeBackup(list) {
-    try { localStorage.setItem(BACKUP_KEY, JSON.stringify(list)); } catch (err) { /* đầy bộ nhớ */ }
+    try { localStorage.setItem(BACKUP_KEY, JSON.stringify(list)); } catch (err) { /* quota */ }
   }
 
-  /* ---- cài đặt: link sheet + link ghi ngược ----------------------------- */
-  /* Chỉ nằm trong trình duyệt này. Ai mở trang mà không có link thì không
-     ghi được vào sheet — đó là điều giữ cho sheet của bạn không ai sửa được. */
-  var settings = { sheetUrl: "", webApp: "", key: "" };
+  /* ---- settings ---------------------------------------------------------- */
+  /* Everything here stays in this browser. The sync link and key never ship
+     inside the page, which is what keeps other visitors from writing to the
+     sheet. The passcode only gates this interface — anyone who reads the page
+     source can find it, so treat it as a guard against stray clicks, not as
+     real security. */
+  var settings = { sheetUrl: "", webApp: "", key: "", code: DEFAULT_PASSCODE, unlocked: false };
 
   function readSettings() {
     try {
@@ -122,18 +126,21 @@
         settings.sheetUrl = s.sheetUrl || "";
         settings.webApp = s.webApp || "";
         settings.key = s.key || "";
+        settings.code = s.code || DEFAULT_PASSCODE;
+        settings.unlocked = !!s.unlocked;
       }
-    } catch (err) { /* bỏ qua */ }
+    } catch (err) { /* ignore */ }
   }
   function writeSettings() {
-    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch (err) { /* bỏ qua */ }
+    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch (err) { /* ignore */ }
   }
+  function unlocked() { return settings.unlocked; }
+  function mayAdd() { return canWrite && unlocked(); }
   function canWriteSheet() {
-    return MODE === "static" && !!settings.webApp && !!settings.key;
+    return MODE === "static" && unlocked() && !!settings.webApp && !!settings.key;
   }
 
-  /* Apps Script chấp nhận POST không kèm header lạ, nên không phát sinh
-     preflight; gửi chuỗi thường là đủ. */
+  /* Apps Script accepts a plain POST with no custom headers, so no preflight. */
   function callSheet(payload) {
     payload.key = settings.key;
     return fetch(settings.webApp, {
@@ -143,12 +150,12 @@
     }).then(function (r) {
       return r.json();
     }).then(function (res) {
-      if (!res || !res.ok) throw new Error((res && res.error) || "Sheet từ chối yêu cầu");
+      if (!res || !res.ok) throw new Error((res && res.error) || "The sheet rejected the request");
       return res;
     });
   }
 
-  /* ---- tự publish lại (chỉ chế độ artifact) ----------------------------- */
+  /* ---- self-republish (artifact mode only) -------------------------------- */
   function renderPage(added) {
     var css = document.getElementById("css").textContent;
     var mode = document.getElementById("mode").textContent;
@@ -156,9 +163,9 @@
     var js = document.getElementById("appjs").textContent;
     var S = "<" + "script";
     var E = "<" + "/" + "script>";
-    return '<!doctype html>\n<html lang="vi">\n<head>\n<meta charset="utf-8">\n'
+    return '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n'
       + '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
-      + "<title>Sổ Tra Từ</title>\n"
+      + "<title>EngrowDict</title>\n"
       + '<link rel="preconnect" href="https://fonts.googleapis.com">\n'
       + '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n'
       + '<link rel="stylesheet" href="' + FONT_URL.replace(/&/g, "&amp;") + '">\n'
@@ -176,9 +183,8 @@
   function goReadOnly() {
     if (!canWrite) return;
     canWrite = false;
-    var ns = document.querySelectorAll("[data-write]");
-    for (var i = 0; i < ns.length; i++) ns[i].hidden = true;
-    banner("Bản này chỉ xem được — từ bạn thêm chỉ nằm trên máy này.", null, null);
+    banner("This copy is read-only — words you add stay on this device.", null, null);
+    refreshChrome();
   }
 
   function persist(nextAdded) {
@@ -186,33 +192,33 @@
     if (MODE === "static") return Promise.resolve({ ok: true, reload: false });
     if (!window.claude || !window.claude.use) {
       goReadOnly();
-      return Promise.resolve({ ok: false, msg: "Đã lưu trên máy này. Mở trang từ claude.ai để lưu vĩnh viễn." });
+      return Promise.resolve({ ok: false, msg: "Saved on this device. Open the page from claude.ai to store it for good." });
     }
     return window.claude.use("artifact").then(function (art) {
       if (!art) {
         goReadOnly();
-        return { ok: false, msg: "Đã lưu trên máy này. Bản đang mở không ghi được lên máy chủ." };
+        return { ok: false, msg: "Saved on this device. This copy cannot write to the server." };
       }
       return art.publish(renderPage(nextAdded)).then(function () {
         return { ok: true, reload: true };
       }, function (err) {
         var code = err && err.code;
         if (code === "conflict") {
-          return { ok: false, msg: "Có người vừa lưu trước. Trang sẽ tải lại — từ của bạn đã giữ trong bản sao lưu, bấm Đồng bộ sau khi tải xong." };
+          return { ok: false, msg: "Someone saved first. The page is reloading — your word is in the local backup, press Sync once it is back." };
         }
         if (code === "not_writer" || code === "not_granted" || code === "not_declared"
           || code === "capability_disabled" || code === "capability_removed" || code === "consent_required") {
           goReadOnly();
-          return { ok: false, msg: "Bạn không có quyền ghi vào trang này. Từ đã lưu trên máy bạn." };
+          return { ok: false, msg: "You do not have write access to this page. The word is saved on your device." };
         }
-        if (code === "rate_limited") return { ok: false, msg: "Lưu quá dồn dập. Đợi một chút rồi bấm Đồng bộ." };
-        if (code === "too_large") return { ok: false, msg: "Trang đã quá lớn để lưu thêm lên máy chủ." };
-        return { ok: false, msg: "Không lưu được lên máy chủ. Từ đã giữ trong bản sao lưu trên máy này." };
+        if (code === "rate_limited") return { ok: false, msg: "Saving too fast. Wait a moment, then press Sync." };
+        if (code === "too_large") return { ok: false, msg: "The page is too large to save anything more to the server." };
+        return { ok: false, msg: "Could not save to the server. The word is in the local backup." };
       });
     });
   }
 
-  /* ---- tìm kiếm --------------------------------------------------------- */
+  /* ---- search ------------------------------------------------------------ */
   function pool() {
     if (view === "read") return READINGS;
     if (kindFilter === "all") return entries;
@@ -238,8 +244,8 @@
     hits = buckets[0].concat(buckets[1], buckets[2], buckets[3], buckets[4]);
   }
 
-  /* Dựng danh sách dòng cho khung cuộn: khi không tìm gì thì chèn thêm dòng
-     đánh dấu chữ cái, cho cảm giác lật từ điển. */
+  /* With no query, letter marks are woven in so browsing feels like flipping
+     through a printed dictionary. */
   function layout() {
     rows = [];
     var showMarks = !query.trim() && view !== "read";
@@ -269,10 +275,10 @@
     node.appendChild(document.createTextNode(text.slice(i + q.length)));
   }
 
-  /* ---- cuộn ảo ---------------------------------------------------------- */
+  /* ---- virtual list ------------------------------------------------------- */
   var scrollBox, spacer, windowBox, drawnFrom = -1, drawnTo = -1;
 
-  function findRow(y) {                       // nhị phân theo toạ độ
+  function findRow(y) {
     var lo = 0, hi = rows.length - 1, best = 0;
     while (lo <= hi) {
       var mid = (lo + hi) >> 1;
@@ -292,14 +298,12 @@
     var q = norm(query.trim());
     var frag = document.createDocumentFragment();
     for (var i = from; i <= to; i++) {
-      frag.appendChild(rows[i].mark ? markRow(rows[i]) : hitRow(rows[i], q));
+      frag.appendChild(rows[i].mark ? el("div", "letter-mark", rows[i].mark) : hitRow(rows[i], q));
     }
     windowBox.style.transform = "translateY(" + rows[from].y + "px)";
     windowBox.textContent = "";
     windowBox.appendChild(frag);
   }
-
-  function markRow(r) { return el("div", "letter-mark", r.mark); }
 
   function hitRow(r, q) {
     var e = r.e;
@@ -307,31 +311,30 @@
     b.type = "button";
     b.dataset.i = r.i;
     b.setAttribute("aria-current", e.id === selectedId ? "true" : "false");
-    if (e.paras) {                                  // dòng của một bài đọc
-      var tline = el("div", "top-line");
+    b.addEventListener("click", function () { select(e.id); showDetail(); });
+
+    var line = el("div", "top-line");
+    if (e.paras) {                                  // a reading passage
       var thw = el("span", "hw");
       markUp(thw, e.title, q);
-      tline.appendChild(thw);
-      tline.appendChild(el("span", "senses-n", "bài " + e.index));
-      b.appendChild(tline);
+      line.appendChild(thw);
+      line.appendChild(el("span", "senses-n", "no. " + e.index));
+      b.appendChild(line);
       var tg = el("span", "gloss");
       markUp(tg, e.paras[0], q);
       b.appendChild(tg);
-      b.addEventListener("click", function () { select(e.id); showDetail(); });
       return b;
     }
-    var line = el("div", "top-line");
     var hw = el("span", "hw");
     markUp(hw, e.word, q);
     line.appendChild(hw);
     if (e.pos) line.appendChild(el("span", "pos", e.pos));
     if (e.mine) line.appendChild(el("span", "mine-dot"));
-    if (e.senses.length > 1) line.appendChild(el("span", "senses-n", e.senses.length + " nghĩa"));
+    if (e.senses.length > 1) line.appendChild(el("span", "senses-n", e.senses.length + " senses"));
     b.appendChild(line);
     var g = el("span", "gloss");
     markUp(g, glossOf(e), q);
     b.appendChild(g);
-    b.addEventListener("click", function () { select(e.id); showDetail(); });
     return b;
   }
 
@@ -347,7 +350,7 @@
     }
   }
 
-  /* ---- chọn mục --------------------------------------------------------- */
+  /* ---- selection ---------------------------------------------------------- */
   function cursorIndex() {
     for (var i = 0; i < hits.length; i++) if (hits[i].id === selectedId) return i;
     return -1;
@@ -383,7 +386,7 @@
     document.querySelector(".detail").scrollTop = 0;
   }
 
-  /* ---- dải A–Z ---------------------------------------------------------- */
+  /* ---- A–Z rail ----------------------------------------------------------- */
   function jumpTo(letter) {
     if (query) { qInput.value = ""; query = ""; refresh(); }
     for (var i = 0; i < rows.length; i++) {
@@ -402,7 +405,7 @@
     }
   }
 
-  /* ---- khung nghĩa ------------------------------------------------------- */
+  /* ---- detail pane -------------------------------------------------------- */
   function drawDetail() {
     var host = document.getElementById("detail-inner");
     host.textContent = "";
@@ -421,17 +424,17 @@
     var nav = el("div", "entry-nav");
     var prev = el("button", "iconbtn", "←");
     prev.type = "button";
-    prev.title = "Mục trước (phím ←)";
+    prev.title = "Previous entry (← key)";
     prev.disabled = at <= 0;
     prev.addEventListener("click", function () { step(-1); });
     var next = el("button", "iconbtn", "→");
     next.type = "button";
-    next.title = "Mục sau (phím →)";
+    next.title = "Next entry (→ key)";
     next.disabled = at < 0 || at >= hits.length - 1;
     next.addEventListener("click", function () { step(1); });
     nav.appendChild(prev);
     nav.appendChild(next);
-    if (at > -1) nav.appendChild(el("span", "pos-in-list", fmt(at + 1) + " / " + fmt(hits.length)));
+    if (at > -1) nav.appendChild(el("span", "pos-in-list", fmt(at + 1) + " of " + fmt(hits.length)));
     nav.appendChild(el("span", "grow"));
     art.appendChild(nav);
 
@@ -440,10 +443,10 @@
     if (e.pos) head.appendChild(el("span", "pos-big", e.pos + "."));
     if (e.ipa) head.appendChild(el("span", "ipa", e.ipa));
     head.appendChild(el("span", "kind", kindOf(e)));
-    if (e.mine) head.appendChild(el("span", "kind kind-mine", "Của tôi"));
+    if (e.mine) head.appendChild(el("span", "kind kind-mine", "Added by me"));
     if (e.mine && canWriteSheet()) {
       head.appendChild(el("span", "kind" + (e.inSheet ? " kind-sheet" : ""),
-        e.inSheet ? "Đã vào sheet" : "Chưa vào sheet"));
+        e.inSheet ? "In the sheet" : "Not in the sheet"));
     }
     art.appendChild(head);
     if (e.note) art.appendChild(el("p", "note", e.note));
@@ -468,8 +471,8 @@
     var rel = relatedOf(e);
     if (rel.length) {
       var box = el("div", "related");
-      box.appendChild(el("h2", null, e.type === "compare" ? "Dễ nhầm với"
-        : e.type === "phrasal" ? "Cùng động từ" : "Cùng gốc"));
+      box.appendChild(el("h2", null, e.type === "compare" ? "Easily mixed up with"
+        : e.type === "phrasal" ? "Same verb" : "Same root"));
       var ul = el("ul");
       rel.forEach(function (x) {
         var li = el("li");
@@ -485,9 +488,9 @@
       art.appendChild(box);
     }
 
-    if (e.mine && canWrite) {
+    if (e.mine && mayAdd()) {
       var foot = el("div", "entry-foot");
-      var del = el("button", "btn btn-danger", "Xoá từ này");
+      var del = el("button", "btn btn-danger", "Delete this word");
       del.type = "button";
       del.addEventListener("click", function () { removeEntry(e); });
       foot.appendChild(del);
@@ -496,7 +499,7 @@
     return art;
   }
 
-  /* Mục liên quan: nhóm dễ nhầm, cùng động từ (phrasal), hoặc cùng gốc từ. */
+  /* Related entries: the mixed-up group, the same phrasal verb, or same root. */
   function relatedOf(e) {
     var out = [];
     var i;
@@ -532,7 +535,7 @@
     var w = el("div", "read");
     w.appendChild(el("h1", null, r.title));
     var words = r.paras.join(" ").split(/\s+/).length;
-    w.appendChild(el("p", "meta", "Bài " + r.index + " · " + fmt(words) + " từ"));
+    w.appendChild(el("p", "meta", "Passage " + r.index + " · " + fmt(words) + " words"));
     var prose = el("div", "prose");
     r.paras.forEach(function (p) { prose.appendChild(el("p", null, p)); });
     w.appendChild(prose);
@@ -542,20 +545,21 @@
   function blankView() {
     var w = el("div", "blank");
     if (view === "read") {
-      w.appendChild(el("p", "lead", "Chọn một bài đọc"));
-      w.appendChild(el("p", "sub", "Gõ vào ô tìm kiếm để lọc theo tiêu đề hoặc nội dung bài."));
+      w.appendChild(el("p", "lead", "Pick a passage"));
+      w.appendChild(el("p", "sub", "Type in the search box to filter by title or by what is inside."));
       return w;
     }
-    w.appendChild(el("p", "lead", "Tra một từ, hoặc lật theo chữ cái"));
+    w.appendChild(el("p", "lead", "Look a word up, or flip through by letter"));
     w.appendChild(el("p", "sub",
-      "Gõ tiếng Anh hoặc tiếng Việt — trang tìm trong cả từ, phiên âm, định nghĩa "
-      + "và nghĩa tiếng Việt. Tiếng Việt không dấu vẫn ra: gõ “thoai vi” ra abdicate."));
+      "Type English or Vietnamese — the search covers the word, its phonetics, "
+      + "the English definition and the Vietnamese meaning. Vietnamese without "
+      + "tone marks works too: “thoai vi” finds abdicate."));
 
     var stats = el("div", "stats");
-    [[entries.length, "mục từ"],
-     [senseCount(entries), "nghĩa"],
-     [counts.phrasal || 0, "phrasal verb"],
-     [counts.idiom || 0, "thành ngữ"]].forEach(function (p) {
+    [[entries.length, "entries"],
+     [senseCount(entries), "senses"],
+     [counts.phrasal || 0, "phrasal verbs"],
+     [counts.idiom || 0, "idioms"]].forEach(function (p) {
       if (!p[0]) return;
       var s = el("div", "stat");
       s.appendChild(el("b", null, fmt(p[0])));
@@ -565,12 +569,12 @@
     w.appendChild(stats);
 
     var keys = el("div", "keys");
-    keys.appendChild(el("h3", null, "Phím tắt"));
+    keys.appendChild(el("h3", null, "Keyboard"));
     var dl = el("dl");
-    [[["/"], "nhảy vào ô tìm kiếm"],
-     [["↑", "↓"], "đi trong danh sách"],
-     [["←", "→"], "mục trước / mục sau"],
-     [["Esc"], "xoá ô tìm kiếm"]].forEach(function (p) {
+    [[["/"], "jump to the search box"],
+     [["↑", "↓"], "move through the list"],
+     [["←", "→"], "previous / next entry"],
+     [["Esc"], "clear the search box"]].forEach(function (p) {
       var dt = el("dt");
       p[0].forEach(function (k) { dt.appendChild(el("span", null, k)); });
       dl.appendChild(dt);
@@ -580,7 +584,7 @@
     w.appendChild(keys);
 
     var foot = el("div", "foot");
-    var rnd = el("button", "btn", "Một từ ngẫu nhiên");
+    var rnd = el("button", "btn", "Random entry");
     rnd.type = "button";
     rnd.addEventListener("click", function () {
       if (!hits.length) return;
@@ -589,29 +593,36 @@
       showDetail();
     });
     foot.appendChild(rnd);
+    if (!unlocked()) {
+      var unlock = el("button", "btn", "Unlock adding words");
+      unlock.type = "button";
+      unlock.addEventListener("click", function () { openSettings(true); });
+      foot.appendChild(unlock);
+    }
     w.appendChild(foot);
 
-    if (MODE === "static") {
+    if (MODE === "static" && unlocked() && !canWriteSheet()) {
       w.appendChild(el("p", "local-note",
-        "Từ bạn thêm ở bản này được lưu trong chính trình duyệt bạn đang dùng, "
-        + "không gửi đi đâu cả — bấm “Sao lưu .json” nếu muốn giữ lâu dài."));
+        "Words you add here are kept in this browser only, and are not sent "
+        + "anywhere. Use Back up .json to keep them for good, or set a sync link "
+        + "in Settings to write them straight into the Google Sheet."));
     }
     return w;
   }
 
-  /* ---- thêm / xoá từ ----------------------------------------------------- */
+  /* ---- add / remove a word ------------------------------------------------ */
   function newSenseRow(n) {
     var box = el("div", "sense-edit");
     var row = el("div", "row");
-    row.appendChild(el("span", "lab", "Nghĩa " + n));
-    var drop = el("button", "btn btn-quiet drop", "Bỏ");
+    row.appendChild(el("span", "lab", "Sense " + n));
+    var drop = el("button", "btn btn-quiet drop", "Remove");
     drop.type = "button";
     drop.addEventListener("click", function () { box.remove(); renumberSenses(); });
     row.appendChild(drop);
     box.appendChild(row);
 
     var f1 = el("label", "field");
-    f1.appendChild(el("span", null, "Definition (English)"));
+    f1.appendChild(el("span", null, "English definition"));
     var ta = el("textarea");
     ta.name = "def";
     ta.placeholder = "to become less strong";
@@ -619,7 +630,7 @@
     box.appendChild(f1);
 
     var f2 = el("label", "field");
-    f2.appendChild(el("span", null, "Nghĩa ngắn gọn"));
+    f2.appendChild(el("span", null, "Vietnamese meaning"));
     var inp = el("input");
     inp.name = "vi";
     inp.placeholder = "yếu đi / giảm đi";
@@ -630,12 +641,13 @@
   function renumberSenses() {
     var boxes = document.querySelectorAll("#sense-list .sense-edit");
     for (var i = 0; i < boxes.length; i++) {
-      boxes[i].querySelector(".lab").textContent = "Nghĩa " + (i + 1);
+      boxes[i].querySelector(".lab").textContent = "Sense " + (i + 1);
       boxes[i].querySelector(".drop").hidden = boxes.length === 1;
     }
   }
 
   function openForm(prefill) {
+    if (!mayAdd()) { openSettings(true); return; }
     var dlg = document.getElementById("form-dlg");
     dlg.querySelector("[name=word]").value = prefill || "";
     dlg.querySelector("[name=pos]").value = "";
@@ -654,7 +666,7 @@
   function collectForm() {
     var dlg = document.getElementById("form-dlg");
     var word = dlg.querySelector("[name=word]").value.trim();
-    if (!word) return { err: "Chưa nhập từ." };
+    if (!word) return { err: "Enter the word first." };
     var senses = [];
     var boxes = document.querySelectorAll("#sense-list .sense-edit");
     for (var i = 0; i < boxes.length; i++) {
@@ -662,7 +674,7 @@
       var vi = boxes[i].querySelector("[name=vi]").value.trim();
       if (def || vi) senses.push({ def: def, vi: vi, eg: [] });
     }
-    if (!senses.length) return { err: "Cần ít nhất một nghĩa — điền definition hoặc nghĩa tiếng Việt." };
+    if (!senses.length) return { err: "Add at least one sense — a definition or a Vietnamese meaning." };
     return {
       entry: {
         id: "u" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
@@ -686,7 +698,7 @@
     var box = document.getElementById("to-sheet");
     var wantSheet = canWriteSheet() && box && box.checked;
     btn.disabled = true;
-    btn.textContent = wantSheet ? "Đang ghi vào sheet…" : "Đang lưu…";
+    btn.textContent = wantSheet ? "Writing to the sheet…" : "Saving…";
     msg.textContent = "";
 
     var sheetErr = null;
@@ -702,27 +714,27 @@
       var next = ADDED.concat([got.entry]);
       return persist(next).then(function (res) {
         btn.disabled = false;
-        btn.textContent = "Lưu từ";
+        btn.textContent = "Save word";
         document.getElementById("form-dlg").close();
-        if (res.ok && res.reload) { toast("Đã lưu “" + got.entry.word + "”"); return; }
+        if (res.ok && res.reload) { toast("Saved “" + got.entry.word + "”"); return; }
         ADDED = next;
         rebuild();
         refresh();
         select(got.entry.id);
         showDetail();
-        if (!res.ok) { banner(res.msg, "Đồng bộ", syncPending); return; }
-        if (got.entry.inSheet) { toast("Đã ghi “" + got.entry.word + "” vào sheet"); return; }
+        if (!res.ok) { banner(res.msg, "Sync", syncPending); return; }
+        if (got.entry.inSheet) { toast("Wrote “" + got.entry.word + "” into the sheet"); return; }
         if (sheetErr) {
-          banner("Đã lưu trong trình duyệt, nhưng chưa ghi được vào sheet: " + sheetErr,
-            "Thử lại", pushToSheet);
+          banner("Saved in this browser, but not written to the sheet: " + sheetErr,
+            "Try again", pushToSheet);
           return;
         }
-        toast("Đã lưu “" + got.entry.word + "” vào trình duyệt này");
+        toast("Saved “" + got.entry.word + "” in this browser");
       });
     });
   }
 
-  /* Đẩy những từ đã thêm mà chưa vào sheet. */
+  /* Push words that have been added but not written into the sheet yet. */
   function unsynced() {
     return ADDED.filter(function (e) { return !e.inSheet; });
   }
@@ -730,8 +742,8 @@
   function pushToSheet() {
     if (!canWriteSheet()) { openSettings(); return; }
     var todo = unsynced();
-    if (!todo.length) { toast("Không còn từ nào chờ ghi vào sheet."); return; }
-    banner("Đang ghi " + todo.length + " từ vào sheet…", null, null);
+    if (!todo.length) { toast("Nothing is waiting to be written."); return; }
+    banner("Writing " + plural(todo.length, "word", "words") + " into the sheet…", null, null);
     var okN = 0, lastErr = null;
     var chain = Promise.resolve();
     todo.forEach(function (e) {
@@ -746,34 +758,39 @@
       writeBackup(ADDED);
       rebuild();
       refresh();
-      if (okN && !lastErr) { document.getElementById("banner").hidden = true; toast("Đã ghi " + okN + " từ vào sheet"); }
-      else if (okN) banner("Ghi được " + okN + " từ, còn lỗi: " + lastErr, "Thử lại", pushToSheet);
-      else banner("Chưa ghi được vào sheet: " + lastErr, "Thử lại", pushToSheet);
+      if (okN && !lastErr) {
+        document.getElementById("banner").hidden = true;
+        toast("Wrote " + plural(okN, "word", "words") + " into the sheet");
+      } else if (okN) {
+        banner("Wrote " + okN + ", then hit an error: " + lastErr, "Try again", pushToSheet);
+      } else {
+        banner("Could not write to the sheet: " + lastErr, "Try again", pushToSheet);
+      }
     });
   }
 
   function removeEntry(e) {
-    if (!window.confirm("Xoá “" + e.word + "” khỏi sổ?")) return;
+    if (!window.confirm("Remove “" + e.word + "” from the notebook?")) return;
     var next = ADDED.filter(function (x) { return x.id !== e.id; });
     persist(next).then(function (res) {
-      if (res.ok && res.reload) { toast("Đã xoá"); return; }
+      if (res.ok && res.reload) { toast("Removed"); return; }
       ADDED = next;
       selectedId = null;
       rebuild();
       refresh();
-      if (res.ok) { toast("Đã xoá"); return; }
-      banner(res.msg, "Đồng bộ", syncPending);
+      if (res.ok) { toast("Removed"); return; }
+      banner(res.msg, "Sync", syncPending);
     });
   }
 
   function syncPending() {
-    banner("Đang đồng bộ…", null, null);
+    banner("Syncing…", null, null);
     persist(ADDED).then(function (res) {
-      if (!res.ok) banner(res.msg, "Thử lại", syncPending);
+      if (!res.ok) banner(res.msg, "Try again", syncPending);
     });
   }
 
-  /* ---- xuất tệp ---------------------------------------------------------- */
+  /* ---- export -------------------------------------------------------------- */
   function exportJson() {
     var payload = JSON.stringify({
       exportedAt: new Date().toISOString(),
@@ -785,24 +802,24 @@
       var url = URL.createObjectURL(new Blob([payload], { type: "application/json" }));
       var a = document.createElement("a");
       a.href = url;
-      a.download = "so-tra-tu.json";
+      a.download = "engrowdict.json";
       document.body.appendChild(a);
       a.click();
       a.remove();
       setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
-      toast("Đã tạo bản sao lưu");
+      toast("Backup file created");
       return;
     }
-    if (!window.claude || !window.claude.use) { toast("Không tải xuống được ở bản này."); return; }
+    if (!window.claude || !window.claude.use) { toast("Downloads are not available in this copy."); return; }
     window.claude.use("downloads").then(function (dl) {
-      if (!dl) { toast("Không tải xuống được ở bản này."); return; }
-      return dl.save({ filename: "so-tra-tu.json", data: payload }).then(function () {
-        toast("Đã tạo bản sao lưu");
-      }, function () { toast("Chưa tải được tệp."); });
+      if (!dl) { toast("Downloads are not available in this copy."); return; }
+      return dl.save({ filename: "engrowdict.json", data: payload }).then(function () {
+        toast("Backup file created");
+      }, function () { toast("The file could not be saved."); });
     });
   }
 
-  /* ---- thông báo --------------------------------------------------------- */
+  /* ---- notices -------------------------------------------------------------- */
   var toastTimer = null;
   function toast(text) {
     var t = document.getElementById("toast");
@@ -821,14 +838,14 @@
       btn.addEventListener("click", fn);
       b.appendChild(btn);
     }
-    var x = el("button", "btn btn-quiet", "Ẩn");
+    var x = el("button", "btn btn-quiet", "Dismiss");
     x.type = "button";
     x.addEventListener("click", function () { b.hidden = true; });
     b.appendChild(x);
     b.hidden = false;
   }
 
-  /* ---- vẽ lại toàn bộ ---------------------------------------------------- */
+  /* ---- redraw --------------------------------------------------------------- */
   function refresh() {
     search();
     var total = layout();
@@ -841,8 +858,8 @@
     drawDetail();
     refreshChrome();
     document.getElementById("tally").textContent =
-      fmt(entries.length) + " mục · " + fmt(senseCount(entries)) + " nghĩa"
-      + (READINGS.length ? " · " + fmt(READINGS.length) + " bài đọc" : "");
+      plural(entries.length, "entry", "entries") + " · " + fmt(senseCount(entries)) + " senses"
+      + (READINGS.length ? " · " + fmt(READINGS.length) + " passages" : "");
   }
 
   function drawCount() {
@@ -850,15 +867,15 @@
     box.textContent = "";
     var q = query.trim();
     if (view === "read") {
-      box.appendChild(document.createTextNode(fmt(hits.length) + " bài đọc"));
+      box.appendChild(document.createTextNode(plural(hits.length, "passage", "passages")));
       return;
     }
-    box.appendChild(document.createTextNode(fmt(hits.length) + " mục"));
+    box.appendChild(document.createTextNode(plural(hits.length, "entry", "entries")));
     box.appendChild(el("span", "dot", "·"));
-    box.appendChild(document.createTextNode(fmt(senseCount(hits)) + " nghĩa"));
+    box.appendChild(document.createTextNode(fmt(senseCount(hits)) + " senses"));
     if (q) {
       box.appendChild(el("span", "dot", "·"));
-      box.appendChild(document.createTextNode("khớp “" + q + "”"));
+      box.appendChild(document.createTextNode("matching “" + q + "”"));
     }
   }
 
@@ -866,8 +883,8 @@
     var box = document.getElementById("chips");
     box.hidden = view === "read";
     box.textContent = "";
-    var defs = [["all", "Tất cả"]].concat(KIND_ORDER.map(function (k) { return [k, KINDS[k].filter]; }));
-    if (counts.mine) defs.push(["mine", "Của tôi"]);
+    var defs = [["all", "All"]].concat(KIND_ORDER.map(function (k) { return [k, KINDS[k].filter]; }));
+    if (counts.mine) defs.push(["mine", "Mine"]);
     defs.forEach(function (d) {
       if (d[0] !== "all" && !counts[d[0]]) return;
       var b = el("button", "chip");
@@ -894,13 +911,35 @@
       b.type = "button";
       b.dataset.l = L;
       b.disabled = !have[L];
-      b.title = "Lật tới chữ " + L.toUpperCase();
+      b.title = "Jump to " + L.toUpperCase();
       b.addEventListener("click", function () { jumpTo(L); });
       box.appendChild(b);
     });
   }
 
-  /* ---- dựng khung trang --------------------------------------------------- */
+  /* Everything whose visibility depends on settings or write access. */
+  function refreshChrome() {
+    var add = document.getElementById("add-word");
+    if (add) {
+      add.hidden = !canWrite;
+      add.textContent = mayAdd() ? "+ Add word" : "Unlock to add";
+    }
+    var open = document.getElementById("open-sheet");
+    if (open) {
+      open.hidden = !settings.sheetUrl;
+      open.href = settings.sheetUrl || "#";
+    }
+    var push = document.getElementById("push-sheet");
+    if (push) {
+      var n = canWriteSheet() ? unsynced().length : 0;
+      push.hidden = !n;
+      push.textContent = "Write " + plural(n, "word", "words") + " to sheet";
+    }
+    var row = document.getElementById("to-sheet-row");
+    if (row) row.hidden = !canWriteSheet();
+  }
+
+  /* ---- page chrome ---------------------------------------------------------- */
   var qInput;
 
   function build() {
@@ -909,13 +948,13 @@
 
     var top = el("header", "top");
     var brand = el("div", "brand");
-    brand.appendChild(el("span", "mark", "Sổ Tra Từ"));
+    brand.appendChild(el("span", "mark", "EngrowDict"));
     var tally = el("span", "tally");
     tally.id = "tally";
     brand.appendChild(tally);
     top.appendChild(brand);
 
-    var back = el("button", "btn btn-quiet back", "← Danh sách");
+    var back = el("button", "btn btn-quiet back", "← List");
     back.type = "button";
     back.addEventListener("click", function () { document.body.dataset.view = "list"; });
     top.appendChild(back);
@@ -927,8 +966,8 @@
     qInput.type = "search";
     qInput.autocomplete = "off";
     qInput.spellcheck = false;
-    qInput.setAttribute("aria-label", "Tìm từ");
-    qInput.placeholder = "Tra từ, nghĩa, hoặc tiếng Việt…";
+    qInput.setAttribute("aria-label", "Search");
+    qInput.placeholder = "Search a word, a meaning, or Vietnamese…";
     searchBox.appendChild(qInput);
     var hk = el("div", "hintkeys");
     hk.appendChild(el("kbd", null, "/"));
@@ -937,28 +976,29 @@
 
     var acts = el("div", "acts");
     if (READINGS.length) {
-      var rd = el("button", "btn", "Bài đọc");
+      var rd = el("button", "btn", "Passages");
       rd.type = "button";
       rd.addEventListener("click", function () {
         view = view === "read" ? "vocab" : "read";
         rd.setAttribute("aria-pressed", String(view === "read"));
         rd.className = view === "read" ? "btn btn-primary" : "btn";
-        qInput.placeholder = view === "read" ? "Tìm trong bài đọc…" : "Tra từ, nghĩa, hoặc tiếng Việt…";
+        qInput.placeholder = view === "read"
+          ? "Search inside the passages…" : "Search a word, a meaning, or Vietnamese…";
         selectedRead = null;
         refresh();
       });
       acts.appendChild(rd);
     }
-    var add = el("button", "btn btn-primary", "+ Thêm từ");
+    var add = el("button", "btn btn-primary", "+ Add word");
     add.type = "button";
-    add.dataset.write = "1";
+    add.id = "add-word";
     add.addEventListener("click", function () { openForm(query.trim()); });
     acts.appendChild(add);
-    var push = el("button", "btn", "Ghi vào sheet");
+
+    var push = el("button", "btn", "Write to sheet");
     push.type = "button";
     push.id = "push-sheet";
     push.hidden = true;
-    push.dataset.write = "1";
     push.addEventListener("click", pushToSheet);
     acts.appendChild(push);
 
@@ -967,20 +1007,21 @@
     openSheet.id = "open-sheet";
     openSheet.target = "_blank";
     openSheet.rel = "noopener";
-    openSheet.textContent = "Mở sheet";
+    openSheet.textContent = "Open sheet";
     openSheet.hidden = true;
     acts.appendChild(openSheet);
 
-    var exp = el("button", "btn btn-quiet", "Sao lưu .json");
+    var exp = el("button", "btn btn-quiet", "Back up .json");
     exp.type = "button";
     exp.addEventListener("click", exportJson);
     acts.appendChild(exp);
 
     var gear = el("button", "btn btn-quiet", "⚙");
     gear.type = "button";
-    gear.title = "Cài đặt";
-    gear.setAttribute("aria-label", "Cài đặt");
-    gear.addEventListener("click", openSettings);
+    gear.id = "settings-btn";
+    gear.title = "Settings";
+    gear.setAttribute("aria-label", "Settings");
+    gear.addEventListener("click", function () { openSettings(); });
     acts.appendChild(gear);
 
     top.appendChild(acts);
@@ -994,7 +1035,7 @@
     var work = el("div", "work");
     var alpha = el("nav", "alpha");
     alpha.id = "alpha";
-    alpha.setAttribute("aria-label", "Lật theo chữ cái");
+    alpha.setAttribute("aria-label", "Jump by letter");
     work.appendChild(alpha);
 
     var list = el("div", "list");
@@ -1059,23 +1100,22 @@
   function buildDialog() {
     var dlg = document.createElement("dialog");
     dlg.id = "form-dlg";
-    dlg.dataset.write = "1";
 
     var head = el("div", "dlg-head");
-    head.appendChild(el("h2", null, "Thêm từ"));
-    head.appendChild(el("p", null, "Một từ có thể có nhiều nghĩa."));
+    head.appendChild(el("h2", null, "Add a word"));
+    head.appendChild(el("p", null, "A word can carry several senses."));
     dlg.appendChild(head);
 
     var body = el("div", "dlg-body");
     var g = el("div", "grid-3");
-    g.appendChild(field("Từ", "word", "abate", false));
-    g.appendChild(field("Từ loại", "pos", "v", false));
-    g.appendChild(field("Phiên âm", "ipa", "/əˈbeɪt/", true));
+    g.appendChild(field("Word", "word", "abate", false));
+    g.appendChild(field("Part of speech", "pos", "v", false));
+    g.appendChild(field("Phonetics", "ipa", "/əˈbeɪt/", true));
     body.appendChild(g);
 
     var g2 = el("div", "grid-3");
     var ft = el("label", "field");
-    ft.appendChild(el("span", null, "Nhóm"));
+    ft.appendChild(el("span", null, "Group"));
     var sel = el("select");
     sel.name = "type";
     KIND_ORDER.forEach(function (k) {
@@ -1085,7 +1125,7 @@
     });
     ft.appendChild(sel);
     g2.appendChild(ft);
-    var fn = field("Ghi chú", "note", "US: slaughterhouse", false);
+    var fn = field("Note", "note", "US: slaughterhouse", false);
     fn.style.gridColumn = "span 2";
     g2.appendChild(fn);
     body.appendChild(g2);
@@ -1095,7 +1135,7 @@
     list.style.gap = "12px";
     body.appendChild(list);
 
-    var more = el("button", "btn", "+ Thêm nghĩa");
+    var more = el("button", "btn", "+ Add another sense");
     more.type = "button";
     more.addEventListener("click", function () {
       list.appendChild(newSenseRow(list.children.length + 1));
@@ -1113,129 +1153,23 @@
     cb.id = "to-sheet";
     cb.checked = true;
     toSheetRow.appendChild(cb);
-    toSheetRow.appendChild(el("span", null, "Ghi thẳng vào sheet"));
+    toSheetRow.appendChild(el("span", null, "Write straight into the sheet"));
     foot.appendChild(toSheetRow);
     var msg = el("span", "dlg-msg");
     msg.id = "form-msg";
     foot.appendChild(msg);
     foot.appendChild(el("span", "spacer2"));
-    var cancel = el("button", "btn", "Huỷ");
+    var cancel = el("button", "btn", "Cancel");
     cancel.type = "button";
     cancel.addEventListener("click", function () { dlg.close(); });
     foot.appendChild(cancel);
-    var save = el("button", "btn btn-primary", "Lưu từ");
+    var save = el("button", "btn btn-primary", "Save word");
     save.type = "button";
     save.id = "form-save";
     save.addEventListener("click", saveForm);
     foot.appendChild(save);
     dlg.appendChild(foot);
     return dlg;
-  }
-
-  function buildSettings() {
-    var dlg = document.createElement("dialog");
-    dlg.id = "set-dlg";
-
-    var head = el("div", "dlg-head");
-    head.appendChild(el("h2", null, "Cài đặt"));
-    head.appendChild(el("p", null, "Chỉ lưu trong trình duyệt này."));
-    dlg.appendChild(head);
-
-    var body = el("div", "dlg-body");
-    body.appendChild(setField("Link Google Sheet", "sheetUrl",
-      "https://docs.google.com/spreadsheets/d/…",
-      "Để hiện nút “Mở sheet” trên thanh đầu trang."));
-    body.appendChild(setField("Link Web App ghi từ", "webApp",
-      "https://script.google.com/macros/s/…/exec",
-      "Lấy trong sheet: menu Sổ Tra Từ → Link cho web ghi từ vào sheet."));
-    body.appendChild(setField("Mã khoá", "key", "", "Lấy cùng chỗ với link trên."));
-
-    var note = el("p", "set-note");
-    note.textContent = MODE === "static"
-      ? "Có đủ link và mã khoá thì mỗi từ bạn thêm sẽ được chèn thẳng vào đúng tab của sheet, đúng thứ tự a→z. Hai thứ này không rời khỏi máy bạn, nên người khác mở trang cũng không ghi được vào sheet."
-      : "Bản Artifact trên claude.ai không được phép gọi ra ngoài, nên đường ghi vào sheet chỉ chạy ở bản web tĩnh (GitHub Pages).";
-    body.appendChild(note);
-    dlg.appendChild(body);
-
-    var foot = el("div", "dlg-foot");
-    var msg = el("span", "dlg-msg");
-    msg.id = "set-msg";
-    foot.appendChild(msg);
-    foot.appendChild(el("span", "spacer2"));
-    var testBtn = el("button", "btn", "Kiểm tra kết nối");
-    testBtn.type = "button";
-    testBtn.addEventListener("click", function () {
-      readForm();
-      if (!settings.webApp || !settings.key) { msg.textContent = "Cần cả link Web App và mã khoá."; return; }
-      msg.textContent = "Đang thử…";
-      callSheet({ action: "ping" }).then(function () {
-        msg.style.color = "var(--accent-hi)";
-        msg.textContent = "Kết nối được.";
-      }, function (err) {
-        msg.style.color = "";
-        msg.textContent = "Không được: " + (err && err.message ? err.message : err);
-      });
-    });
-    foot.appendChild(testBtn);
-    var save = el("button", "btn btn-primary", "Lưu");
-    save.type = "button";
-    save.addEventListener("click", function () {
-      readForm();
-      writeSettings();
-      dlg.close();
-      refreshChrome();
-      toast("Đã lưu cài đặt");
-    });
-    foot.appendChild(save);
-    dlg.appendChild(foot);
-
-    function readForm() {
-      settings.sheetUrl = dlg.querySelector("[name=sheetUrl]").value.trim();
-      settings.webApp = dlg.querySelector("[name=webApp]").value.trim();
-      settings.key = dlg.querySelector("[name=key]").value.trim();
-    }
-    return dlg;
-  }
-
-  function setField(label, name, placeholder, hint) {
-    var f = el("label", "field");
-    f.appendChild(el("span", null, label));
-    var i = el("input", "mono");
-    i.name = name;
-    i.placeholder = placeholder;
-    i.autocomplete = "off";
-    i.spellcheck = false;
-    f.appendChild(i);
-    if (hint) f.appendChild(el("span", "hint", hint));
-    return f;
-  }
-
-  function openSettings() {
-    var dlg = document.getElementById("set-dlg");
-    dlg.querySelector("[name=sheetUrl]").value = settings.sheetUrl;
-    dlg.querySelector("[name=webApp]").value = settings.webApp;
-    dlg.querySelector("[name=key]").value = settings.key;
-    var m = document.getElementById("set-msg");
-    m.textContent = "";
-    m.style.color = "";
-    dlg.showModal();
-  }
-
-  /* Bật/tắt những thứ phụ thuộc vào cài đặt. */
-  function refreshChrome() {
-    var open = document.getElementById("open-sheet");
-    if (open) {
-      open.hidden = !settings.sheetUrl;
-      open.href = settings.sheetUrl || "#";
-    }
-    var push = document.getElementById("push-sheet");
-    if (push) {
-      var n = canWriteSheet() ? unsynced().length : 0;
-      push.hidden = !n;
-      push.textContent = "Ghi " + n + " từ vào sheet";
-    }
-    var row = document.getElementById("to-sheet-row");
-    if (row) row.hidden = !canWriteSheet();
   }
 
   function field(label, name, placeholder, mono) {
@@ -1249,7 +1183,255 @@
     return f;
   }
 
-  /* ---- khởi động ---------------------------------------------------------- */
+  /* ---- settings dialog ------------------------------------------------------ */
+  /* Each link is shown as plain text and only becomes editable after its Edit
+     button is pressed, so a stray click cannot repoint the sheet. */
+  function setRow(id, label, key, placeholder, hint, secret) {
+    var row = el("div", "setrow");
+    row.id = "row-" + id;
+    row.appendChild(el("span", "setlabel", label));
+
+    var line = el("div", "setline");
+    var val = el("span", "setval");
+    val.id = "val-" + id;
+    line.appendChild(val);
+
+    var input = el("input", "mono");
+    input.name = key;
+    input.placeholder = placeholder;
+    input.autocomplete = "off";
+    input.spellcheck = false;
+    input.hidden = true;
+    line.appendChild(input);
+
+    var btn = el("button", "btn edit-btn", "Edit");
+    btn.type = "button";
+    btn.addEventListener("click", function () {
+      if (input.hidden) {
+        input.hidden = false;
+        val.hidden = true;
+        btn.textContent = "Cancel";
+        input.focus();
+      } else {
+        input.hidden = true;
+        input.value = settings[key] || "";
+        val.hidden = false;
+        btn.textContent = "Edit";
+      }
+    });
+    line.appendChild(btn);
+    row.appendChild(line);
+    if (hint) row.appendChild(el("span", "hint", hint));
+    row.dataset.secret = secret ? "1" : "";
+    return row;
+  }
+
+  function showRowValue(id, key) {
+    var row = document.getElementById("row-" + id);
+    var val = document.getElementById("val-" + id);
+    var input = row.querySelector("input");
+    var raw = settings[key] || "";
+    if (!raw) {
+      val.textContent = "Not set yet";
+      val.classList.add("unset");
+    } else if (row.dataset.secret) {
+      val.textContent = raw.slice(0, 3) + "•".repeat(Math.max(4, raw.length - 3));
+      val.classList.remove("unset");
+    } else {
+      val.textContent = raw;
+      val.classList.remove("unset");
+    }
+    val.hidden = false;
+    input.hidden = true;
+    input.value = raw;
+    row.querySelector(".edit-btn").textContent = "Edit";
+  }
+
+  function buildSettings() {
+    var dlg = document.createElement("dialog");
+    dlg.id = "set-dlg";
+
+    var head = el("div", "dlg-head");
+    head.appendChild(el("h2", null, "Settings"));
+    head.appendChild(el("p", null, "Kept in this browser only."));
+    dlg.appendChild(head);
+
+    var body = el("div", "dlg-body");
+
+    /* --- passcode ------------------------------------------------------- */
+    var gate = el("div", "gate");
+    gate.id = "gate";
+    body.appendChild(gate);
+
+    /* --- links ---------------------------------------------------------- */
+    var links = el("div", "setgroup");
+    links.id = "setgroup";
+    links.appendChild(setRow("sheet", "Google Sheet link", "sheetUrl",
+      "https://docs.google.com/spreadsheets/d/…",
+      "Adds an Open sheet button to the top bar.", false));
+    links.appendChild(setRow("webapp", "Sync Web App link", "webApp",
+      "https://script.google.com/macros/s/…/exec",
+      "From the sheet: EngrowDict menu → Link for the web to write words.", false));
+    links.appendChild(setRow("key", "Sync key", "key", "",
+      "Comes with the link above.", true));
+    body.appendChild(links);
+
+    var note = el("p", "set-note");
+    note.id = "set-note";
+    body.appendChild(note);
+    dlg.appendChild(body);
+
+    var foot = el("div", "dlg-foot");
+    var msg = el("span", "dlg-msg");
+    msg.id = "set-msg";
+    foot.appendChild(msg);
+    foot.appendChild(el("span", "spacer2"));
+    var testBtn = el("button", "btn", "Test connection");
+    testBtn.type = "button";
+    testBtn.id = "set-test";
+    testBtn.addEventListener("click", function () {
+      readForm();
+      if (!settings.webApp || !settings.key) { setMsg("Both the Web App link and the key are needed.", false); return; }
+      setMsg("Trying…", true);
+      callSheet({ action: "ping" }).then(function () {
+        setMsg("Connected.", true);
+      }, function (err) {
+        setMsg("No luck: " + (err && err.message ? err.message : err), false);
+      });
+    });
+    foot.appendChild(testBtn);
+    var close = el("button", "btn", "Close");
+    close.type = "button";
+    close.addEventListener("click", function () { dlg.close(); });
+    foot.appendChild(close);
+    var save = el("button", "btn btn-primary", "Save");
+    save.type = "button";
+    save.id = "set-save";
+    save.addEventListener("click", function () {
+      readForm();
+      writeSettings();
+      drawSettings();
+      refresh();
+      toast("Settings saved");
+    });
+    foot.appendChild(save);
+    dlg.appendChild(foot);
+
+    function readForm() {
+      ["sheet:sheetUrl", "webapp:webApp", "key:key"].forEach(function (pair) {
+        var p = pair.split(":");
+        var row = document.getElementById("row-" + p[0]);
+        var input = row.querySelector("input");
+        if (!input.hidden) settings[p[1]] = input.value.trim();
+      });
+    }
+    return dlg;
+  }
+
+  function setMsg(text, good) {
+    var m = document.getElementById("set-msg");
+    m.textContent = text;
+    m.classList.toggle("good", !!good);
+  }
+
+  /* Redraw the parts of Settings that depend on lock state. */
+  function drawSettings() {
+    var gate = document.getElementById("gate");
+    gate.textContent = "";
+
+    if (!unlocked()) {
+      gate.appendChild(el("p", "gate-title", "Locked"));
+      gate.appendChild(el("p", "gate-sub",
+        "Enter the passcode to add words and to change these links."));
+      var row = el("div", "gate-row");
+      var inp = el("input", "mono");
+      inp.type = "password";
+      inp.id = "pass-in";
+      inp.placeholder = "Passcode";
+      inp.autocomplete = "off";
+      row.appendChild(inp);
+      var go = el("button", "btn btn-primary", "Unlock");
+      go.type = "button";
+      go.id = "pass-go";
+      go.addEventListener("click", function () {
+        if (inp.value.trim() === settings.code) {
+          settings.unlocked = true;
+          writeSettings();
+          drawSettings();
+          refresh();
+          toast("Unlocked");
+        } else {
+          setMsg("Wrong passcode.", false);
+          inp.select();
+        }
+      });
+      inp.addEventListener("keydown", function (ev) { if (ev.key === "Enter") go.click(); });
+      row.appendChild(go);
+      gate.appendChild(row);
+    } else {
+      gate.appendChild(el("p", "gate-title good", "Unlocked"));
+      gate.appendChild(el("p", "gate-sub", "You can add words and edit the links below."));
+      var row2 = el("div", "gate-row");
+      var np = el("input", "mono");
+      np.type = "text";
+      np.id = "pass-new";
+      np.placeholder = "New passcode";
+      np.autocomplete = "off";
+      row2.appendChild(np);
+      var ch = el("button", "btn", "Change passcode");
+      ch.type = "button";
+      ch.id = "pass-change";
+      ch.addEventListener("click", function () {
+        var v = np.value.trim();
+        if (v.length < 4) { setMsg("Use at least 4 characters.", false); return; }
+        settings.code = v;
+        writeSettings();
+        np.value = "";
+        setMsg("Passcode changed.", true);
+      });
+      row2.appendChild(ch);
+      var lk = el("button", "btn btn-quiet", "Lock again");
+      lk.type = "button";
+      lk.id = "pass-lock";
+      lk.addEventListener("click", function () {
+        settings.unlocked = false;
+        writeSettings();
+        drawSettings();
+        refresh();
+        toast("Locked");
+      });
+      row2.appendChild(lk);
+      gate.appendChild(row2);
+    }
+
+    showRowValue("sheet", "sheetUrl");
+    showRowValue("webapp", "webApp");
+    showRowValue("key", "key");
+
+    var on = unlocked();
+    document.getElementById("setgroup").classList.toggle("disabled", !on);
+    var btns = document.querySelectorAll("#setgroup .edit-btn");
+    for (var i = 0; i < btns.length; i++) btns[i].disabled = !on;
+    document.getElementById("set-test").disabled = !on;
+    document.getElementById("set-save").disabled = !on;
+
+    document.getElementById("set-note").textContent = MODE === "static"
+      ? "With a Web App link and a key set, every word you add is inserted straight into the right tab of the sheet, in alphabetical order. Neither ever leaves this device, so other visitors cannot write to your sheet. The passcode only guards this interface — it is visible to anyone who reads the page source."
+      : "The claude.ai copy is not allowed to call out to other sites, so writing into the sheet only works on the public web copy.";
+  }
+
+  function openSettings(focusPass) {
+    drawSettings();
+    setMsg("", false);
+    var dlg = document.getElementById("set-dlg");
+    dlg.showModal();
+    if (focusPass && !unlocked()) {
+      var p = document.getElementById("pass-in");
+      if (p) p.focus();
+    }
+  }
+
+  /* ---- start ----------------------------------------------------------------- */
   function start(data) {
     readSettings();
     BASE = data;
@@ -1267,8 +1449,8 @@
     if (pending.length) {
       ADDED = ADDED.concat(pending);
       if (MODE !== "static") {
-        banner(pending.length + " từ trong bản sao lưu trên máy này chưa có trên máy chủ.",
-          "Đồng bộ", syncPending);
+        banner(plural(pending.length, "word", "words")
+          + " in the local backup are not on the server yet.", "Sync", syncPending);
       }
     } else if (backup.length !== ADDED.length) {
       writeBackup(ADDED);
@@ -1307,12 +1489,12 @@
   if (embedded) {
     start(JSON.parse(embedded.textContent));
   } else {
-    showLoading("Đang tải sổ từ…");
+    showLoading("Loading the notebook…");
     fetch("data.json").then(function (r) {
       if (!r.ok) throw new Error(r.status);
       return r.json();
     }).then(start, function () {
-      showLoading("Không tải được dữ liệu. Thử tải lại trang.");
+      showLoading("Could not load the data. Try reloading the page.");
     });
   }
 })();

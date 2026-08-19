@@ -1,14 +1,24 @@
-/* Khung dùng chung: nạp một bản trang vào jsdom và trả về cửa sổ đã chạy.
-   jsdom không tính layout nên clientHeight = 0; danh sách cuộn ảo vì thế chỉ
-   dựng vài dòng đầu — vẫn đủ để kiểm tra nội dung và tương tác. */
+/* Shared harness: load one build of the page into jsdom and hand back the
+   window once its scripts have run. jsdom does no layout, so clientHeight is 0
+   and the virtual list only builds its first few rows — still enough to check
+   content and interaction. */
 const fs = require('fs');
 const path = require('path');
 const { JSDOM } = require('jsdom');
 
 const ROOT = path.join(__dirname, '..');
+const SETTINGS_KEY = 'engrowdict:settings:v1';
+const BACKUP_KEY = 'engrowdict:added:v1';
+const PASSCODE = '229922';
 
 function read(rel) {
   return fs.readFileSync(path.join(ROOT, rel), 'utf8');
+}
+
+/** Pre-unlock a store so the add-word tests are not blocked by the passcode. */
+function unlockedStore(extra) {
+  const s = Object.assign({ sheetUrl: '', webApp: '', key: '', code: PASSCODE, unlocked: true }, extra);
+  return { [SETTINGS_KEY]: JSON.stringify(s) };
 }
 
 function boot(opts) {
@@ -22,7 +32,7 @@ function boot(opts) {
   const dom = new JSDOM(html, {
     runScripts: 'dangerously',
     pretendToBeVisual: true,
-    url: opts.url || 'https://artifacts.example/so-tra-tu',
+    url: opts.url || 'https://artifacts.example/engrowdict',
     beforeParse(w) {
       w.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
       w.HTMLDialogElement.prototype.close = function () { this.open = false; };
@@ -71,5 +81,21 @@ function done(errs) {
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const click = (w, node) => node.dispatchEvent(new w.Event('click'));
 const type = (w, input, value) => { input.value = value; input.dispatchEvent(new w.Event('input')); };
+const btn = (doc, sel, label) =>
+  [...doc.querySelectorAll(sel)].find(b => b.textContent.trim() === label);
 
-module.exports = { ROOT, read, boot, ok, done, wait, click, type };
+/** Fill the add-word dialog and save. Assumes the passcode is already cleared. */
+function addWord(g, fields) {
+  click(g.window, g.doc.getElementById('add-word'));
+  const dlg = g.doc.getElementById('form-dlg');
+  for (const [name, value] of Object.entries(fields)) {
+    dlg.querySelector('[name=' + name + ']').value = value;
+  }
+  click(g.window, g.doc.getElementById('form-save'));
+  return dlg;
+}
+
+module.exports = {
+  ROOT, read, boot, ok, done, wait, click, type, btn, addWord,
+  unlockedStore, SETTINGS_KEY, BACKUP_KEY, PASSCODE,
+};
