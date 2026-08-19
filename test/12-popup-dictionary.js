@@ -96,6 +96,36 @@ const mk = store => boot({
      (doc.querySelector('.pd-entry .vi')?.textContent || '').includes('đỉnh'),
      doc.querySelector('.pd-ipa')?.textContent + ' — ' + doc.querySelector('.pd-entry .vi')?.textContent);
   ok('  and a way back to the results', !!doc.querySelector('.pd-back'));
+
+  /* Same arithmetic as the workspace grid: a block with one child must not be
+     laid out in two tracks, or the text is squeezed into the 20px meant for
+     the sense number and wraps a word to a line. */
+  const css = read('app.css');
+  const tracksOf = sel => {
+    const i = css.indexOf(sel);
+    const j = css.indexOf('grid-template-columns:', i);
+    return css.slice(j + 'grid-template-columns:'.length, css.indexOf(';', j))
+      .trim().split(/\s+/).length;
+  };
+  const solo = doc.querySelector('.pd-sense');
+  ok('a lone sense is laid out in one track',
+     solo.classList.contains('solo') &&
+     tracksOf('.pd-sense.solo') === solo.children.length,
+     solo.className + ', ' + solo.children.length + ' child, ' +
+     tracksOf('.pd-sense.solo') + ' track');
+
+  typeIn('strike');
+  click(w, doc.querySelector('.pd-hit'));
+  const many = doc.querySelector('.pd-sense');
+  ok('a numbered sense is laid out in two',
+     !many.classList.contains('solo') &&
+     tracksOf('.pd-sense {') === many.children.length,
+     many.children.length + ' children, ' + tracksOf('.pd-sense {') + ' tracks');
+  ok('  and the numbers are there', doc.querySelectorAll('.pd-num').length > 1,
+     doc.querySelectorAll('.pd-num').length + ' numbered senses');
+
+  typeIn('zenith');
+  click(w, doc.querySelector('.pd-hit'));
   click(w, doc.querySelector('.pd-back'));
   ok('  which returns to them', !!doc.querySelector('.pd-hits'));
 
