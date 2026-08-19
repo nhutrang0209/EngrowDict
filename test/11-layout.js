@@ -66,7 +66,7 @@ const mk = store => boot({
      b.doc.documentElement.style.getPropertyValue('--list-w') === '596px',
      b.doc.body.dataset.list + ' / ' + b.doc.documentElement.style.getPropertyValue('--list-w'));
 
-  /* --- the panel beside a passage ---------------------------------------- */
+  /* --- a passage uses the whole width; folding hides only the list ------- */
   const c = mk({});
   await wait(900);
   click(c.window, c.doc.getElementById('tab-passages'));
@@ -74,37 +74,35 @@ const mk = store => boot({
   click(c.window, c.doc.querySelector('.hit'));
   await wait(60);
 
-  ok('reading a passage lays the page out in two columns',
+  ok('a passage is given the full width',
      c.doc.getElementById('detail-inner').className.includes('wide'));
-  const aside = c.doc.querySelector('.fromtext');
-  ok('the space beside the prose holds the notebook panel', !!aside,
-     aside && aside.querySelector('h2')?.textContent);
-  const items = c.doc.querySelectorAll('.ft-item');
-  ok('  in the order they turn up in the passage',
-     [...items].slice(0, 3).map(n => n.querySelector('.ft-w').firstChild.textContent.trim())
-       .every(x => c.doc.querySelector('.read .prose').textContent.toLowerCase().includes(x.split(' ')[0])),
-     [...items].slice(0, 3).map(n => n.querySelector('.ft-w').firstChild.textContent.trim()).join(' → '));
-  ok('  listing words from this passage that the notebook has', items.length > 3,
-     items.length + ' words: ' +
-     [...items].slice(0, 5).map(n => n.querySelector('.ft-w')?.textContent.trim()).join(', '));
-  ok('  each with its short Vietnamese meaning',
-     [...items].every(n => (n.querySelector('.ft-vi')?.textContent || '').length > 0),
-     items[0].querySelector('.ft-vi')?.textContent);
-  ok('  and the count is shown', aside.querySelector('h2 .n')?.textContent === String(items.length),
-     aside.querySelector('h2 .n')?.textContent);
+  ok('  with no side column beside it', !c.doc.querySelector('.fromtext'));
+  ok('  and the prose measure is uncapped',
+     /\.detail-inner\.wide \.read \{[^}]*max-width: none/.test(read('app.css')));
+  ok('the dictionary view keeps its narrower measure', (() => {
+    click(c.window, c.doc.getElementById('tab-dictionary'));
+    return !c.doc.getElementById('detail-inner').className.includes('wide');
+  })(), c.doc.getElementById('detail-inner').className);
 
-  const word = items[0].querySelector('.ft-w').firstChild.textContent.trim();
-  click(c.window, items[0]);
+  // folding while reading must not take the passage away with it
+  click(c.window, c.doc.getElementById('tab-passages'));
+  await wait(30);
+  click(c.window, c.doc.querySelector('.hit'));
   await wait(40);
-  ok('clicking one opens it in the dictionary',
-     c.doc.querySelector('.headword')?.textContent === word,
-     word + ' → ' + c.doc.querySelector('.headword')?.textContent);
-  ok('  and the view has switched tabs',
-     c.doc.getElementById('tab-dictionary').getAttribute('aria-selected') === 'true');
-
-  ok('the dictionary view stays single-column',
-     !c.doc.getElementById('detail-inner').className.includes('wide'),
-     c.doc.getElementById('detail-inner').className);
+  const title = c.doc.querySelector('.read h1')?.textContent;
+  click(c.window, c.doc.getElementById('fold'));
+  ok('folding hides the list', c.doc.body.dataset.list === 'off');
+  ok('  and the letter rail with it',
+     /body\[data-list="off"\] \.alpha, body\[data-list="off"\] \.list \{ display: none/
+       .test(read('app.css')));
+  ok('  while the passage stays on screen',
+     c.doc.querySelector('.read h1')?.textContent === title &&
+     c.doc.querySelectorAll('.read .prose p').length > 1,
+     c.doc.querySelector('.read h1')?.textContent + ' — ' +
+     c.doc.querySelectorAll('.read .prose p').length + ' paragraphs');
+  ok('  and the detail column is the only one left with width',
+     /body\[data-list="off"\] \.work \{ grid-template-columns: 0 0 7px 1fr/
+       .test(read('app.css')));
 
   done(a.errs.concat(b.errs, c.errs));
 })();

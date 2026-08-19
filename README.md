@@ -34,7 +34,12 @@ them.
 
 The list column can be dragged wider or narrower by its divider, nudged with the
 arrow keys once the divider has focus, and folded away entirely with the chevron
-on it. Both the width and the folded state are remembered per browser.
+on it. Folding takes the list and the letter rail with it and leaves whatever you
+were reading in place. Both the width and the folded state are remembered per
+browser.
+
+A passage runs the full width of the column, capped at 1400px so the lines do not
+run away on a very large screen. Dictionary entries keep a narrower measure.
 
 ## Reading passages
 
@@ -42,11 +47,6 @@ Both builds carry the 33 passages. Open **Passages** in the top bar, pick one,
 and select any word or phrase in it: a card opens with what the notebook holds
 on it — headword, part of speech, phonetics, the Vietnamese meanings — and a
 button through to the full entry.
-
-Beside the prose sits **In your notebook** — every entry the notebook holds that
-turns up in this passage, in the order it appears, each a click away from its
-full entry. It is what fills the space next to a column of prose that should not
-itself get any wider.
 
 The notebook is advanced vocabulary, so ordinary running words are often not in
 it. When there is no entry, the card falls back to machine translation (English
@@ -157,7 +157,7 @@ python parse_sheet.py    # when source.xlsx changes (download the sheet as .xlsx
 cd test && npm install && npm test
 ```
 
-255 checks against a fake DOM (jsdom), across eleven areas:
+254 checks against a fake DOM (jsdom), across eleven areas:
 
 1. the data pulled from the sheet covers a–z, has the right shape, and carries
    no leftover formatting junk
@@ -181,8 +181,8 @@ cd test && npm install && npm test
    entries back for the visit
 10. the styling of rows written into the sheet: merged head cell, linked
     headword, dotted rule between senses, nothing drawn into unused columns
-11. the list column dragging, folding and being remembered, and the notebook
-    panel beside a passage
+11. the list column dragging, folding and being remembered, and a passage
+    keeping the full width while folded
 
 Checks 7 and 8 need `test/grids.json`, which `parse_sheet.py` writes; without it
 check 7 skips itself.

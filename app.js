@@ -492,12 +492,10 @@
     hideLookup();
     var host = document.getElementById("detail-inner");
     host.textContent = "";
-    host.className = "detail-inner";
+    // a passage runs the full width; an entry keeps a narrower measure
+    host.className = "detail-inner" + (view === "read" && selectedRead ? " wide" : "");
     if (view === "read") {
-      if (!selectedRead) { host.appendChild(blankView()); return; }
-      host.className = "detail-inner wide";
-      host.appendChild(readingView(selectedRead));
-      host.appendChild(notebookPanel(selectedRead));
+      host.appendChild(selectedRead ? readingView(selectedRead) : blankView());
       return;
     }
     var e = byId[selectedId];
@@ -827,86 +825,6 @@
       }
     }
     return out;
-  }
-
-  /* Which of this passage's words the notebook already holds. This is the
-     point of reading with the notebook open, and it fills the space beside a
-     column of prose that should not itself get any wider. */
-  function notebookIn(r) {
-    var text = " " + norm(r._text) + " ";
-    var seen = {}, out = [], at = {};
-
-    // multi-word entries first, so "make up for" wins over "make"
-    for (var i = 0; i < entries.length; i++) {
-      var e = entries[i];
-      if (e._w.indexOf(" ") < 0) continue;
-      var found = text.indexOf(" " + e._w + " ");
-      if (found > -1 && !seen[e._w]) {
-        seen[e._w] = true;
-        at[e.id] = found;
-        out.push(e);
-      }
-    }
-
-    /* Walk the words with their offsets rather than looking the headword up
-       again afterwards: an entry reached through stemming — "carry" from
-       "carries" — does not appear literally, and searching for it would come
-       back empty and sort the word to the top. */
-    var re = /[a-z0-9'-]+/g, m;
-    while ((m = re.exec(text)) !== null) {
-      var t = m[0];
-      if (t.length < 5) continue;
-      var forms = lemmas(t);
-      for (var k = 0; k < forms.length; k++) {
-        var hit = byWord[forms[k]];
-        if (hit && !seen[hit._w]) {
-          seen[hit._w] = true;
-          at[hit.id] = m.index;
-          out.push(hit);
-          break;
-        }
-      }
-    }
-    // in the order they turn up, so the panel tracks the reading
-    out.sort(function (x, y) { return at[x.id] - at[y.id]; });
-    return out;
-  }
-
-  function notebookPanel(r) {
-    var found = notebookIn(r);
-    var aside = el("aside", "fromtext");
-    var head = el("h2", null, "In your notebook");
-    aside.appendChild(head);
-    if (!found.length) {
-      aside.appendChild(el("p", "empty-note", "None of this passage's words are in the notebook yet."));
-      return aside;
-    }
-    head.appendChild(el("span", "n", String(found.length)));
-    var list = el("ul");
-    found.forEach(function (e) {
-      var li = el("li");
-      var b = el("button", "ft-item");
-      b.type = "button";
-      var line = el("span", "ft-w", e.word);
-      if (e.pos) line.appendChild(el("i", null, e.pos));
-      b.appendChild(line);
-      b.appendChild(el("span", "ft-vi", glossOf(e)));
-      b.addEventListener("click", function () {
-        view = "vocab";
-        selectedId = e.id;
-        selectedRead = null;
-        query = "";
-        if (qInput) qInput.value = "";
-        syncViewButtons();
-        refresh();
-        select(e.id);
-        showDetail();
-      });
-      li.appendChild(b);
-      list.appendChild(li);
-    });
-    aside.appendChild(list);
-    return aside;
   }
 
   function readingView(r) {
