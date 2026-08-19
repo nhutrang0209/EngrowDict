@@ -596,7 +596,8 @@
     drawDetail();
     drawChips();
     document.getElementById("tally").textContent =
-      fmt(entries.length) + " mục · " + fmt(senseCount(entries)) + " nghĩa · " + fmt(READINGS.length) + " bài đọc";
+      fmt(entries.length) + " mục · " + fmt(senseCount(entries)) + " nghĩa"
+      + (READINGS.length ? " · " + fmt(READINGS.length) + " bài đọc" : "");
   }
 
   function drawChips() {
@@ -639,7 +640,9 @@
 
     var tabs = el("div", "tabs");
     tabs.setAttribute("role", "tablist");
-    [["vocab", "Từ vựng"], ["read", "Bài đọc"]].forEach(function (t) {
+    // Bản công khai không kèm bài đọc — khi đó bỏ luôn tab.
+    var tabDefs = READINGS.length ? [["vocab", "Từ vựng"], ["read", "Bài đọc"]] : [];
+    tabDefs.forEach(function (t) {
       var b = el("button", "tab", t[1]);
       b.type = "button";
       b.setAttribute("role", "tab");

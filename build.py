@@ -15,7 +15,17 @@ BS = chr(92)
 
 data = json.load(open(os.path.join(HERE, 'dataset.json'), encoding='utf-8'))
 entries, readings = data['entries'], data['readings']
-blob = json.dumps(data, ensure_ascii=False, separators=(',', ':')).replace('<', BS + 'u003c')
+
+
+def embed(payload):
+    return (json.dumps(payload, ensure_ascii=False, separators=(',', ':'))
+            .replace('<', BS + 'u003c'))
+
+
+blob = embed(data)
+# Bản công khai bỏ phần bài đọc: đó là nguyên văn bài của TED-Ed và BBC,
+# giữ trong sổ riêng thì được, đăng lên web công khai thì không.
+blob_public = embed({'entries': entries, 'readings': []})
 
 css = open(os.path.join(HERE, 'app.css'), encoding='utf-8').read()
 js = open(os.path.join(HERE, 'app.js'), encoding='utf-8').read()
@@ -34,18 +44,19 @@ HEAD = (
     '<link rel="stylesheet" href="' + FONTS + '">\n'
     '<style id="css">' + css + '</style>\n'
 )
-BODY = (
-    '<div id="app"></div>\n'
-    '<script type="application/json" id="mode">"{mode}"</script>\n'
-    '<script type="application/json" id="base">' + blob + '</script>\n'
-    '<script type="application/json" id="added">[]</script>\n'
-    '<script type="text/plain" id="appjs">' + js + '</script>\n'
-    "<script>new Function(document.getElementById('appjs').textContent)()</script>\n"
-)
+def body(mode, payload):
+    return (
+        '<div id="app"></div>\n'
+        '<script type="application/json" id="mode">"' + mode + '"</script>\n'
+        '<script type="application/json" id="base">' + payload + '</script>\n'
+        '<script type="application/json" id="added">[]</script>\n'
+        '<script type="text/plain" id="appjs">' + js + '</script>\n'
+        "<script>new Function(document.getElementById('appjs').textContent)()</script>\n")
+
 
 # Bản cho Artifact: khung <head> do claude.ai bọc, nên chỉ cần phần thân.
 out = os.path.join(HERE, 'so-tra-tu.html')
-open(out, 'w', encoding='utf-8').write(HEAD + BODY.replace('{mode}', 'artifact'))
+open(out, 'w', encoding='utf-8').write(HEAD + body('artifact', blob))
 
 # Bản web tĩnh (GitHub Pages): tài liệu đầy đủ, tự đứng một mình.
 site = os.path.join(HERE, 'docs')
@@ -59,10 +70,10 @@ open(index, 'w', encoding='utf-8').write(
     '<meta name="description" content="Tra 1.395 mục từ, thành ngữ và phrasal verb '
     'Anh-Việt: phiên âm, định nghĩa tiếng Anh, nghĩa tiếng Việt.">\n'
     + HEAD
-    + '</head>\n<body>\n' + BODY.replace('{mode}', 'static') + '</body>\n</html>\n')
+    + '</head>\n<body>\n' + body('static', blob_public) + '</body>\n</html>\n')
 
 print('mục', len(entries),
       '· nghĩa', sum(len(e['senses']) for e in entries),
-      '· bài đọc', len(readings))
+      '· bài đọc', len(readings), '(chỉ có trong bản artifact)')
 print('so-tra-tu.html ', round(os.path.getsize(out) / 1024), 'KB (artifact)')
 print('docs/index.html', round(os.path.getsize(index) / 1024), 'KB (web tĩnh)')

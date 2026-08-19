@@ -17,13 +17,18 @@ và tiếng Việt không dấu vẫn ra (`thoai vi` → *abdicate*).
 | | `docs/index.html` (GitHub Pages) | `so-tra-tu.html` (Artifact claude.ai) |
 | --- | --- | --- |
 | Ai xem được | bất kỳ ai có link | người bạn chia sẻ |
-| Tra cứu | đầy đủ | đầy đủ |
+| Tra cứu | 1.395 mục đầy đủ | 1.395 mục đầy đủ |
+| 33 bài đọc | không kèm | có |
 | Thêm / xoá từ | được, lưu trong trình duyệt người xem | được, lưu lên máy chủ cho mọi người |
 | Sao lưu `.json` | được | được |
 
 Bản Artifact tự publish lại chính nó mỗi lần thêm hoặc xoá từ, nên từ mới còn nguyên
 khi mở ở máy khác. Bản tĩnh không có máy chủ, nên từ ai người nấy giữ — dùng nút
 **Sao lưu .json** nếu muốn giữ lâu dài.
+
+Bản công khai bỏ hẳn phần bài đọc: đó là nguyên văn bài của TED-Ed và BBC, giữ trong
+sổ riêng thì được nhưng đăng lên web mở thì thành phát tán lại nội dung có bản quyền.
+Khi `readings` rỗng, trang tự bỏ luôn tab **Bài đọc**.
 
 ## Cấu trúc
 
@@ -47,6 +52,17 @@ python parse_sheet.py    # chỉ khi sheet gốc đổi (cần bản xuất mớ
 ```
 
 `build.py` chỉ đọc `dataset.json`, nên sửa giao diện xong chạy một lệnh là xong.
+
+## Kiểm tra
+
+```sh
+cd test && npm install && npm test
+```
+
+57 phép kiểm chạy trên một DOM giả (jsdom), phủ bốn mặt: tra cứu và bàn phím,
+vòng tự-publish của bản Artifact (thêm từ → trang tự sinh HTML thay thế → nạp lại
+→ từ vẫn còn), bản tĩnh lưu vào `localStorage` và sống sót qua lần tải sau, và
+bản công khai không lọt câu nào của bài đọc. Chạy sau mỗi lần `python build.py`.
 
 ## Deploy
 

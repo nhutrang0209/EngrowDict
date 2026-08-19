@@ -1,0 +1,11 @@
+{
+  "name": "so-tra-tu-test",
+  "private": true,
+  "description": "Kiểm tra hai bản trang dựng ra bằng một DOM giả (jsdom).",
+  "scripts": {
+    "test": "node run.js"
+  },
+  "devDependencies": {
+    "jsdom": "^30.0.1"
+  }
+}
