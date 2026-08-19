@@ -12,7 +12,7 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const { read, boot, ok, done, wait, click, btn, addWord,
-        unlockedStore, BACKUP_KEY } = require('./helpers');
+        unlockedStore, BACKUP_KEY, appsScriptSandbox } = require('./helpers');
 
 const shell = read('docs/index.html');
 const CFG = {
@@ -134,42 +134,8 @@ function page(store, posts, reply) {
   /* ------------------------------------------------ B. in Apps Script */
   const grids = JSON.parse(fs.readFileSync(path.join(__dirname, 'grids.json'), 'utf8'));
 
-  function fakeSheet(rows) {
-    const g = rows.map(r => r.slice());
-    return {
-      grid: g,
-      getLastRow: () => g.length,
-      getMaxColumns: () => 4,
-      getLastColumn: () => 4,
-      insertRowsBefore: (at, n) => {
-        for (let i = 0; i < n; i++) g.splice(at - 1, 0, ['', '', '', '']);
-      },
-      getRange: (row, col, nRows, nCols) => ({
-        getDisplayValues: () => g.slice(row - 1, row - 1 + nRows)
-          .map(r => r.slice(col - 1, col - 1 + nCols)),
-        setValues: vals => {
-          for (let i = 0; i < vals.length; i++) {
-            while (g.length < row - 1 + i + 1) g.push(['', '', '', '']);
-            for (let j = 0; j < vals[i].length; j++) g[row - 1 + i][col - 1 + j] = vals[i][j];
-          }
-        },
-      }),
-    };
-  }
-
-  const sheets = {};
-  for (const name of Object.keys(grids)) sheets[name] = fakeSheet(grids[name]);
   const props = { SOTRATU_KEY: CFG.key };
-  const sandbox = {
-    SpreadsheetApp: { getActiveSpreadsheet: () => ({ getSheetByName: n => sheets[n] || null }) },
-    PropertiesService: { getScriptProperties: () => ({ getProperty: k => props[k] || null }) },
-    LockService: { getScriptLock: () => ({ waitLock: () => {}, releaseLock: () => {} }) },
-    ContentService: {
-      MimeType: { JSON: 'json' },
-      createTextOutput: t => ({ setMimeType: () => t }),
-    },
-    console,
-  };
+  const sandbox = appsScriptSandbox(grids, props);
   vm.createContext(sandbox);
   vm.runInContext(read('sheet-sync.gs') + '\nthis.__doPost = doPost; this.__buildData = buildData;', sandbox);
 

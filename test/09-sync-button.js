@@ -7,7 +7,8 @@
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { read, boot, ok, done, wait, click, addWord, unlockedStore, BACKUP_KEY } = require('./helpers');
+const { read, boot, ok, done, wait, click, addWord, unlockedStore, BACKUP_KEY,
+        appsScriptSandbox } = require('./helpers');
 
 const shell = read('docs/index.html');
 const CFG = {
@@ -126,24 +127,10 @@ function page(store, posts, reply, dataNow) {
 
   /* --- the script side: sync uses the same reader as the menu ---------- */
   const grids = JSON.parse(fs.readFileSync(path.join(__dirname, 'grids.json'), 'utf8'));
-  const props = { SOTRATU_KEY: CFG.key };          // deliberately no repo or token
-  const sandbox = {
-    SpreadsheetApp: {
-      getActiveSpreadsheet: () => ({
-        getSheetByName: name => grids[name] ? {
-          getLastRow: () => grids[name].length,
-          getLastColumn: () => 4,
-          getRange: () => ({ getDisplayValues: () => grids[name] }),
-        } : null,
-      }),
-    },
-    PropertiesService: { getScriptProperties: () => ({ getProperty: k => props[k] || null }) },
-    LockService: { getScriptLock: () => ({ waitLock: () => {}, releaseLock: () => {} }) },
-    ContentService: { MimeType: { JSON: 'json' }, createTextOutput: t => ({ setMimeType: () => t }) },
-    console,
-  };
+  const sandbox = appsScriptSandbox(grids, { SOTRATU_KEY: CFG.key });   // no repo, no token
   vm.createContext(sandbox);
   vm.runInContext(read('sheet-sync.gs') + '\nthis.__doPost = doPost;', sandbox);
+
   const res = JSON.parse(sandbox.__doPost({
     postData: { contents: JSON.stringify({ key: CFG.key, action: 'sync' }) },
   }));

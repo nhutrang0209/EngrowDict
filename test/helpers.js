@@ -98,7 +98,93 @@ function addWord(g, fields) {
   return dlg;
 }
 
+/* ---- stand-ins for the Apps Script side ---------------------------------- */
+
+/** A sheet that records the formatting calls as well as the values. */
+function fakeSheet(rows) {
+  const g = rows.map(r => r.slice());
+  const log = { merges: [], borders: [], rich: [] };
+  const sheet = {
+    grid: g,
+    log,
+    getLastRow: () => g.length,
+    getMaxColumns: () => 4,
+    getLastColumn: () => 4,
+    insertRowsBefore: (at, n) => {
+      for (let i = 0; i < n; i++) g.splice(at - 1, 0, ['', '', '', '']);
+    },
+    getRange: (row, col, nRows, nCols) => {
+      nRows = nRows === undefined ? 1 : nRows;
+      nCols = nCols === undefined ? 1 : nCols;
+      const at = { row, col, nRows, nCols };
+      return {
+        getDisplayValues: () => g.slice(row - 1, row - 1 + nRows)
+          .map(r => r.slice(col - 1, col - 1 + nCols)),
+        setValues: vals => {
+          for (let i = 0; i < vals.length; i++) {
+            while (g.length < row - 1 + i + 1) g.push(['', '', '', '']);
+            for (let j = 0; j < vals[i].length; j++) g[row - 1 + i][col - 1 + j] = vals[i][j];
+          }
+        },
+        merge: () => { log.merges.push(at); },
+        setRichTextValue: v => { log.rich.push({ at, value: v }); },
+        setBorder: (top, left, bottom, right, vertical, horizontal, color, style) => {
+          log.borders.push({ at, top, left, bottom, right, vertical, horizontal, color, style });
+        },
+      };
+    },
+  };
+  return sheet;
+}
+
+/** Enough of the Apps Script globals for sheet-sync.gs to run under Node. */
+function appsScriptSandbox(grids, props) {
+  const sheets = {};
+  for (const name of Object.keys(grids)) sheets[name] = fakeSheet(grids[name]);
+
+  const textStyle = () => {
+    const s = {};
+    const b = {
+      setBold: v => { s.bold = v; return b; },
+      setItalic: v => { s.italic = v; return b; },
+      setUnderline: v => { s.underline = v; return b; },
+      setForegroundColor: v => { s.color = v; return b; },
+      build: () => s,
+    };
+    return b;
+  };
+  const richText = () => {
+    const v = { text: '', styles: [], links: [] };
+    const b = {
+      setText: t => { v.text = t; return b; },
+      setTextStyle: (from, to, style) => { v.styles.push({ from, to, style }); return b; },
+      setLinkUrl: (from, to, url) => { v.links.push({ from, to, url }); return b; },
+      build: () => v,
+    };
+    return b;
+  };
+
+  const sandbox = {
+    sheets,
+    SpreadsheetApp: {
+      getActiveSpreadsheet: () => ({ getSheetByName: n => sheets[n] || null }),
+      newTextStyle: textStyle,
+      newRichTextValue: richText,
+      BorderStyle: { SOLID: 'SOLID', DASHED: 'DASHED' },
+    },
+    PropertiesService: { getScriptProperties: () => ({ getProperty: k => props[k] || null }) },
+    LockService: { getScriptLock: () => ({ waitLock: () => {}, releaseLock: () => {} }) },
+    ContentService: {
+      MimeType: { JSON: 'json' },
+      createTextOutput: t => ({ setMimeType: () => t }),
+    },
+    console,
+  };
+  return sandbox;
+}
+
 module.exports = {
   ROOT, read, boot, ok, done, wait, click, type, btn, addWord,
   unlockedStore, SETTINGS_KEY, BACKUP_KEY, PASSCODE,
+  fakeSheet, appsScriptSandbox,
 };

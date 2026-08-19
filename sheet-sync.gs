@@ -184,6 +184,76 @@ function nextGroup(sh) {
   return String(max + 1);
 }
 
+var LINK_BLUE = '#1155cc';   // the blue the sheet already uses for headwords
+var BORDER_INK = '#000000';
+
+/** Where the headword links to. Cambridge slugs are lowercase, hyphenated. */
+function cambridgeUrl(term) {
+  var slug = txt(term).toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+  return slug ? 'https://dictionary.cambridge.org/dictionary/english/' + slug : '';
+}
+
+/**
+ * The head cell as rich text: the word itself bold, blue and linked; the part
+ * of speech, the phonetics and any note left plain underneath.
+ */
+function headRichText(fullText, word, url) {
+  var plain = SpreadsheetApp.newTextStyle()
+    .setBold(false).setItalic(false).setUnderline(false)
+    .setForegroundColor(BORDER_INK).build();
+  var headline = SpreadsheetApp.newTextStyle()
+    .setBold(true).setUnderline(true).setForegroundColor(LINK_BLUE).build();
+
+  var b = SpreadsheetApp.newRichTextValue().setText(fullText);
+  if (!fullText.length) return b.build();
+  b = b.setTextStyle(0, fullText.length, plain);
+  var n = Math.min(word.length, fullText.length);
+  if (n > 0 && fullText.lastIndexOf(word, 0) === 0) {
+    b = b.setTextStyle(0, n, headline);
+    if (url) b = b.setLinkUrl(0, n, url);
+  }
+  return b.build();
+}
+
+/**
+ * Make the new rows look like every other entry: one merged cell for the head,
+ * a dashed rule between senses, solid lines everywhere else.
+ */
+function formatInserted(sh, at, n, entry, w) {
+  var headWide = (entry.type === 'phrasal' || entry.type === 'compare') ? 2 : 1;
+
+  if (n > 1) {
+    for (var c = 1; c <= headWide; c++) sh.getRange(at, c, n, 1).merge();
+  }
+
+  if (entry.type === 'compare') {
+    var cw = txt(entry.word);
+    sh.getRange(at, 2).setRichTextValue(headRichText(cw, cw, cambridgeUrl(cw)));
+  } else if (entry.type === 'phrasal') {
+    var verb = txt(entry.verb || entry.word);
+    var whole = (verb + ' ' + txt(entry.particle)).trim();
+    sh.getRange(at, 1).setRichTextValue(headRichText(verb, verb, cambridgeUrl(whole)));
+  } else {
+    var text = headCell(entry);
+    sh.getRange(at, 1).setRichTextValue(
+      headRichText(text, txt(entry.word), cambridgeUrl(entry.word)));
+  }
+
+  // outline and the column rules stay solid
+  sh.getRange(at, 1, n, w).setBorder(
+    true, true, true, true, true, null, BORDER_INK, SpreadsheetApp.BorderStyle.SOLID);
+
+  // only the rules between senses are dashed, and only beside the merged head
+  if (n > 1 && w > headWide) {
+    sh.getRange(at, headWide + 1, n, w - headWide).setBorder(
+      null, null, null, null, null, true, BORDER_INK, SpreadsheetApp.BorderStyle.DASHED);
+  }
+}
+
 /** Build the head cell the way the sheet writes it: word (pos) \n /ipa/ */
 function headCell(entry) {
   var s = txt(entry.word);
@@ -247,6 +317,15 @@ function insertEntry(entry) {
   var trimmed = [];
   for (i = 0; i < rowsOut.length; i++) trimmed.push(rowsOut[i].slice(0, w));
   sh.getRange(at, 1, trimmed.length, w).setValues(trimmed);
+
+  // The words matter more than the styling, so a formatting failure is
+  // reported rather than allowed to throw the whole insert away.
+  try {
+    formatInserted(sh, at, trimmed.length, entry, w);
+  } catch (err) {
+    return { ok: true, sheet: tab.sheet, row: at, rows: trimmed.length,
+             warning: 'Added, but the formatting did not apply: ' + String(err) };
+  }
   return { ok: true, sheet: tab.sheet, row: at, rows: trimmed.length };
 }
 

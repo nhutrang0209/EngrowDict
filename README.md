@@ -85,6 +85,13 @@ first cell left empty on the rows that follow.
    field, paste the sheet link, the Web App link and the key, then **Test
    connection** and **Save**.
 
+A word written back is styled to match the ones already in the sheet: the
+headword bold, blue and hyperlinked to its Cambridge entry, the part of speech
+and phonetics plain beneath it, column A merged across a multi-sense entry, a
+dashed rule between senses and solid lines everywhere else. Styling is applied
+after the values are written, so a formatting failure is reported rather than
+allowed to lose the word.
+
 From then on the add-word form carries a **Write straight into the sheet** tick,
 on by default. Anything that has not made it into the sheet is badged *Not in
 the sheet*, and the top bar grows a **Write N words to sheet** button.
