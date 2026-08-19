@@ -51,5 +51,21 @@ ok('almost no example left stuck to a definition', stuck.length < 5,
 ok('reading passages keep their paragraphs',
    d.readings.length > 30 && d.readings.every(r => r.paras.length > 0),
    d.readings.length + ' passages');
+ok('every paragraph is text, with a letter only where the passage uses them',
+   d.readings.every(r => r.paras.every(p => typeof p.text === 'string' && p.text)));
+
+const lettered = d.readings.filter(r => r.paras.some(p => p.mark));
+ok('the IELTS-style passages have their letters lifted out', lettered.length >= 4,
+   lettered.length + ' of ' + d.readings.length + ' passages are lettered');
+ok('  running A, B, C down the passage in order',
+   lettered.every(r => r.paras.filter(p => p.mark)
+     .every((p, i) => p.mark === String.fromCharCode(65 + i))),
+   lettered[0].paras.slice(0, 5).map(p => p.mark || '-').join(''));
+ok('  with the letter stripped off the text, doubles included',
+   !lettered.some(r => r.paras.some(p => p.mark && /^[A-Z]\s/.test(p.text))),
+   lettered.find(r => r.title.startsWith('Animal Minds'))?.paras[0].text.slice(0, 34));
+ok('a paragraph that merely starts with the article "A" keeps it',
+   d.readings.some(r => r.paras[0].text.startsWith('A few years ago')),
+   d.readings.find(r => r.paras[0].text.startsWith('A few'))?.title);
 
 done();

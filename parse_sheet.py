@@ -151,6 +151,29 @@ for n, row in enumerate(wb['Grammar'].iter_rows(values_only=True)):
         add(type='compare', word=flat(txt(row[1])), group=group,
             senses=[sense(row[2], row[3])])
 
+def label_paragraphs(paras):
+    """Some passages are the IELTS sort, with paragraphs lettered A, B, C…
+    The letter is glued to the text and sometimes doubled ("A A In 1977"). It
+    only counts as a label when the letters actually run in order down the
+    passage — otherwise a paragraph opening with the article "A" would lose it.
+    """
+    letters = [chr(ord('A') + i) for i in range(len(paras))]
+    runs = sum(1 for i, p in enumerate(paras)
+               if i < 26 and re.match(letters[i] + r'(\s|$)', p))
+    if len(paras) < 3 or runs < max(3, int(len(paras) * 0.6)):
+        return [{'text': p} for p in paras]
+
+    out = []
+    for i, p in enumerate(paras):
+        L = letters[i] if i < 26 else None
+        m = re.match(L + r'\s+(?:' + L + r'\s+)?(.*)$', p, re.S) if L else None
+        if m and m.group(1).strip():
+            out.append({'mark': L, 'text': m.group(1).strip()})
+        else:
+            out.append({'text': p})
+    return out
+
+
 # --- Reading Passage: two rows per piece, the title then the body ---
 pend = None
 for n, row in enumerate(wb['Reading Passage'].iter_rows(values_only=True)):
@@ -163,7 +186,7 @@ for n, row in enumerate(wb['Reading Passage'].iter_rows(values_only=True)):
     if txt(row[0]):
         pend = {'index': txt(row[0]).replace('.0', ''), 'title': flat(body)}
     elif pend:
-        pend['paras'] = [flat(p) for p in body.split('\n') if flat(p)]
+        pend['paras'] = label_paragraphs([flat(p) for p in body.split('\n') if flat(p)])
         readings.append(pend)
         pend = None
 

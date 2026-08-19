@@ -309,6 +309,16 @@ body {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .hit .mine-dot { display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: var(--flag); flex: none; }
+
+/* a passage row leads with its number, so the titles line up down the column */
+.hit.passage { display: grid; grid-template-columns: 22px 1fr; gap: 12px; align-items: start; }
+.hit .idx {
+  font-family: var(--mono); font-size: 12.5px; color: var(--faint);
+  font-variant-numeric: tabular-nums; text-align: right; padding-top: 3px;
+}
+.hit[aria-current="true"] .idx { color: var(--accent-hi); }
+.hit.passage .col { min-width: 0; }
+.hit.passage .hw { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .letter-mark {
   height: 28px; display: flex; align-items: center;
   padding: 0 16px; background: var(--tint);
@@ -445,12 +455,20 @@ body {
 }
 .read .prose { margin-top: 26px; display: flex; flex-direction: column; gap: 18px; }
 .read .prose p {
+  position: relative;
   font-size: 17px; line-height: 1.78; color: var(--ink-2);
   /* justified, with hyphenation so the word spacing does not gape */
   text-align: justify; text-justify: inter-word;
   hyphens: auto; -webkit-hyphens: auto;
 }
 .read .prose p::selection, .read .prose ::selection { background: var(--accent-soft); }
+/* lettered paragraphs, as the IELTS-style passages are written */
+.read .prose p.labelled { padding-left: 32px; }
+.read .prose .pmark {
+  position: absolute; left: 0; top: 4px;
+  font-family: var(--mono); font-size: 11.5px; font-weight: 600;
+  color: var(--accent); letter-spacing: .04em;
+}
 
 /* the little card that opens over a selection */
 .lookup {

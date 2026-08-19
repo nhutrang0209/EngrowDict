@@ -395,14 +395,16 @@
 
     var line = el("div", "top-line");
     if (e.paras) {                                  // a reading passage
+      b.className = "hit passage";
+      b.appendChild(el("span", "idx", e.index));
+      var col = el("div", "col");
       var thw = el("span", "hw");
       markUp(thw, e.title, q);
-      line.appendChild(thw);
-      line.appendChild(el("span", "senses-n", "no. " + e.index));
-      b.appendChild(line);
+      col.appendChild(thw);
       var tg = el("span", "gloss");
-      markUp(tg, e.paras[0], q);
-      b.appendChild(tg);
+      markUp(tg, e.paras[0].text, q);
+      col.appendChild(tg);
+      b.appendChild(col);
       return b;
     }
     var hw = el("span", "hw");
@@ -722,12 +724,20 @@
   function readingView(r) {
     var w = el("div", "read");
     w.appendChild(el("h1", null, r.title));
-    var words = r.paras.join(" ").split(/\s+/).length;
+    var words = r._text.split(/\s+/).length;
     w.appendChild(el("p", "meta", "Passage " + r.index + " · " + fmt(words) + " words"));
     w.appendChild(el("p", "hint",
       "Select any word or phrase to see what the notebook has on it — English to Vietnamese."));
     var prose = el("div", "prose");
-    r.paras.forEach(function (p) { prose.appendChild(el("p", null, p)); });
+    r.paras.forEach(function (x) {
+      var node = el("p", x.mark ? "labelled" : null, x.text);
+      if (x.mark) {
+        var m = el("span", "pmark", x.mark);
+        m.setAttribute("aria-hidden", "true");
+        node.insertBefore(m, node.firstChild);
+      }
+      prose.appendChild(node);
+    });
     prose.addEventListener("mouseup", onSelectInProse);
     prose.addEventListener("touchend", onSelectInProse);
     w.appendChild(prose);
@@ -1801,8 +1811,11 @@
     READINGS = data.readings || [];
     READINGS.forEach(function (r, i) {
       r.id = "r" + i;
+      // tolerate an older data.json still serving plain strings
+      r.paras = r.paras.map(function (p) { return typeof p === "string" ? { text: p } : p; });
+      r._text = r.paras.map(function (x) { return x.text; }).join(" ");
       r._w = norm(r.title);
-      r._all = norm(r.title + " " + r.paras.join(" "));
+      r._all = norm(r.title + " " + r._text);
     });
 
     var backup = readBackup();

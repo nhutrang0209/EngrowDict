@@ -320,6 +320,16 @@ body {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .hit .mine-dot { display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: var(--flag); flex: none; }
+
+/* a passage row leads with its number, so the titles line up down the column */
+.hit.passage { display: grid; grid-template-columns: 22px 1fr; gap: 12px; align-items: start; }
+.hit .idx {
+  font-family: var(--mono); font-size: 12.5px; color: var(--faint);
+  font-variant-numeric: tabular-nums; text-align: right; padding-top: 3px;
+}
+.hit[aria-current="true"] .idx { color: var(--accent-hi); }
+.hit.passage .col { min-width: 0; }
+.hit.passage .hw { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .letter-mark {
   height: 28px; display: flex; align-items: center;
   padding: 0 16px; background: var(--tint);
@@ -456,12 +466,20 @@ body {
 }
 .read .prose { margin-top: 26px; display: flex; flex-direction: column; gap: 18px; }
 .read .prose p {
+  position: relative;
   font-size: 17px; line-height: 1.78; color: var(--ink-2);
   /* justified, with hyphenation so the word spacing does not gape */
   text-align: justify; text-justify: inter-word;
   hyphens: auto; -webkit-hyphens: auto;
 }
 .read .prose p::selection, .read .prose ::selection { background: var(--accent-soft); }
+/* lettered paragraphs, as the IELTS-style passages are written */
+.read .prose p.labelled { padding-left: 32px; }
+.read .prose .pmark {
+  position: absolute; left: 0; top: 4px;
+  font-family: var(--mono); font-size: 11.5px; font-weight: 600;
+  color: var(--accent); letter-spacing: .04em;
+}
 
 /* the little card that opens over a selection */
 .lookup {
@@ -1010,14 +1028,16 @@ a.btn[hidden] { display: none; }
 
     var line = el("div", "top-line");
     if (e.paras) {                                  // a reading passage
+      b.className = "hit passage";
+      b.appendChild(el("span", "idx", e.index));
+      var col = el("div", "col");
       var thw = el("span", "hw");
       markUp(thw, e.title, q);
-      line.appendChild(thw);
-      line.appendChild(el("span", "senses-n", "no. " + e.index));
-      b.appendChild(line);
+      col.appendChild(thw);
       var tg = el("span", "gloss");
-      markUp(tg, e.paras[0], q);
-      b.appendChild(tg);
+      markUp(tg, e.paras[0].text, q);
+      col.appendChild(tg);
+      b.appendChild(col);
       return b;
     }
     var hw = el("span", "hw");
@@ -1337,12 +1357,20 @@ a.btn[hidden] { display: none; }
   function readingView(r) {
     var w = el("div", "read");
     w.appendChild(el("h1", null, r.title));
-    var words = r.paras.join(" ").split(/\s+/).length;
+    var words = r._text.split(/\s+/).length;
     w.appendChild(el("p", "meta", "Passage " + r.index + " · " + fmt(words) + " words"));
     w.appendChild(el("p", "hint",
       "Select any word or phrase to see what the notebook has on it — English to Vietnamese."));
     var prose = el("div", "prose");
-    r.paras.forEach(function (p) { prose.appendChild(el("p", null, p)); });
+    r.paras.forEach(function (x) {
+      var node = el("p", x.mark ? "labelled" : null, x.text);
+      if (x.mark) {
+        var m = el("span", "pmark", x.mark);
+        m.setAttribute("aria-hidden", "true");
+        node.insertBefore(m, node.firstChild);
+      }
+      prose.appendChild(node);
+    });
     prose.addEventListener("mouseup", onSelectInProse);
     prose.addEventListener("touchend", onSelectInProse);
     w.appendChild(prose);
@@ -2416,8 +2444,11 @@ a.btn[hidden] { display: none; }
     READINGS = data.readings || [];
     READINGS.forEach(function (r, i) {
       r.id = "r" + i;
+      // tolerate an older data.json still serving plain strings
+      r.paras = r.paras.map(function (p) { return typeof p === "string" ? { text: p } : p; });
+      r._text = r.paras.map(function (x) { return x.text; }).join(" ");
       r._w = norm(r.title);
-      r._all = norm(r.title + " " + r.paras.join(" "));
+      r._all = norm(r.title + " " + r._text);
     });
 
     var backup = readBackup();

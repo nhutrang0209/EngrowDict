@@ -54,11 +54,38 @@ ok('the shell itself stays light', shell.length < 160000,
      doc.querySelectorAll('.read .prose p').length > 1,
      doc.querySelector('.read h1')?.textContent + ' — ' +
      doc.querySelectorAll('.read .prose p').length + ' paragraphs');
+  ok('the row leads with the passage number, not a pill',
+     doc.querySelector('.hit.passage .idx')?.textContent === '1' &&
+     !doc.querySelector('.hit .senses-n'),
+     doc.querySelector('.hit.passage .idx')?.textContent);
+  ok('  and the title sits beside it',
+     doc.querySelector('.hit.passage .col .hw')?.textContent === 'Pine Trees',
+     doc.querySelector('.hit.passage .col .hw')?.textContent);
+
   ok('  and says selections can be looked up',
      (doc.querySelector('.read .hint')?.textContent || '').includes('Select any word'));
   ok('  the prose is justified, with hyphenation to keep the spacing even',
      /\.read \.prose p \{[^}]*text-align: justify/.test(read('app.css')) &&
      /\.read \.prose p \{[^}]*hyphens: auto/.test(read('app.css')));
+
+  // a lettered passage shows its letters in the margin
+  const q2 = doc.getElementById('q');
+  q2.value = 'Animal Minds';
+  q2.dispatchEvent(new w.Event('input'));
+  await wait(30);
+  click(w, doc.querySelector('.hit'));
+  await wait(30);
+  ok('a lettered passage marks its paragraphs',
+     doc.querySelectorAll('.read .prose p.labelled .pmark').length > 4,
+     [...doc.querySelectorAll('.read .prose .pmark')].slice(0, 6).map(n => n.textContent).join(''));
+  ok('  and the letter is no longer part of the sentence',
+     doc.querySelector('.read .prose p.labelled')?.textContent.startsWith('AIn 1977'),
+     doc.querySelector('.read .prose p.labelled')?.textContent.slice(0, 26));
+  q2.value = '';
+  q2.dispatchEvent(new w.Event('input'));
+  await wait(30);
+  click(w, doc.querySelector('.hit'));
+  await wait(30);
 
   /* --- the selection card ------------------------------------------------ */
   // jsdom has no real selection, so drive the same path the handler uses
