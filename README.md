@@ -156,3 +156,30 @@ thing — that is what the **Test connection** button is for.
 GitHub Pages serves `docs/` on the `main` branch directly — no CI. After editing,
 run `python build.py`, commit and push. When only the sheet's contents change,
 the Publish button handles it without touching the repo.
+
+## Pushing the Apps Script from the command line
+
+The sheet's script project is managed with [clasp](https://github.com/google/clasp),
+so `sheet-sync.gs` does not have to be pasted in by hand after the first setup.
+`appsscript/.clasp.json` already points at the bound project.
+
+```sh
+npm install -g @google/clasp
+clasp login                              # one browser consent, once per machine
+cp sheet-sync.gs appsscript/Code.js      # Code.js is generated, not committed
+cd appsscript && clasp push -f
+clasp redeploy <deploymentId> -d "EngrowDict web write endpoint"
+```
+
+`clasp list-deployments` prints the id. Use **redeploy** rather than a fresh
+`clasp deploy`, so the Web App link stays the same and nothing has to be pasted
+into Settings again.
+
+Two things clasp cannot do, because they are consent screens inside your own
+Google account: granting the script its scopes the first time, and revealing the
+key. Both happen together the first time you use **EngrowDict → Link for the web
+to write words** from the sheet.
+
+Careful with `clasp create`: it overwrites the local `appsscript.json` with a
+default that has no `webapp` block, which silently turns the deployment into
+something that answers 404. Put the block back and push again before deploying.
