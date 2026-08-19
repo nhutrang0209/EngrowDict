@@ -611,10 +611,18 @@ dialog::backdrop { background: rgba(8, 14, 11, .5); backdrop-filter: blur(2px); 
 .setfold-title { font-family: var(--mono); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--accent-hi); font-weight: 600; }
 .setfold-state { margin-left: auto; font-size: 11.5px; color: var(--faint); font-style: italic; }
 .setfold-body { padding: 14px 15px 15px; border-top: 1px solid var(--hair); display: flex; flex-direction: column; gap: 13px; }
-.setfold-lede { font-size: 12.5px; color: var(--ink-2); }
+.setfold-lede { font-family: var(--mono); font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--faint); }
 .setfold-note { font-size: 11.5px; color: var(--faint); line-height: 1.55; }
-.steps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 7px; font-size: 12.5px; color: var(--muted); line-height: 1.55; }
-.steps li::marker { color: var(--faint); font-family: var(--mono); font-size: 11px; }
+/* the reset takes list markers away, so the numbers are drawn back on */
+.steps { margin: 0; padding: 0; counter-reset: step; display: flex; flex-direction: column; gap: 9px; font-size: 12.5px; color: var(--ink-2); line-height: 1.5; }
+.steps > li { counter-increment: step; display: flex; align-items: flex-start; gap: 9px; }
+.steps > li::before {
+  content: counter(step);
+  flex: none; width: 18px; height: 18px; margin-top: 1px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 50%; background: var(--accent-soft); color: var(--accent-hi);
+  font-family: var(--mono); font-size: 10px; font-weight: 600;
+}
 .setfold .setgroup { margin-top: 2px; }
 .setfold.sub { background: var(--tint); }
 .setfold.sub[open] { background: var(--tint); }
@@ -2785,22 +2793,19 @@ a.btn[hidden] { display: none; }
     fold.appendChild(sum);
 
     var inner = el("div", "setfold-body");
-    inner.appendChild(el("p", "setfold-lede", "To work from a different workbook:"));
+    inner.appendChild(el("p", "setfold-lede", "To change workbook:"));
 
     var steps = el("ol", "steps");
     [
-      "Paste its link into Google Sheet link below, then Test connection and Save.",
-      "Press Sync in the top bar. Looking words up reads the published copy, so "
-        + "until you do, you are still searching the old workbook.",
-      "Words you add now go straight into the new sheet. To take one out, delete "
-        + "its row in the sheet itself and Sync again.",
+      "Paste the new link below, then Test connection and Save.",
+      "Press Sync in the top bar.",
+      "To take a word out, delete its row in the sheet, then Sync again.",
     ].forEach(function (t) { steps.appendChild(el("li", null, t)); });
     inner.appendChild(steps);
 
     inner.appendChild(el("p", "setfold-note",
-      "The other two fields stay as they are: the Web App link and the key belong "
-      + "to the Apps Script project, not to any one workbook, and so do the GitHub "
-      + "repo and token it publishes with."));
+      "The other two fields never change: they belong to the Apps Script project, "
+      + "not to a workbook."));
 
     /* Where those two come from, for whoever has not set them up before. */
     var first = el("details", "setfold sub");
@@ -2811,30 +2816,24 @@ a.btn[hidden] { display: none; }
     first.appendChild(fsum);
 
     var fbody = el("div", "setfold-body");
-    fbody.appendChild(el("p", "setfold-lede",
-      "The sheet hands you both. You never have to invent the key."));
+    fbody.appendChild(el("p", "setfold-lede", "The sheet hands you both."));
 
     var fsteps = el("ol", "steps");
-    var li1 = el("li", null, "In the workbook: Extensions → Apps Script. If the project "
-      + "is empty, paste in the whole of ");
-    var file = repoFileLink("sheet-sync.gs");
-    li1.appendChild(file);
-    li1.appendChild(document.createTextNode(" and Save."));
-    fsteps.appendChild(li1);
+    fsteps.appendChild(el("li", null, "In the sheet: Extensions → Apps Script."));
+    var li2 = el("li", null, "Paste in ");
+    li2.appendChild(repoFileLink("sheet-sync.gs"));
+    li2.appendChild(document.createTextNode(", then Save."));
+    fsteps.appendChild(li2);
     [
-      "Deploy → New deployment → pick the type Web app → Who has access: Anyone "
-        + "→ Deploy, and allow the permissions it asks for. If a deployment is "
-        + "already there, use Manage deployments → ✏️ → Version: New version instead, "
-        + "which keeps the same link.",
-      "Reload the workbook. An EngrowDict menu appears beside Help → Link for the "
-        + "web to write words. It shows the Web App link and the key together.",
-      "Copy those two into the fields below, press Test connection, then Save.",
+      "Deploy → New deployment → Web app → Anyone → Deploy, and allow it.",
+      "Reload the sheet: EngrowDict menu → Link for the web to write words.",
+      "Copy both into the fields below → Test connection → Save.",
     ].forEach(function (t) { fsteps.appendChild(el("li", null, t)); });
     fbody.appendChild(fsteps);
 
     fbody.appendChild(el("p", "setfold-note",
-      "Done once, this covers every workbook afterwards — a new sheet only needs "
-      + "the first field above."));
+      "Already deployed? Manage deployments → ✏️ → New version, which keeps the "
+      + "same link. Done once, this covers every workbook after it."));
     first.appendChild(fbody);
     inner.appendChild(first);
 
@@ -2842,12 +2841,12 @@ a.btn[hidden] { display: none; }
     links.id = "setgroup";
     links.appendChild(setRow("sheet", "Google Sheet link", "sheetUrl",
       "https://docs.google.com/spreadsheets/d/…",
-      "The workbook that Add word and Sync write to, and the Open sheet button.", false));
+      "Which workbook Add word and Sync use.", false));
     links.appendChild(setRow("webapp", "Sync Web App link", "webApp",
       "https://script.google.com/macros/s/…/exec",
-      "In the sheet: EngrowDict menu → Link for the web to write words.", false));
+      "EngrowDict menu → Link for the web to write words.", false));
     links.appendChild(setRow("key", "Sync key", "key", "",
-      "Shown by that same menu item, right under the link.", true));
+      "Shown with that link.", true));
     inner.appendChild(links);
 
     fold.appendChild(inner);

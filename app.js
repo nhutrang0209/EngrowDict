@@ -2024,22 +2024,19 @@
     fold.appendChild(sum);
 
     var inner = el("div", "setfold-body");
-    inner.appendChild(el("p", "setfold-lede", "To work from a different workbook:"));
+    inner.appendChild(el("p", "setfold-lede", "To change workbook:"));
 
     var steps = el("ol", "steps");
     [
-      "Paste its link into Google Sheet link below, then Test connection and Save.",
-      "Press Sync in the top bar. Looking words up reads the published copy, so "
-        + "until you do, you are still searching the old workbook.",
-      "Words you add now go straight into the new sheet. To take one out, delete "
-        + "its row in the sheet itself and Sync again.",
+      "Paste the new link below, then Test connection and Save.",
+      "Press Sync in the top bar.",
+      "To take a word out, delete its row in the sheet, then Sync again.",
     ].forEach(function (t) { steps.appendChild(el("li", null, t)); });
     inner.appendChild(steps);
 
     inner.appendChild(el("p", "setfold-note",
-      "The other two fields stay as they are: the Web App link and the key belong "
-      + "to the Apps Script project, not to any one workbook, and so do the GitHub "
-      + "repo and token it publishes with."));
+      "The other two fields never change: they belong to the Apps Script project, "
+      + "not to a workbook."));
 
     /* Where those two come from, for whoever has not set them up before. */
     var first = el("details", "setfold sub");
@@ -2050,30 +2047,24 @@
     first.appendChild(fsum);
 
     var fbody = el("div", "setfold-body");
-    fbody.appendChild(el("p", "setfold-lede",
-      "The sheet hands you both. You never have to invent the key."));
+    fbody.appendChild(el("p", "setfold-lede", "The sheet hands you both."));
 
     var fsteps = el("ol", "steps");
-    var li1 = el("li", null, "In the workbook: Extensions → Apps Script. If the project "
-      + "is empty, paste in the whole of ");
-    var file = repoFileLink("sheet-sync.gs");
-    li1.appendChild(file);
-    li1.appendChild(document.createTextNode(" and Save."));
-    fsteps.appendChild(li1);
+    fsteps.appendChild(el("li", null, "In the sheet: Extensions → Apps Script."));
+    var li2 = el("li", null, "Paste in ");
+    li2.appendChild(repoFileLink("sheet-sync.gs"));
+    li2.appendChild(document.createTextNode(", then Save."));
+    fsteps.appendChild(li2);
     [
-      "Deploy → New deployment → pick the type Web app → Who has access: Anyone "
-        + "→ Deploy, and allow the permissions it asks for. If a deployment is "
-        + "already there, use Manage deployments → ✏️ → Version: New version instead, "
-        + "which keeps the same link.",
-      "Reload the workbook. An EngrowDict menu appears beside Help → Link for the "
-        + "web to write words. It shows the Web App link and the key together.",
-      "Copy those two into the fields below, press Test connection, then Save.",
+      "Deploy → New deployment → Web app → Anyone → Deploy, and allow it.",
+      "Reload the sheet: EngrowDict menu → Link for the web to write words.",
+      "Copy both into the fields below → Test connection → Save.",
     ].forEach(function (t) { fsteps.appendChild(el("li", null, t)); });
     fbody.appendChild(fsteps);
 
     fbody.appendChild(el("p", "setfold-note",
-      "Done once, this covers every workbook afterwards — a new sheet only needs "
-      + "the first field above."));
+      "Already deployed? Manage deployments → ✏️ → New version, which keeps the "
+      + "same link. Done once, this covers every workbook after it."));
     first.appendChild(fbody);
     inner.appendChild(first);
 
@@ -2081,12 +2072,12 @@
     links.id = "setgroup";
     links.appendChild(setRow("sheet", "Google Sheet link", "sheetUrl",
       "https://docs.google.com/spreadsheets/d/…",
-      "The workbook that Add word and Sync write to, and the Open sheet button.", false));
+      "Which workbook Add word and Sync use.", false));
     links.appendChild(setRow("webapp", "Sync Web App link", "webApp",
       "https://script.google.com/macros/s/…/exec",
-      "In the sheet: EngrowDict menu → Link for the web to write words.", false));
+      "EngrowDict menu → Link for the web to write words.", false));
     links.appendChild(setRow("key", "Sync key", "key", "",
-      "Shown by that same menu item, right under the link.", true));
+      "Shown with that link.", true));
     inner.appendChild(links);
 
     fold.appendChild(inner);

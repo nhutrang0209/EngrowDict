@@ -129,25 +129,27 @@ const mk = store => boot({
     .map(li => li.textContent);
   ok('  the steps for changing workbook are spelled out there',
      steps.length === 3 && /Test connection and Save/.test(steps[0]) &&
-     /Sync/.test(steps[1]), steps.length + ' steps');
+     /^Press Sync/.test(steps[1]), steps.length + ' steps');
   ok('  and the note says the Web App link and key stay put',
-     /stay as they are/.test(
+     /never change/.test(
        a.doc.querySelector('#sheet-fold > .setfold-body > .setfold-note').textContent));
 
   // where the link and the key come from, for a first-time set-up
   const first = a.doc.getElementById('first-fold');
   const fsteps = [...first.querySelectorAll('.steps > li')].map(li => li.textContent);
   ok('  a nested section says where the link and key come from',
-     !!first && first.open === false && fsteps.length === 4);
+     !!first && first.open === false && fsteps.length === 5, fsteps.length + ' steps');
   ok('    it names the file to paste, and links to it in the repo',
-     /sheet-sync\.gs/.test(fsteps[0]) &&
+     /sheet-sync\.gs/.test(fsteps[1]) &&
      first.querySelector('a.filelink').href ===
        'https://github.com/nhutrang0209/EngrowDict/blob/main/sheet-sync.gs',
      first.querySelector('a.filelink').href);
   ok('    it says to deploy as a Web app open to Anyone',
-     /Web app/.test(fsteps[1]) && /Anyone/.test(fsteps[1]));
+     /Web app/.test(fsteps[2]) && /Anyone/.test(fsteps[2]), fsteps[2]);
   ok('    and names the menu item that shows both',
-     /Link for the web to write words/.test(fsteps[2]), fsteps[2]);
+     /Link for the web to write words/.test(fsteps[3]), fsteps[3]);
+  ok('    every step is its own line, none of them a paragraph',
+     fsteps.every(t => t.length < 80), String(Math.max.apply(null, fsteps.map(t => t.length))));
 
   const c = mk({ [SETTINGS_KEY]: JSON.stringify({
     sheetUrl: 'https://docs.google.com/spreadsheets/d/ABC/edit',
