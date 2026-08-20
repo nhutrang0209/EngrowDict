@@ -41,7 +41,8 @@ function page(store, posts, reply) {
 (async () => {
   /* ------------------------------------------------ A. in the browser */
   const posts0 = [];
-  const a = page(unlockedStore(), posts0, () => ({ ok: true, pong: true, ai: '', aiModel: '' }));
+  const a = page(unlockedStore(), posts0,
+    () => ({ ok: true, pong: true, script: 'SCRIPT-ID-1', ai: '', aiModel: '' }));
   await wait(900);
   const { doc, window: w } = a;
 
@@ -70,6 +71,10 @@ function page(store, posts, reply) {
   ok('  and, with no key in the sheet, says the Vietnamese column is Google Translate',
      /No key for the Vietnamese column is set/.test(doc.getElementById('set-msg').textContent) &&
      /EngrowDict menu/.test(doc.getElementById('set-msg').textContent),
+     doc.getElementById('set-msg').textContent);
+  ok('  and names the script it means, since a sheet may hold a copy of it',
+     /SCRIPT-ID-1/.test(doc.getElementById('set-msg').textContent) &&
+     /SOTRATU_AI_KEY/.test(doc.getElementById('set-msg').textContent),
      doc.getElementById('set-msg').textContent);
 
   /* A sheet that has one says which service, and which model. */
@@ -160,7 +165,10 @@ function page(store, posts, reply) {
   const call = payload => JSON.parse(sandbox.__doPost({ postData: { contents: JSON.stringify(payload) } }));
 
   ok('doPost refuses a wrong key', call({ key: 'nope', action: 'ping' }).ok === false);
-  ok('doPost answers a ping with the right key', call({ key: CFG.key, action: 'ping' }).ok === true);
+  const pong = call({ key: CFG.key, action: 'ping' });
+  ok('doPost answers a ping with the right key', pong.ok === true);
+  ok('  and names the script that answered, so a copy of it can be told apart',
+     pong.script === 'script-id-under-test' && pong.ai === '', JSON.stringify(pong));
 
   // Sample words must not already exist, or find() would pick up an old entry.
   const existing = new Set(sandbox.__buildData().entries.map(e => e.word));

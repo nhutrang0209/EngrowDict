@@ -284,11 +284,16 @@ function doPost(e) {
 
     /* The ping carries back which service will write the Vietnamese, so the
        page can say whether a key is set without a word being looked up. The
-       key itself is never sent: only its kind, and the model if one is named. */
+       key itself is never sent: only its kind, and the model if one is named.
+
+       And the id of this script, because a sheet can hold a copy of this file
+       and a copy has properties of its own: a key put into the wrong one of
+       them looks, from the page, exactly like a key put into none. */
     if (body.action === 'ping') {
       var pp = PropertiesService.getScriptProperties();
       var pkey = pp.getProperty(PROP_AI);
       return out({ ok: true, pong: true,
+                   script: ScriptApp.getScriptId(),
                    ai: pkey ? aiName(pkey) : '',
                    aiModel: pkey ? (pp.getProperty(PROP_AI_MODEL) || aiDefaultModel(pkey)) : '' });
     }

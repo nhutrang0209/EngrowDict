@@ -236,7 +236,10 @@ function appsScriptSandbox(grids, props, others) {
       base64Encode: t => Buffer.from(String(t), 'utf8').toString('base64'),
       Charset: { UTF_8: 'utf8' },
     },
-    ScriptApp: { getService: () => ({ getUrl: () => props.DEPLOYED_URL || '' }) },
+    ScriptApp: {
+      getService: () => ({ getUrl: () => props.DEPLOYED_URL || '' }),
+      getScriptId: () => props.SCRIPT_ID || 'script-id-under-test',
+    },
     LanguageApp: {
       translate: (text, from, to) => {
         net.translated.push(text);

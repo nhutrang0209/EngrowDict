@@ -3006,9 +3006,11 @@
         setMsg("Connected. " + (res.ai
           ? "Auto Fill asks " + res.ai + " for the Vietnamese"
             + (res.aiModel ? " (" + res.aiModel + ")" : "") + "."
-          : "No key for the Vietnamese column is set, so that column is Google "
-            + "Translate — EngrowDict menu in the sheet, Key for the Vietnamese "
-            + "column."), true);
+          : "No key for the Vietnamese column is set in the script this link "
+            + "runs" + (res.script ? " (" + res.script + ")" : "")
+            + ", so that column is Google Translate. Put it in there, not in a "
+            + "copy: EngrowDict menu in that script's own sheet, or Project "
+            + "Settings, Script properties, SOTRATU_AI_KEY."), true);
       }, function (err) {
         setMsg("No luck: " + (err && err.message ? err.message : err), false);
       });
