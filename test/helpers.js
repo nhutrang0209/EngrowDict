@@ -68,6 +68,11 @@ function boot(opts) {
           };
         }
       }
+      // jsdom has no dynamic import, so the page's hook stands in for
+      // bookify.js: hand back the book a picked file would have read as
+      if (opts.bookify) w.bookifyStub = opts.bookify;
+      if (!w.TextEncoder) w.TextEncoder = TextEncoder;
+      if (!w.TextDecoder) w.TextDecoder = TextDecoder;
       w.URL.createObjectURL = () => 'blob:fake';
       w.URL.revokeObjectURL = () => {};
       w.scrollTo = () => {};

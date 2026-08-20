@@ -276,8 +276,11 @@ a time.
 There are two ways in. **Add a book** in the Books tab takes a PDF or an EPUB
 straight from the browser: the file is read where it is picked — nothing is
 uploaded anywhere — and the book is kept in that browser's own storage, so it
-is on the device it was added on and no other. `import_books.py --publish` is
-the other way, and puts a book on the site for every device at once.
+is on the device it was added on and no other. Beside the button is **Put it on
+the site too**, which sends the same book to `docs/books/` in this repo, and
+from there every device has it; it needs a GitHub token, and how to get one is
+under *Books for every device* in Settings. `import_books.py --publish` does
+the same two writes from a terminal.
 
     pip install pymupdf
     python import_books.py books/your-book.pdf            # -> books/out/
@@ -309,6 +312,26 @@ actually picked.
 with the site to anyone who has the address, so it is for books that are out of
 copyright; a personal copy of one that is not belongs in `books/out/`, or in
 the browser through the Add a book button.
+
+### Putting a book up from the page
+
+The tick beside **Add a book** writes those same two files — the book, then the
+shelf that names it — over the GitHub API, so a book picked on the phone is on
+the laptop as well. What it needs is a fine-grained token with **Contents: read
+and write** on this repo, pasted into Settings → *Books for every device*. The
+token is kept in this browser exactly as the sheet key is: it never ships inside
+the page, so nobody else who opens the address can write to the repo. The repo
+itself is worked out from the address the page is served from; the field beside
+the token is only for a custom domain, which says nothing about what is behind
+it.
+
+The book goes up before the shelf, so the shelf never names a file that is not
+there yet, and re-sending a book replaces the one entry rather than adding a
+second. GitHub Pages then takes a minute to publish the commit, and an installed
+copy is cache-first, so a phone that already has the page may show yesterday's
+shelf once and the new book the next time it is opened. The tick is off every
+time: `docs/` is public, and putting a book there is a decision worth making on
+purpose rather than by leaving a box ticked.
 
 ## Installing it on a phone
 

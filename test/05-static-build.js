@@ -12,10 +12,11 @@ const mk = () => boot({
 });
 
 (async () => {
-  // 150 KB, not 140: the Books tab and the reader added about seven. The
-  // importer itself is not in here — bookify.js and pdf.js are fetched only
-  // when someone actually picks a file.
-  ok('the shell is small', shell.length < 150000, Math.round(shell.length / 1024) + ' KB');
+  // 160 KB, not 140: the Books tab and the reader added about seven, and
+  // putting a book on the site for every device another three. The importer
+  // itself is not in here — bookify.js and pdf.js are fetched only when
+  // someone actually picks a file.
+  ok('the shell is small', shell.length < 160000, Math.round(shell.length / 1024) + ' KB');
   ok('the shell embeds no data',
      !shell.includes('<script type="application/json" id="base">'));
   ok('the shell points at data.json', shell.includes('href="data.json"'));

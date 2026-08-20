@@ -492,6 +492,12 @@ body.resizing { cursor: col-resize; user-select: none; }
 .shelf-add { display: flex; align-items: center; gap: 10px; padding: 0 0 10px; flex-wrap: wrap; }
 .chip.add { cursor: pointer; }
 .chip.add:disabled { opacity: .5; cursor: default; }
+.shelf-pub {
+  display: flex; align-items: center; gap: 6px;
+  font-family: var(--mono); font-size: 10.5px; color: var(--faint);
+  cursor: pointer; user-select: none;
+}
+.shelf-pub input { accent-color: var(--accent-hi); margin: 0; cursor: pointer; }
 .shelf-msg { font-family: var(--mono); font-size: 10.5px; color: var(--faint); min-width: 0; }
 .shelf-msg.warn { color: var(--term); }
 .shelf-msg.good { color: var(--accent-hi); }

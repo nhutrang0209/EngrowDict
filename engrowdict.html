@@ -496,6 +496,12 @@ body.resizing { cursor: col-resize; user-select: none; }
 .shelf-add { display: flex; align-items: center; gap: 10px; padding: 0 0 10px; flex-wrap: wrap; }
 .chip.add { cursor: pointer; }
 .chip.add:disabled { opacity: .5; cursor: default; }
+.shelf-pub {
+  display: flex; align-items: center; gap: 6px;
+  font-family: var(--mono); font-size: 10.5px; color: var(--faint);
+  cursor: pointer; user-select: none;
+}
+.shelf-pub input { accent-color: var(--accent-hi); margin: 0; cursor: pointer; }
 .shelf-msg { font-family: var(--mono); font-size: 10.5px; color: var(--faint); min-width: 0; }
 .shelf-msg.warn { color: var(--term); }
 .shelf-msg.good { color: var(--accent-hi); }
@@ -1068,7 +1074,8 @@ a.btn[hidden] { display: none; }
      sheet. The passcode only gates this interface — anyone who reads the page
      source can find it, so treat it as a guard against stray clicks, not as
      real security. */
-  var settings = { sheetUrl: "", webApp: "", key: "", code: DEFAULT_PASSCODE, unlocked: false };
+  var settings = { sheetUrl: "", webApp: "", key: "", repo: "", ghToken: "",
+    code: DEFAULT_PASSCODE, unlocked: false };
 
   function readSettings() {
     try {
@@ -1078,6 +1085,8 @@ a.btn[hidden] { display: none; }
         settings.sheetUrl = s.sheetUrl || "";
         settings.webApp = s.webApp || "";
         settings.key = s.key || "";
+        settings.repo = s.repo || "";
+        settings.ghToken = s.ghToken || "";
         settings.code = s.code || DEFAULT_PASSCODE;
         settings.unlocked = !!s.unlocked;
       }
@@ -1869,6 +1878,8 @@ a.btn[hidden] { display: none; }
     }
     var addRow = document.getElementById("shelf-add");
     if (addRow) addRow.hidden = view !== "book" || !canAddBooks();
+    var pubRow = document.getElementById("book-pub-row");
+    if (pubRow) pubRow.hidden = !!(addRow && addRow.hidden) || !canPublishBooks();
     if (qInput) {
       qInput.placeholder = view === "read" ? "Search inside the passages…"
         : view === "book" ? "Search the shelf by title or author…"
@@ -2127,14 +2138,147 @@ a.btn[hidden] { display: none; }
      The file never leaves the machine. pdf.js reads it here, bookify.js cuts it
      into chapters here, and the result goes into this browser's own storage —
      which also means a book added on the phone is on the phone, and adding it
-     again on the laptop is the way it gets there. Publishing a book to every
-     device is import_books.py --publish, and that is a decision worth making
-     deliberately rather than by dropping a file on a page. */
+     again on the laptop is the way it gets there. Unless the tick beside the
+     button says otherwise: then the same book is also written to the site, and
+     every device has it. */
 
   /* The artifact is one file with nothing beside it, so it cannot reach
      bookify.js or pdf.js; the static copy can. */
   function canAddBooks() {
     return MODE === "static" && !!window.indexedDB;
+  }
+
+  /* ---- putting a book on the site ----------------------------------------
+
+     A book added on a device is on that device. Ticking Put it on the site
+     writes it to docs/books/ in the repo this page is served from — the same
+     two files import_books.py --publish writes, reached over the GitHub API
+     instead of from a terminal — and from there every device reads it off the
+     shelf. GitHub Pages takes a minute or so to publish the commit.
+
+     It needs a fine-grained token with Contents: write, which is kept in this
+     browser beside the sheet key and never ships inside the page, so nobody
+     else who opens the address can write to the repo. docs/ is public, so this
+     is for books that are out of copyright, and the tick is off by default
+     because that is a decision worth making on purpose. */
+
+  var BOOKS_DIR = "docs/books/";
+
+  /* owner/name, worked out from the address the page is served from, the way
+     the links in Settings are. The field in Settings is for a custom domain,
+     where the address says nothing about the repo behind it. */
+  function ghRepo() {
+    if (settings.repo) {
+      return settings.repo.replace(/^https?:\/\/github\.com\//, "")
+        .replace(/\.git$/, "").replace(/^\/+|\/+$/g, "");
+    }
+    var host = location.hostname || "";
+    if (host.slice(-10) !== ".github.io") return "";
+    var owner = host.slice(0, -10);
+    var seg = location.pathname.split("/").filter(Boolean)[0];
+    return owner + "/" + (seg || host);
+  }
+
+  function canPublishBooks() {
+    return canAddBooks() && unlocked() && !!settings.ghToken && !!ghRepo();
+  }
+
+  /* The API wants base64 of the bytes, and btoa wants one byte per character,
+     so the text goes through UTF-8 first — a book of Vietnamese notes or curly
+     quotes would come out wrong otherwise. */
+  function b64(text) {
+    var bytes = new TextEncoder().encode(text), out = "", i;
+    for (i = 0; i < bytes.length; i += 0x8000) {
+      out += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    }
+    return btoa(out);
+  }
+
+  function unb64(text) {
+    var raw = atob(String(text).replace(/\s/g, ""));
+    var bytes = new Uint8Array(raw.length), i;
+    for (i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+    return new TextDecoder().decode(bytes);
+  }
+
+  function gh(path, init) {
+    init = init || {};
+    init.headers = {
+      Authorization: "Bearer " + settings.ghToken,
+      Accept: "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28"
+    };
+    return fetch("https://api.github.com/repos/" + ghRepo() + "/contents/" + path, init);
+  }
+
+  /* null for a file that is not there yet — the first book, or the first
+     shelf — which is the normal case, not a failure. */
+  function ghRead(path) {
+    return gh(path).then(function (r) {
+      if (r.status === 404) return null;
+      if (!r.ok) return ghBlame(r);
+      return r.json();
+    });
+  }
+
+  function ghWrite(path, text, sha, message) {
+    var body = { message: message, content: b64(text) };
+    if (sha) body.sha = sha;
+    return gh(path, { method: "PUT", body: JSON.stringify(body) })
+      .then(function (r) { return r.ok ? r.json() : ghBlame(r); });
+  }
+
+  /* GitHub says why in the body; a bare status code is no help to anyone. */
+  function ghBlame(r) {
+    return r.json().then(function (e) {
+      var why = e && e.message ? e.message : "GitHub answered " + r.status;
+      if (r.status === 401 || r.status === 403) {
+        why = "the token was refused — it needs Contents: write on " + ghRepo();
+      } else if (r.status === 404) {
+        why = ghRepo() + " was not found, or the token cannot see it";
+      }
+      var err = new Error(why);
+      err.status = r.status;
+      throw err;
+    }, function () {
+      var err = new Error("GitHub answered " + r.status);
+      err.status = r.status;
+      throw err;
+    });
+  }
+
+  /* The book first and the shelf after it: a shelf is read by every device
+     that opens the page, and it must never name a file that is not there. */
+  function publishBook(book) {
+    var file = BOOKS_DIR + book.slug + ".json";
+    return ghRead(file).then(function (got) {
+      return ghWrite(file, JSON.stringify(book), got && got.sha,
+        "Add " + book.title + " to the shelf");
+    }).then(function () { return putOnShelf(book, 0); });
+  }
+
+  function putOnShelf(book, tried) {
+    var path = BOOKS_DIR + "index.json";
+    return ghRead(path).then(function (got) {
+      var list = [];
+      if (got && got.content) {
+        try { list = JSON.parse(unb64(got.content)); } catch (err) { list = []; }
+      }
+      if (!Array.isArray(list)) list = [];
+      var entry = onShelf(book);
+      delete entry.mine;                 // it is the site's copy now, not this device's
+      list = list.filter(function (b) { return b && b.slug !== book.slug; });
+      list.push(entry);
+      list.sort(function (a, b) { return a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : 0; });
+      return ghWrite(path, JSON.stringify(list), got && got.sha,
+        "Put " + book.title + " on the shelf");
+    }).catch(function (err) {
+      // another device wrote the shelf between the read and the write
+      if (tried < 2 && (err.status === 409 || err.status === 422)) {
+        return putOnShelf(book, tried + 1);
+      }
+      throw err;
+    });
   }
 
   function buildAdd() {
@@ -2153,6 +2297,17 @@ a.btn[hidden] { display: none; }
     b.id = "book-add";
     b.addEventListener("click", function () { pick.value = ""; pick.click(); });
 
+    /* Off unless it is asked for: the button on its own writes to this
+       browser, and this one writes to the public site. */
+    var pub = el("label", "shelf-pub");
+    pub.id = "book-pub-row";
+    pub.hidden = true;
+    var tick = el("input");
+    tick.type = "checkbox";
+    tick.id = "book-pub";
+    pub.appendChild(tick);
+    pub.appendChild(el("span", null, "Put it on the site too"));
+
     var msg = el("span", "shelf-msg");
     msg.id = "book-msg";
 
@@ -2162,6 +2317,7 @@ a.btn[hidden] { display: none; }
 
     row.appendChild(b);
     row.appendChild(pick);
+    row.appendChild(pub);
     row.appendChild(msg);
     return row;
   }
@@ -2173,23 +2329,45 @@ a.btn[hidden] { display: none; }
     n.className = "shelf-msg" + (tone ? " " + tone : "");
   }
 
+  /* Fetched the first time a file is picked, and never on a visit that picks
+     none. Kept behind a hook because the test harness runs the page in jsdom,
+     which has no dynamic import to run. */
+  function readBookFile(file, say) {
+    if (window.bookifyStub) return Promise.resolve(window.bookifyStub(file, say));
+    return import("./bookify.js").then(function (mod) { return mod.bookify(file, say); });
+  }
+
   function takeBook(file) {
     var add = document.getElementById("book-add");
     if (add) add.disabled = true;
     bookMsg("Reading " + file.name + "…", "warn");
-    import("./bookify.js").then(function (mod) {
-      return mod.bookify(file, function (at, all) {
-        bookMsg("Reading page " + fmt(at) + " of " + fmt(all) + "…", "warn");
-      });
+    readBookFile(file, function (at, all) {
+      bookMsg("Reading page " + fmt(at) + " of " + fmt(all) + "…", "warn");
     }).then(function (book) {
+      var tick = document.getElementById("book-pub");
+      var alsoSite = !!(tick && tick.checked) && canPublishBooks();
       return keepBook(book).then(function () {
         bookText[book.slug] = book;
         bookMsg(book.title + " · "
-          + plural(book.chapters.length, "chapter", "chapters"), "good");
+          + plural(book.chapters.length, "chapter", "chapters")
+          + (alsoSite ? " · putting it on the site…" : ""),
+          alsoSite ? "warn" : "good");
         return refreshShelf().then(function () {
           var found = null;
           BOOKS.forEach(function (b) { if (b.slug === book.slug) found = b; });
           if (found) { select(found.id); showDetail(); }
+        });
+      }).then(function () {
+        /* The book is readable here already; the site is the slow half, so it
+           is reported when it lands rather than waited for first. */
+        if (!alsoSite) return null;
+        return publishBook(book).then(function () {
+          if (tick) tick.checked = false;
+          bookMsg(book.title + " is on the site — every device has it once "
+            + "GitHub Pages has published the commit, a minute or so.", "good");
+        }, function (err) {
+          bookMsg("On this device, but not on the site — "
+            + (err && err.message ? err.message : "unknown"), "bad");
         });
       });
     }).catch(function (err) {
@@ -3345,6 +3523,47 @@ a.btn[hidden] { display: none; }
     fold.appendChild(inner);
     body.appendChild(fold);
 
+    /* --- the shelf on the site ------------------------------------------ */
+    /* Only wanted by whoever publishes books rather than keeping them on one
+       device, so it is folded away like the sheet is. */
+    var gfold = el("details", "setfold");
+    gfold.id = "books-fold";
+    var gsum = el("summary", "setfold-head");
+    gsum.appendChild(el("span", "setfold-title", "Books for every device"));
+    var gstate = el("span", "setfold-state");
+    gstate.id = "books-fold-state";
+    gsum.appendChild(gstate);
+    gfold.appendChild(gsum);
+
+    var ginner = el("div", "setfold-body");
+    ginner.appendChild(el("p", "setfold-lede",
+      "With a token here, Add a book offers to put the book on the site as "
+      + "well as on this device, and every device then reads it off the shelf."));
+
+    var gsteps = el("ol", "steps");
+    [
+      "On GitHub: Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token.",
+      "Repository access: only this repo. Permissions → Contents: Read and write.",
+      "Paste the token below and Save. It stays in this browser.",
+    ].forEach(function (t) { gsteps.appendChild(el("li", null, t)); });
+    ginner.appendChild(gsteps);
+
+    ginner.appendChild(el("p", "setfold-note",
+      "The book is committed to docs/books/, which is served to anyone who has "
+      + "the address, so put out-of-copyright books there and keep the rest on "
+      + "the device. GitHub Pages takes a minute to publish a commit."));
+
+    var glinks = el("div", "setgroup");
+    glinks.id = "setgroup-books";
+    glinks.appendChild(setRow("repo", "GitHub repo", "repo", ghRepo() || "owner/name",
+      "Only for a custom domain — otherwise the address says which repo.", false));
+    glinks.appendChild(setRow("ghtoken", "GitHub token", "ghToken", "github_pat_…",
+      "Fine-grained, Contents: read and write.", true));
+    ginner.appendChild(glinks);
+
+    gfold.appendChild(ginner);
+    body.appendChild(gfold);
+
     var note = el("p", "set-note");
     note.id = "set-note";
     body.appendChild(note);
@@ -3376,6 +3595,7 @@ a.btn[hidden] { display: none; }
       readForm();
       writeSettings();
       drawSettings();
+      syncViewButtons();      // a token just pasted in puts the tick on the shelf
       refresh();
       dlg.close();
       toast("Settings saved");
@@ -3384,7 +3604,8 @@ a.btn[hidden] { display: none; }
     dlg.appendChild(foot);
 
     function readForm() {
-      ["sheet:sheetUrl", "webapp:webApp", "key:key"].forEach(function (pair) {
+      ["sheet:sheetUrl", "webapp:webApp", "key:key",
+       "repo:repo", "ghtoken:ghToken"].forEach(function (pair) {
         var p = pair.split(":");
         var row = document.getElementById("row-" + p[0]);
         var input = row.querySelector("input");
@@ -3473,6 +3694,11 @@ a.btn[hidden] { display: none; }
     showRowValue("sheet", "sheetUrl");
     showRowValue("webapp", "webApp");
     showRowValue("key", "key");
+    showRowValue("repo", "repo");
+    showRowValue("ghtoken", "ghToken");
+
+    document.getElementById("books-fold-state").textContent =
+      canPublishBooks() ? "publishing" : ghRepo() ? "device only" : "not on GitHub Pages";
 
     var ready = !!settings.sheetUrl && !!settings.webApp && !!settings.key;
     var fold = document.getElementById("sheet-fold");
@@ -3482,7 +3708,8 @@ a.btn[hidden] { display: none; }
 
     var on = unlocked();
     document.getElementById("setgroup").classList.toggle("disabled", !on);
-    var btns = document.querySelectorAll("#setgroup .edit-btn");
+    document.getElementById("setgroup-books").classList.toggle("disabled", !unlocked());
+    var btns = document.querySelectorAll("#setgroup .edit-btn, #setgroup-books .edit-btn");
     for (var i = 0; i < btns.length; i++) btns[i].disabled = !on;
     document.getElementById("set-test").disabled = !on;
     document.getElementById("set-save").disabled = !on;
