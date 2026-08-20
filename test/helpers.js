@@ -50,6 +50,24 @@ function boot(opts) {
           removeItem: k => { delete store[k]; },
         },
       });
+      // jsdom has no IndexedDB, and the books added on a device live in it
+      if (opts.idb || opts.idbSeed) {
+        const fake = require('fake-indexeddb');
+        w.indexedDB = new fake.IDBFactory();
+        ['IDBKeyRange', 'IDBTransaction', 'IDBRequest', 'IDBDatabase',
+         'IDBObjectStore'].forEach(n => { if (fake[n]) w[n] = fake[n]; });
+        // seeded here, before the page runs, so the shelf it reads at start-up
+        // already has the book on it — no second read to wait for
+        if (opts.idbSeed) {
+          const req = w.indexedDB.open('engrowdict-books', 1);
+          req.onupgradeneeded = () =>
+            req.result.createObjectStore('books', { keyPath: 'slug' });
+          req.onsuccess = () => {
+            const st = req.result.transaction('books', 'readwrite').objectStore('books');
+            opts.idbSeed.forEach(b => st.put(b));
+          };
+        }
+      }
       w.URL.createObjectURL = () => 'blob:fake';
       w.URL.revokeObjectURL = () => {};
       w.scrollTo = () => {};

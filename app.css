@@ -486,6 +486,32 @@ body.resizing { cursor: col-resize; user-select: none; }
   margin-top: 18px; padding: 11px 14px; border-radius: var(--r-m);
   background: var(--accent-soft); color: var(--accent-hi); font-size: 12.5px;
 }
+/* Adding a book: one button where the kind-chips sit in the dictionary, and a
+   line beside it that says what is happening — reading a 300-page PDF takes
+   long enough that silence would read as nothing happening. */
+.shelf-add { display: flex; align-items: center; gap: 10px; padding: 0 0 10px; flex-wrap: wrap; }
+.chip.add { cursor: pointer; }
+.chip.add:disabled { opacity: .5; cursor: default; }
+.shelf-msg { font-family: var(--mono); font-size: 10.5px; color: var(--faint); min-width: 0; }
+.shelf-msg.warn { color: var(--term); }
+.shelf-msg.good { color: var(--accent-hi); }
+.shelf-msg.bad { color: var(--flag); }
+
+/* A book's table of contents: a chapter is a row you press, and the rows have
+   to stay readable at sixty of them, so they are quieter than a search hit. */
+.toc { margin-top: 24px; display: flex; flex-direction: column; }
+.toc-row {
+  display: grid; grid-template-columns: 30px 1fr auto; gap: 12px; align-items: baseline;
+  width: 100%; padding: 11px 10px; border: 0; border-radius: var(--r-s);
+  background: none; text-align: left; cursor: pointer;
+  border-bottom: 1px solid var(--rule);
+}
+.toc-row:last-child { border-bottom: 0; }
+.toc-row:hover { background: var(--accent-soft); }
+.toc-row .idx { font-family: var(--mono); font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.toc-row .hw { font-family: var(--serif); font-size: 16px; color: var(--ink); min-width: 0; }
+.toc-row .gloss { font-family: var(--mono); font-size: 10.5px; color: var(--faint); white-space: nowrap; }
+
 .read .prose { margin-top: 26px; display: flex; flex-direction: column; gap: 18px; }
 .read .prose p {
   position: relative;

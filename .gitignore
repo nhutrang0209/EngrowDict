@@ -3,3 +3,5 @@ __pycache__/
 test/republished.html
 test/grids.json
 appsscript/Code.js
+/books/*
+!/books/README.md

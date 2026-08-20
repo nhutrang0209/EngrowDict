@@ -267,6 +267,49 @@ Google is never touched while testing: `SpreadsheetApp` and `fetch` are both
 stand-ins. Deploying the Web App, and CORS, can only be confirmed on the real
 thing — that is what the **Test connection** button is for.
 
+## Books
+
+A whole book is not a passage. It is too big to ship inside the page and too
+long to read in one screen, so it is split into chapters and fetched a book at
+a time.
+
+There are two ways in. **Add a book** in the Books tab takes a PDF or an EPUB
+straight from the browser: the file is read where it is picked — nothing is
+uploaded anywhere — and the book is kept in that browser's own storage, so it
+is on the device it was added on and no other. `import_books.py --publish` is
+the other way, and puts a book on the site for every device at once.
+
+    pip install pymupdf
+    python import_books.py books/your-book.pdf            # -> books/out/
+    python import_books.py --publish books/your-book.pdf  # -> docs/books/
+
+`import_books.py` reads PDF and EPUB alike and undoes what a page layout does:
+the running header repeated on every page, the page number, the drop capital
+that comes out of the text layer as a letter standing on its own, and the words
+broken in half by a line ending. Chapters come from the book's own table of
+contents where it has one, and from its headings where it does not — and only
+from headings that are headings: `"SEIZE HIM!"` is a line of the story, not a
+chapter title, and all-caps is no evidence either way.
+
+It writes one JSON file per book plus an `index.json`, the shelf. The page reads
+the shelf when it opens — a few hundred bytes — and the text of a book only when
+a chapter is opened, so a shelf of ten books costs nothing until one is read. A
+chapter is then a passage like any other: same prose, same select-a-word-to-look-
+it-up, and the service worker keeps it for reading with no signal.
+
+`bookify.js` is the same reasoning again in the browser, for the Add a book
+button — with one extra job, because pdf.js hands over loose runs of glyphs
+rather than paragraphs, so runs have to be gathered into lines and lines into
+paragraphs first. `test/make_layout_pdf.py` draws a PDF that does all of the
+awkward things at once, and both importers are held to the same result on it.
+pdf.js is vendored in `docs/vendor/`, 1.8 MB that is fetched only when a file is
+actually picked.
+
+`books/` is not committed. `--publish` writes to `docs/books/`, which is served
+with the site to anyone who has the address, so it is for books that are out of
+copyright; a personal copy of one that is not belongs in `books/out/`, or in
+the browser through the Add a book button.
+
 ## Installing it on a phone
 
 The static copy is a PWA: `docs/manifest.webmanifest`, `docs/sw.js` and three

@@ -35,10 +35,14 @@
   var BASE = null;
   var ADDED = JSON.parse(document.getElementById("added").textContent);
   var READINGS = [];
+  var BOOKS = [];            // the shelf: titles and contents, never the text
+  var SHELF_NET = [];        // what the site publishes
+  var SHELF_MINE = [];       // what was added on this device
+  var bookText = {};         // slug -> the whole book, once it has been opened
   var entries = [];
   var byId = {};
   var canWrite = true;
-  var view = "vocab";        // vocab | read
+  var view = "vocab";        // vocab | read | book
   var kindFilter = "all";
   var query = "";
   var rows = [];             // rows feeding the virtual list
@@ -46,6 +50,8 @@
   var counts = {};
   var selectedId = null;
   var selectedRead = null;
+  var selectedBook = null;
+  var openChapter = 0;       // 0 is the table of contents
 
   /* ---- helpers ---------------------------------------------------------- */
   function norm(s) {
@@ -116,6 +122,7 @@
     }
     entries.sort(function (a, b) { return a._w < b._w ? -1 : a._w > b._w ? 1 : 0; });
     for (var j = 0; j < READINGS.length; j++) byId[READINGS[j].id] = READINGS[j];
+    for (var b = 0; b < BOOKS.length; b++) byId[BOOKS[b].id] = BOOKS[b];
 
     byWord = {};
     for (var k = 0; k < entries.length; k++) {
@@ -353,6 +360,7 @@
   /* ---- search ------------------------------------------------------------ */
   function pool() {
     if (view === "read") return READINGS;
+    if (view === "book") return BOOKS;
     if (kindFilter === "all") return entries;
     return entries.filter(function (e) {
       return kindFilter === "mine" ? !!e.mine : e.type === kindFilter;
@@ -457,6 +465,20 @@
     b.addEventListener("click", function () { select(e.id); showDetail(); });
 
     var line = el("div", "top-line");
+    if (e.chapters) {                               // a book on the shelf
+      b.className = "hit passage";
+      b.appendChild(el("span", "idx", e.index));
+      var bcol = el("div", "col");
+      var bhw = el("span", "hw");
+      markUp(bhw, e.title, q);
+      bcol.appendChild(bhw);
+      var bg = el("span", "gloss");
+      markUp(bg, (e.author ? e.author + " · " : "")
+        + plural(e.chapters.length, "chapter", "chapters"), q);
+      bcol.appendChild(bg);
+      b.appendChild(bcol);
+      return b;
+    }
     if (e.paras) {                                  // a reading passage
       b.className = "hit passage";
       b.appendChild(el("span", "idx", e.index));
@@ -504,6 +526,7 @@
   function select(id, keepScroll) {
     selectedId = id;
     if (view === "read") selectedRead = byId[id] || null;
+    if (view === "book") { selectedBook = byId[id] || null; openChapter = 0; }
     var ns = windowBox.querySelectorAll(".hit");
     for (var i = 0; i < ns.length; i++) {
       var e = hits[Number(ns[i].dataset.i)];
@@ -556,9 +579,15 @@
     var host = document.getElementById("detail-inner");
     host.textContent = "";
     // a passage runs the full width; an entry keeps a narrower measure
-    host.className = "detail-inner" + (view === "read" && selectedRead ? " wide" : "");
+    var wide = (view === "read" && selectedRead)
+      || (view === "book" && selectedBook && openChapter);
+    host.className = "detail-inner" + (wide ? " wide" : "");
     if (view === "read") {
       host.appendChild(selectedRead ? readingView(selectedRead) : blankView());
+      return;
+    }
+    if (view === "book") {
+      host.appendChild(selectedBook ? bookView(selectedBook) : blankView());
       return;
     }
     var e = byId[selectedId];
@@ -979,7 +1008,9 @@
 
   /* Two views, two tabs — the dictionary and the passages are separate places
      rather than a switch on one place. */
-  var TABS = [["vocab", "Dictionary", "tab-dictionary"], ["read", "Passages", "tab-passages"]];
+  var TABS = [["vocab", "Dictionary", "tab-dictionary"],
+              ["read", "Passages", "tab-passages"],
+              ["book", "Books", "tab-books"]];
 
   function buildTabs() {
     var strip = el("div", "tabs");
@@ -995,6 +1026,8 @@
         if (view === t[0]) return;
         view = t[0];
         selectedRead = null;
+        selectedBook = null;
+        openChapter = 0;
         selectedId = null;
         query = "";
         if (qInput) qInput.value = "";
@@ -1013,14 +1046,19 @@
       var bs = strip.querySelectorAll(".tab");
       for (var i = 0; i < bs.length; i++) {
         bs[i].setAttribute("aria-selected", String(bs[i].dataset.view === view));
-        bs[i].hidden = bs[i].dataset.view === "read" && !READINGS.length;
+        var v = bs[i].dataset.view;
+        bs[i].hidden = (v === "read" && !READINGS.length)
+          || (v === "book" && !BOOKS.length && !canAddBooks());
       }
     }
+    var addRow = document.getElementById("shelf-add");
+    if (addRow) addRow.hidden = view !== "book" || !canAddBooks();
     if (qInput) {
-      qInput.placeholder = view === "read"
-        ? "Search inside the passages…" : "Search a word, a meaning, or Vietnamese…";
+      qInput.placeholder = view === "read" ? "Search inside the passages…"
+        : view === "book" ? "Search the shelf by title or author…"
+        : "Search a word, a meaning, or Vietnamese…";
     }
-    if (view !== "read") closePopDict();
+    if (view !== "read" && view !== "book") closePopDict();
     syncPopButton();
   }
 
@@ -1072,11 +1110,12 @@
     return out;
   }
 
-  function readingView(r) {
+  function readingView(r, lead) {
     var w = el("div", "read");
     w.appendChild(el("h1", null, r.title));
     var words = r._text.split(/\s+/).length;
-    w.appendChild(el("p", "meta", "Passage " + r.index + " · " + fmt(words) + " words"));
+    w.appendChild(el("p", "meta",
+      (lead || "Passage " + r.index) + " · " + fmt(words) + " words"));
     w.appendChild(el("p", "hint",
       "Select any word or phrase to see what the notebook has on it — English to Vietnamese."));
     var prose = el("div", "prose");
@@ -1093,6 +1132,269 @@
     prose.addEventListener("touchend", onSelectInProse);
     w.appendChild(prose);
     return w;
+  }
+
+  /* ---- books --------------------------------------------------------------
+
+     A book arrives as a shelf entry — its title and the names of its chapters
+     — and its text only when a chapter is opened. That is what keeps a library
+     from costing anything until it is read. Once open, a chapter is a passage
+     like any other: the same prose, the same select-to-look-up. */
+
+  /* Books added here live in IndexedDB rather than in localStorage: a novel is
+     the best part of a megabyte and localStorage is a few, and it already holds
+     the words waiting to be pushed to the sheet. */
+  var BOOK_DB = "engrowdict-books";
+
+  function withDB() {
+    return new Promise(function (yes, no) {
+      if (!window.indexedDB) { no(new Error("no IndexedDB")); return; }
+      var req = window.indexedDB.open(BOOK_DB, 1);
+      req.onupgradeneeded = function () {
+        if (!req.result.objectStoreNames.contains("books")) {
+          req.result.createObjectStore("books", { keyPath: "slug" });
+        }
+      };
+      req.onsuccess = function () { yes(req.result); };
+      req.onerror = function () { no(req.error); };
+    });
+  }
+
+  function inStore(mode, run) {
+    return withDB().then(function (db) {
+      return new Promise(function (yes, no) {
+        var tx = db.transaction("books", mode);
+        var req = run(tx.objectStore("books"));
+        req.onsuccess = function () { yes(req.result); };
+        req.onerror = function () { no(req.error); };
+      });
+    });
+  }
+
+  function myBooks() {
+    return inStore("readonly", function (st) { return st.getAll(); })
+      .then(function (list) { return list || []; }, function () { return []; });
+  }
+
+  function keepBook(book) {
+    return inStore("readwrite", function (st) { return st.put(book); });
+  }
+
+  function dropBook(slug) {
+    return inStore("readwrite", function (st) { return st.delete(slug); });
+  }
+
+  function loadBook(book) {
+    var slug = book.slug;
+    if (bookText[slug]) return Promise.resolve(bookText[slug]);
+    var get = book.mine
+      ? inStore("readonly", function (st) { return st.get(slug); })
+      : fetch("books/" + slug + ".json").then(function (r) {
+          if (!r.ok) throw new Error("books/" + slug + ".json " + r.status);
+          return r.json();
+        });
+    return get.then(function (b) {
+      if (!b || !b.chapters) throw new Error("empty book");
+      bookText[slug] = b;
+      return b;
+    });
+  }
+
+  function chapterAsPassage(book, c) {
+    var paras = c.paras.map(function (t) { return { text: t }; });
+    return {
+      id: book.id + "#" + c.n,
+      title: c.title,
+      index: c.n,
+      paras: paras,
+      _text: c.paras.join(" ")
+    };
+  }
+
+  function contentsView(book) {
+    var w = el("div", "read contents");
+    w.appendChild(el("h1", null, book.title));
+    var words = 0;
+    book.chapters.forEach(function (c) { words += c.words || 0; });
+    w.appendChild(el("p", "meta",
+      (book.author ? book.author + " · " : "")
+      + plural(book.chapters.length, "chapter", "chapters")
+      + (words ? " · " + fmt(words) + " words" : "")));
+    if (book.mine) {
+      var nav = el("div", "entry-nav");
+      nav.appendChild(el("span", "grow"));
+      var rm = el("button", "btn", "Remove from this device");
+      rm.type = "button";
+      rm.addEventListener("click", function () { forgetBook(book); });
+      nav.appendChild(rm);
+      w.appendChild(nav);
+    }
+    var list = el("div", "toc");
+    book.chapters.forEach(function (c) {
+      var b = el("button", "toc-row");
+      b.type = "button";
+      b.appendChild(el("span", "idx", String(c.n)));
+      b.appendChild(el("span", "hw", c.title));
+      if (c.words) b.appendChild(el("span", "gloss", fmt(c.words) + " words"));
+      b.addEventListener("click", function () { openChapter = c.n; drawDetail(); });
+      list.appendChild(b);
+    });
+    w.appendChild(list);
+    return w;
+  }
+
+  function chapterView(book, full) {
+    var at = -1;
+    for (var i = 0; i < full.chapters.length; i++) {
+      if (full.chapters[i].n === openChapter) at = i;
+    }
+    if (at < 0) { openChapter = 0; return contentsView(book); }
+    var c = full.chapters[at];
+    var w = readingView(chapterAsPassage(book, c), "Chapter " + c.n + " of " + book.title);
+
+    function toContents() { openChapter = 0; drawDetail(); }
+    var top = el("div", "entry-nav");
+    var up = el("button", "btn", "← Contents");
+    up.type = "button";
+    up.addEventListener("click", toContents);
+    top.appendChild(up);
+    w.insertBefore(top, w.firstChild);
+
+    var nav = el("div", "entry-nav");
+    var back = el("button", "btn", "← Contents");
+    back.type = "button";
+    back.addEventListener("click", toContents);
+    nav.appendChild(back);
+    nav.appendChild(el("span", "grow"));
+    [[-1, "Previous"], [1, "Next"]].forEach(function (d) {
+      var to = full.chapters[at + d[0]];
+      var b = el("button", "btn", d[1]);
+      b.type = "button";
+      b.disabled = !to;
+      if (to) {
+        b.addEventListener("click", function () {
+          openChapter = to.n;
+          drawDetail();
+          var box = document.getElementById("detail");
+          if (box) box.scrollTop = 0;
+        });
+      }
+      nav.appendChild(b);
+    });
+    w.appendChild(nav);
+    return w;
+  }
+
+  function bookView(book) {
+    if (!openChapter) return contentsView(book);
+    var full = bookText[book.slug];
+    if (full) return chapterView(book, full);
+    var w = el("div", "read");
+    w.appendChild(el("h1", null, book.title));
+    w.appendChild(el("p", "meta", "Opening the book…"));
+    var want = book.slug, chapter = openChapter;
+    loadBook(book).then(function () {
+      if (view === "book" && selectedBook && selectedBook.slug === want
+        && openChapter === chapter) drawDetail();
+    }, function () {
+      if (view === "book" && selectedBook && selectedBook.slug === want) {
+        openChapter = 0;
+        drawDetail();
+        toast("Could not open " + book.title);
+      }
+    });
+    return w;
+  }
+
+  /* ---- adding a book ------------------------------------------------------
+
+     The file never leaves the machine. pdf.js reads it here, bookify.js cuts it
+     into chapters here, and the result goes into this browser's own storage —
+     which also means a book added on the phone is on the phone, and adding it
+     again on the laptop is the way it gets there. Publishing a book to every
+     device is import_books.py --publish, and that is a decision worth making
+     deliberately rather than by dropping a file on a page. */
+
+  /* The artifact is one file with nothing beside it, so it cannot reach
+     bookify.js or pdf.js; the static copy can. */
+  function canAddBooks() {
+    return MODE === "static" && !!window.indexedDB;
+  }
+
+  function buildAdd() {
+    var row = el("div", "shelf-add");
+    row.id = "shelf-add";
+    row.hidden = true;
+
+    var pick = el("input");
+    pick.type = "file";
+    pick.id = "book-file";
+    pick.accept = ".pdf,.epub,application/pdf,application/epub+zip";
+    pick.hidden = true;
+
+    var b = el("button", "chip add", "Add a book");
+    b.type = "button";
+    b.id = "book-add";
+    b.addEventListener("click", function () { pick.value = ""; pick.click(); });
+
+    var msg = el("span", "shelf-msg");
+    msg.id = "book-msg";
+
+    pick.addEventListener("change", function () {
+      if (pick.files && pick.files[0]) takeBook(pick.files[0]);
+    });
+
+    row.appendChild(b);
+    row.appendChild(pick);
+    row.appendChild(msg);
+    return row;
+  }
+
+  function bookMsg(text, tone) {
+    var n = document.getElementById("book-msg");
+    if (!n) return;
+    n.textContent = text || "";
+    n.className = "shelf-msg" + (tone ? " " + tone : "");
+  }
+
+  function takeBook(file) {
+    var add = document.getElementById("book-add");
+    if (add) add.disabled = true;
+    bookMsg("Reading " + file.name + "…", "warn");
+    import("./bookify.js").then(function (mod) {
+      return mod.bookify(file, function (at, all) {
+        bookMsg("Reading page " + fmt(at) + " of " + fmt(all) + "…", "warn");
+      });
+    }).then(function (book) {
+      return keepBook(book).then(function () {
+        bookText[book.slug] = book;
+        bookMsg(book.title + " · "
+          + plural(book.chapters.length, "chapter", "chapters"), "good");
+        return refreshShelf().then(function () {
+          var found = null;
+          BOOKS.forEach(function (b) { if (b.slug === book.slug) found = b; });
+          if (found) { select(found.id); showDetail(); }
+        });
+      });
+    }).catch(function (err) {
+      bookMsg("Could not read that file — " + (err && err.message ? err.message : "unknown"),
+        "bad");
+    }).then(function () {
+      if (add) add.disabled = false;
+    });
+  }
+
+  function forgetBook(book) {
+    dropBook(book.slug).then(function () {
+      delete bookText[book.slug];
+      selectedBook = null;
+      openChapter = 0;
+      return refreshShelf();
+    }).then(function () {
+      toast(book.title + " removed from this device");
+    }, function () {
+      toast("Could not remove that book");
+    });
   }
 
   /* ---- the card that opens over a selection ------------------------------- */
@@ -1225,6 +1527,13 @@
 
   function blankView() {
     var w = el("div", "blank");
+    if (view === "book") {
+      w.appendChild(el("p", "lead", "Pick a book"));
+      w.appendChild(el("p", "sub",
+        "Every book is split into chapters. Open one and select any word or "
+        + "phrase in it, the same as in a passage."));
+      return w;
+    }
     if (view === "read") {
       w.appendChild(el("p", "lead", "Pick a passage"));
       w.appendChild(el("p", "sub", "Type in the search box to filter by title or by what is inside."));
@@ -1676,6 +1985,10 @@
       box.appendChild(document.createTextNode(plural(hits.length, "passage", "passages")));
       return;
     }
+    if (view === "book") {
+      box.appendChild(document.createTextNode(plural(hits.length, "book", "books")));
+      return;
+    }
     box.appendChild(document.createTextNode(plural(hits.length, "entry", "entries")));
     box.appendChild(el("span", "dot", "·"));
     box.appendChild(document.createTextNode(fmt(senseCount(hits)) + " senses"));
@@ -1687,7 +2000,7 @@
 
   function drawChips() {
     var box = document.getElementById("chips");
-    box.hidden = view === "read";
+    box.hidden = view === "read" || view === "book";
     box.textContent = "";
     var defs = [["all", "All"]].concat(CHIP_KINDS.map(function (k) { return [k, KINDS[k].filter]; }));
     defs.forEach(function (d) {
@@ -1704,7 +2017,7 @@
 
   function drawAlpha() {
     var box = document.getElementById("alpha");
-    box.hidden = view === "read" || !!query.trim();
+    box.hidden = view === "read" || view === "book" || !!query.trim();
     if (box.hidden) return;
     if (box.dataset.done === kindFilter) return;
     box.dataset.done = kindFilter;
@@ -1861,6 +2174,7 @@
     var chips = el("div", "chips");
     chips.id = "chips";
     list.appendChild(chips);
+    list.appendChild(buildAdd());
     var count = el("div", "count");
     count.id = "count";
     list.appendChild(count);
@@ -1908,7 +2222,7 @@
     document.addEventListener("keydown", function (ev) {
       if (isTyping(ev.target)) return;
       if (ev.key === "/") { ev.preventDefault(); qInput.focus(); qInput.select(); }
-      else if (ev.key === "d" && view === "read") {
+      else if (ev.key === "d" && (view === "read" || view === "book")) {
         ev.preventDefault();
         if (popOpen()) closePopDict(); else openPopDict("");
       }
@@ -2373,6 +2687,65 @@
     }
   }
 
+  /* The shelf is read after the page is already usable: a missing books folder
+     is the normal case, not a failure, and the tab simply stays hidden. What
+     the site publishes and what was added on this device are one shelf. */
+  function indexShelf() {
+    var seen = {};
+    BOOKS = SHELF_MINE.concat(SHELF_NET).filter(function (b) {
+      if (!b || !b.title || !b.chapters || !b.chapters.length) return false;
+      if (seen[b.slug]) return false;    // a device copy stands in for the site's
+      seen[b.slug] = true;
+      return true;
+    }).map(function (b, i) {
+      b.id = "b" + i;
+      b.index = String(i + 1);
+      b._w = norm(b.title);
+      b._all = norm(b.title + " " + (b.author || "") + " "
+        + b.chapters.map(function (c) { return c.title; }).join(" "));
+      return b;
+    });
+    rebuild();
+    syncViewButtons();
+    if (view === "book") refresh();
+  }
+
+  function onShelf(book) {
+    return {
+      slug: book.slug,
+      title: book.title,
+      author: book.author,
+      mine: true,
+      chapters: book.chapters.map(function (c) {
+        return {
+          n: c.n,
+          title: c.title,
+          words: c.paras.reduce(function (n, p) { return n + p.split(/\s+/).length; }, 0)
+        };
+      })
+    };
+  }
+
+  function refreshShelf() {
+    return myBooks().then(function (list) {
+      SHELF_MINE = list.map(onShelf);
+      indexShelf();
+    });
+  }
+
+  function shelf() {
+    refreshShelf();
+    if (typeof fetch !== "function") return;   // the artifact, opened from a file
+    fetch("books/index.json").then(function (r) {
+      return r.ok ? r.json() : [];
+    }).then(function (list) {
+      // a folder with no shelf in it can answer with anything at all
+      if (!Array.isArray(list)) return;
+      SHELF_NET = list;
+      indexShelf();
+    }, function () { /* no shelf, no tab */ });
+  }
+
   /* ---- start ----------------------------------------------------------------- */
   function start(data) {
     readSettings();
@@ -2404,6 +2777,7 @@
     build();
     rebuild();
     refresh();
+    shelf();
 
     if (MODE === "static") return;
     if (!checkWrite()) {

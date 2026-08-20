@@ -116,6 +116,14 @@ open(index, 'w', encoding='utf-8').write(
     + '</head>\n<body>\n' + body('static', None) + REGISTER
     + '</body>\n</html>\n')
 
+# --- the browser-side book importer -------------------------------------
+# Copied rather than inlined: it is an ES module the page imports the first time
+# a file is picked, and most visits never pick one. pdf.js sits in docs/vendor
+# beside it, 1.8 MB that is likewise never fetched until then.
+bookify = os.path.join(site, 'bookify.js')
+open(bookify, 'w', encoding='utf-8', newline='').write(
+    open(os.path.join(HERE, 'bookify.js'), encoding='utf-8').read())
+
 # --- the service worker, stamped with what it is caching ---
 stamp = hashlib.sha1()
 for f in (index, dat):
@@ -134,3 +142,4 @@ print('docs/index.html %5d KB  static shell' % kb(index))
 print('docs/data.json  %5d KB  public data' % kb(dat))
 print('docs/sw.js      %5d KB  installable, version %s'
       % (kb(sw), stamp.hexdigest()[:12]))
+print('docs/bookify.js %5d KB  reads an uploaded PDF or EPUB' % kb(bookify))
