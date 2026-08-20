@@ -41,7 +41,7 @@ function page(store, posts, reply) {
 (async () => {
   /* ------------------------------------------------ A. in the browser */
   const posts0 = [];
-  const a = page(unlockedStore(), posts0, () => ({ ok: true }));
+  const a = page(unlockedStore(), posts0, () => ({ ok: true, pong: true, ai: '', aiModel: '' }));
   await wait(900);
   const { doc, window: w } = a;
 
@@ -67,6 +67,24 @@ function page(store, posts, reply) {
   ok('the ping carries the key', posts0[0].body.key === CFG.key);
   ok('it reports success', doc.getElementById('set-msg').textContent.includes('Connected'),
      doc.getElementById('set-msg').textContent);
+  ok('  and, with no key in the sheet, says the Vietnamese column is Google Translate',
+     /No key for the Vietnamese column is set/.test(doc.getElementById('set-msg').textContent) &&
+     /EngrowDict menu/.test(doc.getElementById('set-msg').textContent),
+     doc.getElementById('set-msg').textContent);
+
+  /* A sheet that has one says which service, and which model. */
+  const postsAi = [];
+  const withAi = page(unlockedStore({ webApp: CFG.webApp, key: CFG.key, sheetUrl: CFG.sheetUrl }),
+    postsAi, () => ({ ok: true, pong: true, ai: 'Gemini', aiModel: 'gemini-2.5-flash' }));
+  await wait(900);
+  click(withAi.window, withAi.doc.getElementById('settings-btn'));
+  click(withAi.window, btn(withAi.doc, '#set-dlg .dlg-foot .btn', 'Test connection'));
+  await wait(60);
+  ok('a sheet with a key says so from the page, without a word being looked up',
+     /Auto Fill asks Gemini for the Vietnamese \(gemini-2\.5-flash\)/
+       .test(withAi.doc.getElementById('set-msg').textContent),
+     withAi.doc.getElementById('set-msg').textContent);
+  withAi.doc.getElementById('set-dlg').close();
 
   click(w, btn(doc, '#set-dlg .dlg-foot .btn', 'Save'));
   await wait(60);

@@ -282,7 +282,16 @@ function doPost(e) {
       PropertiesService.getScriptProperties().setProperty(PROP_BOOK, id);
     }
 
-    if (body.action === 'ping') return out({ ok: true, pong: true });
+    /* The ping carries back which service will write the Vietnamese, so the
+       page can say whether a key is set without a word being looked up. The
+       key itself is never sent: only its kind, and the model if one is named. */
+    if (body.action === 'ping') {
+      var pp = PropertiesService.getScriptProperties();
+      var pkey = pp.getProperty(PROP_AI);
+      return out({ ok: true, pong: true,
+                   ai: pkey ? aiName(pkey) : '',
+                   aiModel: pkey ? (pp.getProperty(PROP_AI_MODEL) || aiDefaultModel(pkey)) : '' });
+    }
     if (body.action === 'sync') return out(syncForWeb());
     if (body.action === 'draft') {
       return out(draftEntry(body.word, { eg: body.eg, vi: body.vi }));

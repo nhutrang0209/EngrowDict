@@ -3853,8 +3853,15 @@ a.btn[hidden] { display: none; }
       readForm();
       if (!settings.webApp || !settings.key) { setMsg("Both the Web App link and the key are needed.", false); return; }
       setMsg("Trying…", true);
-      callSheet({ action: "ping" }).then(function () {
-        setMsg("Connected.", true);
+      callSheet({ action: "ping" }).then(function (res) {
+        /* The one thing about the sheet that cannot be seen from here is
+           whether a key for the Vietnamese was ever put in, so the ping says. */
+        setMsg("Connected. " + (res.ai
+          ? "Auto Fill asks " + res.ai + " for the Vietnamese"
+            + (res.aiModel ? " (" + res.aiModel + ")" : "") + "."
+          : "No key for the Vietnamese column is set, so that column is Google "
+            + "Translate — EngrowDict menu in the sheet, Key for the Vietnamese "
+            + "column."), true);
       }, function (err) {
         setMsg("No luck: " + (err && err.message ? err.message : err), false);
       });
