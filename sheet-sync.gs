@@ -867,6 +867,15 @@ function draftEntry(term) {
     if (entry.senses[t].vi) continue;
     try {
       var mt = shortVi(LanguageApp.translate(entry.senses[t].def, 'en', 'vi'));
+      // Translating the definition gives a clause, not a gloss. The headword on
+      // its own usually lands much closer to what the column wants, so it wins
+      // whenever it comes back translated and short.
+      if (mt.length > 24) {
+        var head = shortVi(LanguageApp.translate(entry.word, 'en', 'vi'));
+        if (head && head.length <= 24 && head.toLowerCase() !== entry.word.toLowerCase()) {
+          mt = head;
+        }
+      }
       if (mt) { entry.senses[t].vi = mt; machine++; }
     } catch (err2) { /* a sense with no Vietnamese is better than no draft */ }
   }

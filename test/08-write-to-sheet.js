@@ -354,13 +354,12 @@ function page(store, posts, reply) {
      pvDraft.entry.particle === 'after' && pvDraft.entry.ipa === '',
      JSON.stringify(pvDraft.entry).slice(0, 80));
   ok('  a word the Vietnamese dictionary does not carry is translated instead',
-     pvDraft.entry.senses[0].vi === '[vi] a soft, low noise like someone whispering'
-     && pvDraft.translated === 1,
+     pvDraft.entry.senses[0].vi === '[vi] look after' && pvDraft.translated === 1,
      pvDraft.entry.senses[0].vi + ' / translated: ' + pvDraft.translated);
-  ok('    the definition is what gets translated, not the headword',
-     two.net.translated.length === 1 &&
-     two.net.translated[0] === 'a soft, low noise like someone whispering',
-     two.net.translated[0]);
+  ok('    the definition is tried first, the headword only when that runs long',
+     two.net.translated.length === 2 &&
+     two.net.translated[0] === 'a soft, low noise like someone whispering' &&
+     two.net.translated[1] === 'look after', two.net.translated.join(' | '));
 
   // a translation that runs on is cut down to a gloss
   two.net.translation = () => 'trông nom ai đó hoặc cái gì '
@@ -457,8 +456,19 @@ function page(store, posts, reply) {
   click(f.window, f.doc.getElementById('add-word'));
   const fdlg = f.doc.getElementById('form-dlg');
   fdlg.querySelector('[name=word]').value = 'susurrus';
+  ok('the button says Auto Fill',
+     f.doc.getElementById('form-fill').textContent === 'Auto Fill',
+     f.doc.getElementById('form-fill').textContent);
   click(f.window, f.doc.getElementById('form-fill'));
+  ok('  while it is looking, the line turns amber',
+     /warn/.test(f.doc.getElementById('form-msg').className) &&
+     /Looking susurrus up/.test(f.doc.getElementById('form-msg').textContent),
+     f.doc.getElementById('form-msg').className + ' — '
+       + f.doc.getElementById('form-msg').textContent);
   await wait(300);
+  ok('  and green once something came back',
+     /good/.test(f.doc.getElementById('form-msg').className),
+     f.doc.getElementById('form-msg').className);
 
   ok('Fill asks the sheet for a draft of the word typed in',
      postsFill.length === 1 && postsFill[0].body.action === 'draft' &&
@@ -479,6 +489,20 @@ function page(store, posts, reply) {
      /Cambridge/.test(f.doc.getElementById('form-msg').textContent),
      f.doc.getElementById('form-msg').textContent);
 
+  // nothing found: the same line goes red
+  const postsMiss = [];
+  const miss = page(unlockedStore(CFG), postsMiss,
+    () => ({ ok: false, error: 'No entry for "qqq" in Cambridge or Merriam-Webster.' }));
+  await wait(900);
+  click(miss.window, miss.doc.getElementById('add-word'));
+  miss.doc.querySelector('#form-dlg [name=word]').value = 'qqq';
+  click(miss.window, miss.doc.getElementById('form-fill'));
+  await wait(300);
+  const missMsg = miss.doc.getElementById('form-msg');
+  ok('  a word neither dictionary has turns the line red',
+     missMsg.className === 'dlg-msg' && /No entry for/.test(missMsg.textContent),
+     missMsg.className + ' — ' + missMsg.textContent);
+
   click(f.window, f.doc.getElementById('form-save'));
   await wait(300);
   const sent = postsFill.filter(x => x.body.action === 'add').pop();
@@ -487,5 +511,5 @@ function page(store, posts, reply) {
      sent.body.entry.senses[0].vi === 'tiếng xào xạc',
      sent ? JSON.stringify(sent.body.entry).slice(0, 80) : 'nothing sent');
 
-  done(a.errs.concat(b.errs, locked.errs, f.errs));
+  done(a.errs.concat(b.errs, locked.errs, f.errs, miss.errs));
 })();

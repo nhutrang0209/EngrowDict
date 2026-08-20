@@ -1339,27 +1339,34 @@
     list.textContent = "";
     list.appendChild(newSenseRow(1));
     renumberSenses();
-    document.getElementById("form-msg").textContent = "";
+    formMsg("", "");
     dlg.showModal();
     dlg.querySelector("[name=word]").focus();
+  }
+
+  /* The form's one line of feedback: amber while it is working, green when
+     something came back, red when nothing did. */
+  function formMsg(text, tone) {
+    var msg = document.getElementById("form-msg");
+    msg.className = "dlg-msg" + (tone ? " " + tone : "");
+    msg.textContent = text;
   }
 
   /* Cambridge fills the form in and stops there: nothing is written until you
      read it over and press Save word yourself. */
   function fillFromCambridge() {
     var dlg = document.getElementById("form-dlg");
-    var msg = document.getElementById("form-msg");
     var word = dlg.querySelector("[name=word]").value.trim();
-    if (!word) { msg.textContent = "Type the word first."; return; }
+    if (!word) { formMsg("Type the word first.", ""); return; }
     if (!canWriteSheet()) {
-      msg.textContent = "This goes through the sheet's Web App link — set it in Settings first.";
+      formMsg("This goes through the sheet's Web App link — set it in Settings first.", "");
       return;
     }
     var btn = document.getElementById("form-fill");
     var label = btn.textContent;
     btn.disabled = true;
     btn.textContent = "Looking up…";
-    msg.textContent = "Reading Cambridge… this takes a few seconds.";
+    formMsg("Looking " + word + " up in Cambridge…", "warn");
     callSheet({ action: "draft", word: word }).then(function (res) {
       applyDraft(res.entry);
       var bits = [res.source === "Cambridge"
@@ -1375,9 +1382,9 @@
       }
       if (res.warning) bits.push(res.warning);
       bits.push("Then press Save word.");
-      msg.textContent = bits.join(" ");
+      formMsg(bits.join(" "), "good");
     }, function (err) {
-      msg.textContent = (err && err.message) ? err.message : String(err);
+      formMsg((err && err.message) ? err.message : String(err), "");
     }).then(function () {
       btn.disabled = false;
       btn.textContent = label;
@@ -1442,7 +1449,7 @@
   function saveForm() {
     var got = collectForm();
     var msg = document.getElementById("form-msg");
-    if (got.err) { msg.textContent = got.err; return; }
+    if (got.err) { formMsg(got.err, ""); return; }
     var btn = document.getElementById("form-save");
     var box = document.getElementById("to-sheet");
     var wantSheet = canWriteSheet() && box && box.checked;
@@ -1971,7 +1978,7 @@
     toSheetRow.appendChild(cb);
     toSheetRow.appendChild(el("span", null, "Write straight into the sheet"));
     foot.appendChild(toSheetRow);
-    var fill = el("button", "btn", "Fill from Cambridge");
+    var fill = el("button", "btn", "Auto Fill");
     fill.type = "button";
     fill.id = "form-fill";
     fill.addEventListener("click", fillFromCambridge);

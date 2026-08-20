@@ -560,6 +560,7 @@ dialog::backdrop { background: rgba(8, 14, 11, .5); backdrop-filter: blur(2px); 
 .dlg-foot .spacer2 { margin-left: auto; }
 .dlg-msg { font-size: 12.5px; color: var(--flag); }
 .dlg-msg.good { color: var(--accent-hi); }
+.dlg-msg.warn { color: var(--term); }
 
 .grid-3 { display: grid; grid-template-columns: 2fr 1fr 1.4fr; gap: 13px; }
 .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }

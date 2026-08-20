@@ -147,7 +147,7 @@ the sheet*, and the top bar grows a **Write N words to sheet** button.
 
 ### Fill from Cambridge
 
-The add-word form has a **Fill from Cambridge** button. Type the word, press it,
+The add-word form has an **Auto Fill** button. Type the word, press it,
 and the part of speech, the phonetics, the definitions, the examples and the
 Vietnamese come back filled in — then you read them over and press **Save word**
 yourself. Nothing is written until you do.
@@ -176,7 +176,14 @@ smaller of the two, so most senses arrive with that column empty. What fills it:
    hoặc thuyền" where Claude writes "ở phía đuôi tàu".
 
 The form says which of the three wrote each draft's Vietnamese, and a key that
-fails costs you the gloss, not the draft.
+fails costs you the gloss, not the draft. That one line under the form carries
+the state in its colour: amber while it is looking, green when a draft came
+back, red when neither dictionary had the word.
+
+Without a key, step 3 translates the definition and falls back to the headword
+when that reads like a clause rather than a gloss — but *abaft* still arrives as
+"ở phía sau" where Claude writes "ở phía đuôi tàu". The key is what makes this
+column good.
 
 The reader is free and needs no account. If it starts answering **429**, put a
 key from jina.ai in the script property `SOTRATU_READER` for a private rate
