@@ -34,6 +34,12 @@ function boot(opts) {
     pretendToBeVisual: true,
     url: opts.url || 'https://artifacts.example/engrowdict',
     beforeParse(w) {
+      // jsdom 30 dropped the userAgent option, and the phone-only bits of the
+      // page are decided on the user agent
+      if (opts.ua) {
+        Object.defineProperty(w.navigator, 'userAgent',
+          { value: opts.ua, configurable: true });
+      }
       w.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
       w.HTMLDialogElement.prototype.close = function () { this.open = false; };
       Object.defineProperty(w, 'localStorage', {

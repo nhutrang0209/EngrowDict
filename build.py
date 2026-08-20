@@ -10,7 +10,12 @@ docs/index.html  — the static copy for GitHub Pages. A light shell that loads
 docs/data.json     data.json from the same folder, which is what lets the Sync
                    button in Google Sheets update the site by overwriting one
                    file — no build step involved.
+docs/sw.js       — the service worker that makes the static copy installable,
+                   stamped with a hash of the two files above so a phone only
+                   re-downloads when something actually changed. The icons and
+                   the manifest beside it are written by hand.
 """
+import hashlib
 import json
 import os
 
@@ -49,6 +54,28 @@ HEAD = (
 )
 
 
+# iOS reads none of the manifest until the page is added to the Home Screen, and
+# takes its icon from apple-touch-icon rather than from the manifest, so both are
+# given. viewport-fit=cover is what lets the page reach under the notch.
+PWA_HEAD = (
+    '<link rel="manifest" href="manifest.webmanifest">\n'
+    '<link rel="apple-touch-icon" href="icon-180.png">\n'
+    '<meta name="apple-mobile-web-app-capable" content="yes">\n'
+    '<meta name="mobile-web-app-capable" content="yes">\n'
+    '<meta name="apple-mobile-web-app-title" content="EngrowDict">\n'
+    '<meta name="apple-mobile-web-app-status-bar-style" content="default">\n'
+    '<meta name="theme-color" media="(prefers-color-scheme: light)" content="#eef0ec">\n'
+    '<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0a0f0c">\n'
+)
+
+REGISTER = (
+    '<script>if("serviceWorker" in navigator){'
+    'addEventListener("load",function(){'
+    'navigator.serviceWorker.register("sw.js").catch(function(){})})}<'
+    '/script>\n'
+)
+
+
 def body(mode, embedded):
     """embedded=None means the page fetches data.json when it opens."""
     out = ['<div id="app"></div>\n',
@@ -78,13 +105,25 @@ open(dat, 'w', encoding='utf-8').write(dumps(public))
 index = os.path.join(site, 'index.html')
 open(index, 'w', encoding='utf-8').write(
     '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n'
-    '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
+    '<meta name="viewport" content="width=device-width, initial-scale=1, '
+    'viewport-fit=cover">\n'
     '<meta name="description" content="Look up ' + '{:,}'.format(len(entries))
     + ' English-Vietnamese entries: phonetics, English definitions, '
       'Vietnamese meanings.">\n'
     '<link rel="preload" href="data.json" as="fetch" crossorigin>\n'
+    + PWA_HEAD
     + HEAD
-    + '</head>\n<body>\n' + body('static', None) + '</body>\n</html>\n')
+    + '</head>\n<body>\n' + body('static', None) + REGISTER
+    + '</body>\n</html>\n')
+
+# --- the service worker, stamped with what it is caching ---
+stamp = hashlib.sha1()
+for f in (index, dat):
+    stamp.update(open(f, 'rb').read())
+sw = os.path.join(site, 'sw.js')
+open(sw, 'w', encoding='utf-8', newline='').write(
+    open(os.path.join(HERE, 'sw-template.js'), encoding='utf-8')
+    .read().replace('__STAMP__', stamp.hexdigest()[:12]))
 
 kb = lambda p: round(os.path.getsize(p) / 1024)
 print(len(entries), 'entries ·',
@@ -93,3 +132,5 @@ print(len(entries), 'entries ·',
 print('engrowdict.html %5d KB  artifact, data embedded' % kb(art))
 print('docs/index.html %5d KB  static shell' % kb(index))
 print('docs/data.json  %5d KB  public data' % kb(dat))
+print('docs/sw.js      %5d KB  installable, version %s'
+      % (kb(sw), stamp.hexdigest()[:12]))

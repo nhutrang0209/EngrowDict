@@ -1843,6 +1843,9 @@
     top.appendChild(acts);
     app.appendChild(top);
 
+    var hint = addToHomeHint();
+    if (hint) app.appendChild(hint);
+
     var bn = el("div", "banner");
     bn.id = "banner";
     bn.hidden = true;
@@ -2009,6 +2012,49 @@
     i.autocomplete = "off";
     f.appendChild(i);
     return f;
+  }
+
+
+  /* ---- installing it on a phone ------------------------------------------- */
+  /* Android offers its own install prompt; iOS offers nothing at all, so on an
+     iPhone the page has to point at the Share menu itself. Shown once, and only
+     to a Safari that is not already running the installed copy. */
+  var A2HS_KEY = "engrowdict:a2hs:v1";
+
+  function onIphone() {
+    var ua = navigator.userAgent || "";
+    var ios = /iPad|iPhone|iPod/.test(ua)
+      || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);   // iPadOS
+    var safari = /Safari/.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS/.test(ua);
+    return ios && safari;
+  }
+
+  function installed() {
+    return (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches)
+      || navigator.standalone === true;
+  }
+
+  function addToHomeHint() {
+    if (MODE !== "static" || installed() || !onIphone()) return null;
+    try { if (localStorage.getItem(A2HS_KEY)) return null; } catch (err) { /* private mode */ }
+
+    var bar = el("div", "a2hs");
+    bar.id = "a2hs";
+    var text = el("span");
+    text.appendChild(el("b", null, "Keep it on your Home Screen. "));
+    text.appendChild(document.createTextNode(
+      "Share \u2191 → Add to Home Screen. It opens full screen and the whole "
+      + "dictionary works with no signal."));
+    bar.appendChild(text);
+    var x = el("button", "x", "×");
+    x.type = "button";
+    x.setAttribute("aria-label", "Dismiss");
+    x.addEventListener("click", function () {
+      bar.remove();
+      try { localStorage.setItem(A2HS_KEY, "1"); } catch (err) { /* private mode */ }
+    });
+    bar.appendChild(x);
+    return bar;
   }
 
   /* ---- settings dialog ------------------------------------------------------ */

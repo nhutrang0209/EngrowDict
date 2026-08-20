@@ -761,6 +761,28 @@ a.btn[hidden] { display: none; }
 @media (max-width: 760px) {
   .popdict { right: 8px; left: 8px; top: auto; bottom: 8px; width: auto; max-height: 60vh; }
 }
+
+/* ---- the installed copy ------------------------------------------------- */
+/* iPhones put a home indicator across the bottom and, in landscape, a notch
+   down one side. env() is zero everywhere else, so these are free. */
+@media (max-width: 760px) {
+  .top { padding-top: calc(11px + env(safe-area-inset-top)); }
+  .toast { bottom: calc(28px + env(safe-area-inset-bottom)); }
+  .work { padding-bottom: env(safe-area-inset-bottom); }
+}
+
+/* iOS offers no install button of its own, so the page has to say where it is */
+.a2hs {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 11px 14px; font-size: 12.5px; line-height: 1.5; color: var(--ink-2);
+  background: var(--accent-soft); border-bottom: 1px solid var(--rule);
+}
+.a2hs[hidden] { display: none; }
+.a2hs b { font-weight: 600; }
+.a2hs .x {
+  margin-left: auto; flex: none; border: 0; background: none; cursor: pointer;
+  color: var(--muted); font-size: 16px; line-height: 1; padding: 0 2px;
+}
 </style>
 <div id="app"></div>
 <script type="application/json" id="mode">"artifact"</script>
@@ -2611,6 +2633,9 @@ a.btn[hidden] { display: none; }
     top.appendChild(acts);
     app.appendChild(top);
 
+    var hint = addToHomeHint();
+    if (hint) app.appendChild(hint);
+
     var bn = el("div", "banner");
     bn.id = "banner";
     bn.hidden = true;
@@ -2777,6 +2802,49 @@ a.btn[hidden] { display: none; }
     i.autocomplete = "off";
     f.appendChild(i);
     return f;
+  }
+
+
+  /* ---- installing it on a phone ------------------------------------------- */
+  /* Android offers its own install prompt; iOS offers nothing at all, so on an
+     iPhone the page has to point at the Share menu itself. Shown once, and only
+     to a Safari that is not already running the installed copy. */
+  var A2HS_KEY = "engrowdict:a2hs:v1";
+
+  function onIphone() {
+    var ua = navigator.userAgent || "";
+    var ios = /iPad|iPhone|iPod/.test(ua)
+      || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);   // iPadOS
+    var safari = /Safari/.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS/.test(ua);
+    return ios && safari;
+  }
+
+  function installed() {
+    return (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches)
+      || navigator.standalone === true;
+  }
+
+  function addToHomeHint() {
+    if (MODE !== "static" || installed() || !onIphone()) return null;
+    try { if (localStorage.getItem(A2HS_KEY)) return null; } catch (err) { /* private mode */ }
+
+    var bar = el("div", "a2hs");
+    bar.id = "a2hs";
+    var text = el("span");
+    text.appendChild(el("b", null, "Keep it on your Home Screen. "));
+    text.appendChild(document.createTextNode(
+      "Share \u2191 → Add to Home Screen. It opens full screen and the whole "
+      + "dictionary works with no signal."));
+    bar.appendChild(text);
+    var x = el("button", "x", "×");
+    x.type = "button";
+    x.setAttribute("aria-label", "Dismiss");
+    x.addEventListener("click", function () {
+      bar.remove();
+      try { localStorage.setItem(A2HS_KEY, "1"); } catch (err) { /* private mode */ }
+    });
+    bar.appendChild(x);
+    return bar;
   }
 
   /* ---- settings dialog ------------------------------------------------------ */

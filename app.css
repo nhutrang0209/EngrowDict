@@ -757,3 +757,25 @@ a.btn[hidden] { display: none; }
 @media (max-width: 760px) {
   .popdict { right: 8px; left: 8px; top: auto; bottom: 8px; width: auto; max-height: 60vh; }
 }
+
+/* ---- the installed copy ------------------------------------------------- */
+/* iPhones put a home indicator across the bottom and, in landscape, a notch
+   down one side. env() is zero everywhere else, so these are free. */
+@media (max-width: 760px) {
+  .top { padding-top: calc(11px + env(safe-area-inset-top)); }
+  .toast { bottom: calc(28px + env(safe-area-inset-bottom)); }
+  .work { padding-bottom: env(safe-area-inset-bottom); }
+}
+
+/* iOS offers no install button of its own, so the page has to say where it is */
+.a2hs {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 11px 14px; font-size: 12.5px; line-height: 1.5; color: var(--ink-2);
+  background: var(--accent-soft); border-bottom: 1px solid var(--rule);
+}
+.a2hs[hidden] { display: none; }
+.a2hs b { font-weight: 600; }
+.a2hs .x {
+  margin-left: auto; flex: none; border: 0; background: none; cursor: pointer;
+  color: var(--muted); font-size: 16px; line-height: 1; padding: 0 2px;
+}
