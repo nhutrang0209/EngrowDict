@@ -171,13 +171,16 @@ smaller of the two, so most senses arrive with that column empty. What fills it:
    to five words, not a translation of the wording — with the sheet's own
    entries shown to it as the house style. Turn it on with **EngrowDict → Key
    for the Vietnamese column** in the sheet; without a key, step 3. Three kinds
-   of key work: one beginning `AIza` goes to **Gemini**, one beginning
-   `sk-ant-` to Claude, anything else to OpenAI, and the same menu item asks
-   for a model name where the default is not the one you can use. Gemini is
-   the one to start with if none of this is to be paid for: an AI Studio key
-   costs nothing up to a daily limit, which a notebook filled a word at a time
-   is unlikely to reach. The key is kept in the script's own properties, so the
-   public page never sees it.
+   of key work: one beginning `sk-ant-` goes to Claude, one beginning `sk-` to
+   OpenAI, and anything else is taken to be a Google key and goes to
+   **Gemini** — Google has changed that shape once already, from `AIza…` to
+   `AQ.…`, and a prefix test that refused the newer one is why only the two
+   promised prefixes are tested for. The same menu item asks for a model name
+   where the default is not the one you can use. Gemini is the one to start
+   with if none of this is to be paid for: an AI Studio key costs nothing up to
+   a daily limit, which a notebook filled a word at a time is unlikely to
+   reach. The key is kept in the script's own properties, so the public page
+   never sees it.
 3. Otherwise `LanguageApp` (Google Translate), cut back to a gloss. Accurate, but
    it reads like a translation: *abaft* comes out "ở phía sau hoặc bên hông tàu
    hoặc thuyền" where Claude writes "ở phía đuôi tàu".

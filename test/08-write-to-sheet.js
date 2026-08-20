@@ -483,7 +483,7 @@ function page(store, posts, reply) {
      oa.entry.senses[0].vi === 'k\u1ebb v\u00f4 d\u1ee5ng');
 
   /* A Gemini key is the free one, and speaks its own shape again. */
-  two.props.SOTRATU_AI_KEY = 'AIzaNotARealKey';
+  two.props.SOTRATU_AI_KEY = 'AQ.Ab8RN6NotARealKeyAtAllNotEven';
   two.net.calls = [];
   two.net.payloads = [];
   two.net.reply = url => /generativelanguage\.googleapis\.com/.test(url)
@@ -492,7 +492,7 @@ function page(store, posts, reply) {
           parts: [{ text: '["kẻ ăn bám"]' }] } }] }) }
     : notInCambridge(url);
   const gem = call2({ key: CFG.key, action: 'draft', word: 'zzz' });
-  ok('a Gemini key is taken as well, and asked at its own address',
+  ok('a Google key is taken as well, whatever shape it is in, and asked at its own address',
      gem.entry.senses[0].vi === 'kẻ ăn bám' && gem.glossed === 1 &&
      gem.by === 'Gemini' && two.net.translated.length === 0 &&
      /models\/gemini-2\.5-flash:generateContent$/.test(two.net.calls[two.net.calls.length - 1]),
@@ -552,32 +552,48 @@ function page(store, posts, reply) {
     ButtonSet: { OK: 'OK', OK_CANCEL: 'OK_CANCEL' },
   });
 
-  answers.push({ button: 'OK', text: ' sk-proj-abc123 ' }, { button: 'OK', text: '' });
+  answers.push({ button: 'OK', text: ' sk-proj-abc123def456ghi789 ' }, { button: 'OK', text: '' });
   three2.__setAiKey();
   ok('the menu item saves the key, trimmed, without a model',
-     three2.props.SOTRATU_AI_KEY === 'sk-proj-abc123' &&
+     three2.props.SOTRATU_AI_KEY === 'sk-proj-abc123def456ghi789' &&
      three2.props.SOTRATU_AI_MODEL === undefined &&
      /OpenAI/.test(three2.shown.alert[1]), three2.shown.alert[1].slice(0, 60));
 
-  answers.push({ button: 'OK', text: 'sk-ant-xyz' }, { button: 'OK', text: 'claude-sonnet-5' });
+  answers.push({ button: 'OK', text: 'sk-ant-xyz123abc456def789ghi' },
+               { button: 'OK', text: 'claude-sonnet-5' });
   three2.__setAiKey();
   ok('  a new key replaces the old one, and a named model is kept',
-     three2.props.SOTRATU_AI_KEY === 'sk-ant-xyz' &&
+     three2.props.SOTRATU_AI_KEY === 'sk-ant-xyz123abc456def789ghi' &&
      three2.props.SOTRATU_AI_MODEL === 'claude-sonnet-5' &&
      /Claude/.test(three2.shown.alert[1]));
 
-  answers.push({ button: 'OK', text: 'AIzaFreeOne' }, { button: 'OK', text: '' });
+  /* Google's own keys began AIza and now begin AQ.; neither shape is tested
+     for, so both are saved and both are called Gemini. */
+  answers.push({ button: 'OK', text: 'AIzaFreeOneThatIsLongEnough' }, { button: 'OK', text: '' });
   three2.__setAiKey();
-  ok('  a Gemini key is saved the same way, and named in what it says back',
-     three2.props.SOTRATU_AI_KEY === 'AIzaFreeOne' &&
+  ok('  a Google key is saved the same way, and named in what it says back',
+     three2.props.SOTRATU_AI_KEY === 'AIzaFreeOneThatIsLongEnough' &&
      three2.props.SOTRATU_AI_MODEL === undefined &&
+     /Gemini/.test(three2.shown.alert[1]), three2.shown.alert[1].slice(0, 60));
+
+  answers.push({ button: 'OK', text: 'AQ.Ab8RN6LyThisIsTheNewerShape' }, { button: 'OK', text: '' });
+  three2.__setAiKey();
+  ok('  and so is one in the shape Google moved to, which no prefix test would pass',
+     three2.props.SOTRATU_AI_KEY === 'AQ.Ab8RN6LyThisIsTheNewerShape' &&
      /Gemini/.test(three2.shown.alert[1]), three2.shown.alert[1].slice(0, 60));
 
   answers.push({ button: 'OK', text: 'my chatgpt password' });
   three2.__setAiKey();
-  ok('  something that is not an API key is refused, and the old one left alone',
-     three2.props.SOTRATU_AI_KEY === 'AIzaFreeOne' &&
+  ok('  something with spaces in it is refused, and the old key left alone',
+     three2.props.SOTRATU_AI_KEY === 'AQ.Ab8RN6LyThisIsTheNewerShape' &&
      /aistudio.google.com/.test(three2.shown.alert[1]),
+     three2.shown.alert[1].slice(0, 60));
+
+  answers.push({ button: 'OK', text: 'sk-short' });
+  three2.__setAiKey();
+  ok('  as is something far too short to be one',
+     three2.props.SOTRATU_AI_KEY === 'AQ.Ab8RN6LyThisIsTheNewerShape' &&
+     /one long unbroken string/.test(three2.shown.alert[1]),
      three2.shown.alert[1].slice(0, 60));
 
   answers.push({ button: 'OK', text: '' });

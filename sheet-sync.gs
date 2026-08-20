@@ -121,10 +121,11 @@ function setAiKey() {
   var had = props.getProperty(PROP_AI);
 
   var r = ui.prompt('Key for the Vietnamese column',
-    'Paste an API key. One beginning AIza goes to Gemini '
-    + '(aistudio.google.com), which is free up to a daily limit; one beginning '
-    + 'sk-ant- to Claude (console.anthropic.com); anything else, and it is '
-    + 'billed, to OpenAI (platform.openai.com).\n\n'
+    'Paste an API key. One beginning sk-ant- goes to Claude '
+    + '(console.anthropic.com), one beginning sk- to OpenAI '
+    + '(platform.openai.com) — both billed. Anything else is taken as a Google '
+    + 'key and goes to Gemini (aistudio.google.com), which is free up to a '
+    + 'daily limit.\n\n'
     + (had ? 'A key is already saved. Pasting another replaces it; leaving this '
           + 'empty removes it and the column falls back to Google Translate.'
           : 'Leave it empty to carry on without one.'),
@@ -139,12 +140,15 @@ function setAiKey() {
       ui.ButtonSet.OK);
     return;
   }
-  if (key.indexOf('sk-') !== 0 && key.indexOf('AIza') !== 0) {
+  /* Length and a space are all that is worth testing. Which service the key
+     belongs to is read off sk- / sk-ant- and everything else is Google's, so a
+     key in a shape nobody has seen yet still goes through. */
+  if (key.length < 20 || /\s/.test(key)) {
     ui.alert('That does not look like an API key',
-      'A Gemini key starts with AIza and comes from aistudio.google.com; the '
-      + 'other two start with sk-. A ChatGPT Plus or Gemini subscription is not '
-      + 'one of these: an API key is issued separately, and Gemini is the only '
-      + 'one of the three that gives one away.', ui.ButtonSet.OK);
+      'An API key is one long unbroken string. A ChatGPT Plus or Gemini '
+      + 'subscription is not one: the key is issued separately, at '
+      + 'aistudio.google.com (free up to a daily limit), '
+      + 'console.anthropic.com, or platform.openai.com.', ui.ButtonSet.OK);
     return;
   }
 
@@ -762,17 +766,21 @@ function readMerriam(slug) {
  * giảm đi", not a translation of the whole definition. The model is asked for
  * exactly that, all the senses of the word in one request.
  *
- * Three kinds of key work: one beginning sk-ant- goes to Claude, one beginning
- * AIza to Gemini, anything else to OpenAI. Gemini is the one with a free tier,
- * which is why it is worth having its own branch rather than a wrapper service.
- * Set SOTRATU_AI_MODEL to name a particular model; the defaults below are only
- * defaults.
+ * Three kinds of key work. Only OpenAI and Anthropic have promised their keys
+ * a shape — sk- and sk-ant- respectively — so those two are recognised and
+ * everything else is taken to be a Google key. Google has already changed
+ * theirs once, from AIza… to AQ.…, and a prefix test that refused the new one
+ * outright is the reason this reads the way it does now.
+ *
+ * Gemini is the one with a free tier, which is why it is worth its own branch
+ * rather than a wrapper service. Set SOTRATU_AI_MODEL to name a particular
+ * model; the defaults below are only defaults.
  */
 function aiKind(key) {
-  var k = String(key);
+  var k = String(key).trim();
   if (k.indexOf('sk-ant-') === 0) return 'claude';
-  if (k.indexOf('AIza') === 0) return 'gemini';
-  return 'openai';
+  if (k.indexOf('sk-') === 0) return 'openai';
+  return 'gemini';
 }
 
 function aiName(key) {
