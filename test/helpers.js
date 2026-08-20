@@ -193,7 +193,7 @@ function appsScriptSandbox(grids, props, others) {
   // what UrlFetchApp is asked for, and what the test wants it to answer with
   const net = {
     calls: [], reply: () => ({ code: 404, body: '' }),
-    translated: [], translation: t => '[vi] ' + t,
+    translated: [], translation: t => '[vi] ' + t, payloads: [],
   };
 
   const sandbox = {
@@ -220,6 +220,14 @@ function appsScriptSandbox(grids, props, others) {
         const a = net.reply(r.url);
         return { getResponseCode: () => a.code, getContentText: () => a.body || '' };
       }),
+      fetch: (url, opts) => {
+        net.calls.push(url);
+        if (opts && opts.payload) {
+          try { net.payloads.push(JSON.parse(opts.payload)); } catch (e) { /* not json */ }
+        }
+        const a = net.reply(url, opts);
+        return { getResponseCode: () => a.code, getContentText: () => a.body || '' };
+      },
     },
     HtmlService: {
       createHtmlOutput: html => {

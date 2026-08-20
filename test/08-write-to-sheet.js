@@ -378,6 +378,68 @@ function page(store, posts, reply) {
   ok('a word Cambridge does not have is said so plainly',
      missing.ok === false && /no entry|answered 404/i.test(missing.error), missing.error);
 
+  /* Cambridge has no entry for everything; Merriam-Webster catches the rest. */
+  const MW_PAGE =
+    '<h1 class="hword">zzz</h1><span class="parts-of-speech">noun</span>'
+    + '<span class="dtText">: a thing of no <a href="#">account</a></span>'
+    + '<span class="ex-sent t">a mere zzz of a man</span>'
+    + '<span id="dictionary-entry-2"></span>'
+    + '<span class="dtText">: the second entry, which is another word entirely</span>';
+  const notInCambridge = url => /merriam-webster/.test(url)
+    ? { code: 200, body: MW_PAGE } : { code: 404, body: '' };
+
+  two.net.calls = [];
+  two.net.reply = notInCambridge;
+  const mw = call2({ key: CFG.key, action: 'draft', word: 'zzz' });
+  ok('a word Cambridge lacks falls through to Merriam-Webster',
+     mw.ok && mw.source === 'Merriam-Webster' && mw.entry.pos === 'n' &&
+     mw.entry.senses[0].def === 'a thing of no account',
+     JSON.stringify(mw.entry).slice(0, 96));
+  ok('  Cambridge is still asked first, both pages of it',
+     /cambridge/.test(two.net.calls[0]) &&
+     two.net.calls.filter(u => /merriam/.test(u)).length === 1,
+     two.net.calls.length + ' calls');
+  ok('  the example comes with it, and the second entry does not',
+     mw.entry.senses[0].eg[0] === 'a mere zzz of a man' && mw.entry.senses.length === 1);
+  ok('  Merriam-Webster prints no IPA, so that field is left empty',
+     mw.entry.ipa === '');
+
+  /* With a key, Claude writes the gloss instead of Google Translate. */
+  two.props.SOTRATU_AI_KEY = 'sk-ant-not-a-real-key';
+  two.net.payloads = [];
+  two.net.translated = [];
+  two.net.reply = url => /api\.anthropic\.com/.test(url)
+    ? { code: 200, body: JSON.stringify({
+        stop_reason: 'end_turn',
+        content: [{ type: 'text', text: '["k\u1ebb v\u00f4 t\u00edch s\u1ef1"]' }] }) }
+    : notInCambridge(url);
+  const ai = call2({ key: CFG.key, action: 'draft', word: 'zzz' });
+  ok('with a key, the short Vietnamese is written by Claude',
+     ai.entry.senses[0].vi === 'k\u1ebb v\u00f4 t\u00edch s\u1ef1' &&
+     ai.glossed === 1 && ai.translated === 0 && two.net.translated.length === 0,
+     ai.entry.senses[0].vi + ' / glossed ' + ai.glossed);
+  const sentToClaude = two.net.payloads[two.net.payloads.length - 1];
+  ok('  asked of Opus 5, at low effort, in one request for all the senses',
+     sentToClaude.model === 'claude-opus-5' &&
+     sentToClaude.output_config.effort === 'low' &&
+     sentToClaude.messages.length === 1,
+     sentToClaude.model + ' / ' + sentToClaude.output_config.effort);
+  ok('  the definition is what it is asked about, and the house style is shown to it',
+     /a thing of no account/.test(sentToClaude.messages[0].content) &&
+     /y\u1ebfu \u0111i \/ gi\u1ea3m \u0111i/.test(sentToClaude.system) &&
+     /One to five words/.test(sentToClaude.system));
+
+  /* A key that does not work must not cost you the draft. */
+  two.net.reply = url => /api\.anthropic\.com/.test(url)
+    ? { code: 401, body: '{"error":{"message":"invalid x-api-key"}}' }
+    : notInCambridge(url);
+  const broke = call2({ key: CFG.key, action: 'draft', word: 'zzz' });
+  ok('a key that does not work falls back to Google Translate, and says so',
+     broke.ok && broke.glossed === 0 && broke.translated === 1 &&
+     /401/.test(broke.warning) && !!broke.entry.senses[0].vi,
+     broke.warning);
+  delete two.props.SOTRATU_AI_KEY;
+
   /* ------------------- F. the Fill button, from the browser's side */
   const postsFill = [];
   const DRAFT = {

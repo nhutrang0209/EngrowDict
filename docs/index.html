@@ -2137,12 +2137,20 @@ a.btn[hidden] { display: none; }
     msg.textContent = "Reading Cambridge… this takes a few seconds.";
     callSheet({ action: "draft", word: word }).then(function (res) {
       applyDraft(res.entry);
-      var n = res.translated || 0;
-      msg.textContent = "Filled from Cambridge. "
-        + (n ? "Cambridge has no Vietnamese for "
-             + plural(n, "sense", "senses") + " — machine-translated, so look those over. "
-             : "")
-        + "Then press Save word.";
+      var bits = [res.source === "Cambridge"
+        ? "Filled from Cambridge."
+        : "Cambridge had no entry — filled from " + (res.source || "the dictionary") + "."];
+      if (res.glossed) {
+        bits.push("The Vietnamese for " + plural(res.glossed, "sense", "senses")
+          + " was written by Claude.");
+      }
+      if (res.translated) {
+        bits.push(plural(res.translated, "sense", "senses")
+          + " came back machine-translated — look at those twice.");
+      }
+      if (res.warning) bits.push(res.warning);
+      bits.push("Then press Save word.");
+      msg.textContent = bits.join(" ");
     }, function (err) {
       msg.textContent = (err && err.message) ? err.message : String(err);
     }).then(function () {

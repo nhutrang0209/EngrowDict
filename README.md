@@ -159,11 +159,24 @@ pages per word, fetched together: the English dictionary for everything except
 the last column, and the English–Vietnamese one for that. Only the Advanced
 Learner's entry is read — the page stacks the Academic and Business dictionaries
 underneath, and taking all three would fill the form with the same sense written
-three ways. The English–Vietnamese dictionary is much the smaller of the
-two, so a sense often has nothing in that column; the definition then goes
-through `LanguageApp` (Google Translate) and is cut back to a gloss, and the
-form says how many senses that happened to so you know which ones to read
-twice.
+three ways. A word Cambridge has no entry for at all falls
+through to **Merriam-Webster**, which answers a plain request but prints its own
+respelling rather than IPA; the form says when that happened.
+
+**The Vietnamese column.** Cambridge's English–Vietnamese dictionary is much the
+smaller of the two, so most senses arrive with that column empty. What fills it:
+
+1. Cambridge's own Vietnamese, where the word is in that dictionary.
+2. Otherwise **Claude**, asked for the gloss a learner would write down — one to
+   five words, not a translation of the wording — with the sheet's own entries
+   shown to it as the house style. Put an Anthropic key in the script property
+   `SOTRATU_AI_KEY` to turn this on; without it, step 3.
+3. Otherwise `LanguageApp` (Google Translate), cut back to a gloss. Accurate, but
+   it reads like a translation: *abaft* comes out "ở phía sau hoặc bên hông tàu
+   hoặc thuyền" where Claude writes "ở phía đuôi tàu".
+
+The form says which of the three wrote each draft's Vietnamese, and a key that
+fails costs you the gloss, not the draft.
 
 The reader is free and needs no account. If it starts answering **429**, put a
 key from jina.ai in the script property `SOTRATU_READER` for a private rate

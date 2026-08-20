@@ -22,6 +22,7 @@ var PROP_BRANCH = 'SOTRATU_BRANCH';
 var PROP_KEY = 'SOTRATU_KEY';       // shared secret for the web-to-sheet path
 var PROP_BOOK = 'SOTRATU_BOOK';     // the workbook the web page last pointed at
 var PROP_READER = 'SOTRATU_READER'; // optional r.jina.ai key, for a private rate limit
+var PROP_AI = 'SOTRATU_AI_KEY';     // optional Anthropic key, for the short Vietnamese
 var TARGET = 'docs/data.json';
 
 /**
@@ -650,61 +651,178 @@ var POS_SHORT = {
 };
 
 /**
+ * Merriam-Webster, the second choice. It answers a plain request, so no reader
+ * is needed — but it prints its own respelling rather than IPA, and has no
+ * Vietnamese at all, which is why Cambridge is asked first and this is only
+ * reached for words Cambridge does not carry.
+ */
+function readMerriam(slug) {
+  var r;
+  try {
+    r = UrlFetchApp.fetch('https://www.merriam-webster.com/dictionary/' + slug, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+          + '(KHTML, like Gecko) Chrome/126.0 Safari/537.36',
+        'Accept-Language': 'en-US,en;q=0.9'
+      },
+      muteHttpExceptions: true, followRedirects: true
+    });
+  } catch (err) {
+    return null;
+  }
+  if (r.getResponseCode() !== 200) return null;
+
+  var h = r.getContentText();
+  var cut = h.indexOf('id="dictionary-entry-2"');   // the first entry only
+  if (cut > -1) h = h.slice(0, cut);
+
+  var out = {
+    word: cFirst(/class="hw[^"]*"[^>]*>([\s\S]*?)<\//, h),
+    pos: cFirst(/class="parts-of-speech[^"]*"[^>]*>([\s\S]*?)<\//, h),
+    ipa: '',
+    senses: []
+  };
+  var defs = [], m, re = /<span class="dtText">([\s\S]*?)<\/span>/g;
+  while ((m = re.exec(h))) defs.push({ text: m[1], at: re.lastIndex });
+  for (var i = 0; i < defs.length && out.senses.length < 5; i++) {
+    var d = cText(defs[i].text).replace(/^:\s*/, '');
+    if (!d) continue;
+    var seg = h.slice(defs[i].at, i + 1 < defs.length ? defs[i + 1].at : h.length);
+    var eg = [], em, ere = /<span class="ex-sent[^"]*">([\s\S]*?)<\/span>/g;
+    while ((em = ere.exec(seg)) && eg.length < 2) {
+      var one = cText(em[1]);
+      if (one) eg.push(one);
+    }
+    out.senses.push({ def: d, eg: eg, vi: '' });
+  }
+  return out.senses.length ? out : null;
+}
+
+/**
+ * The Vietnamese column holds a gloss a person would jot down — "yếu đi /
+ * giảm đi", not a translation of the whole definition. Claude is asked for
+ * exactly that, all the senses in one request. Without a key in
+ * SOTRATU_AI_KEY the column falls back to Google Translate, which is accurate
+ * but reads like a translation.
+ */
+function glossesFromClaude(word, pos, defs, key) {
+  var lines = [];
+  for (var i = 0; i < defs.length; i++) lines.push((i + 1) + '. ' + defs[i]);
+
+  var payload = {
+    model: 'claude-opus-5',
+    max_tokens: 4000,
+    output_config: { effort: 'low' },
+    fallbacks: 'default',
+    system: 'You write the Vietnamese column of an English-Vietnamese vocabulary '
+      + 'notebook. For each numbered English definition, give the gloss a Vietnamese '
+      + 'learner would write down: the meaning itself, not a translation of the '
+      + 'wording.\n\n'
+      + 'Rules:\n'
+      + '- One to five words. Never a sentence, never a clause with "hoặc" strung '
+      + 'through it.\n'
+      + '- Natural Vietnamese, the register of a dictionary margin.\n'
+      + '- Two close readings may be joined with " / ", at most.\n'
+      + '- Keep any part of speech the English has: a verb glosses as a verb.\n'
+      + '- No quotation marks, no "nghĩa là", no explanation.\n\n'
+      + 'Examples:\n'
+      + 'to become less strong -> yếu đi / giảm đi\n'
+      + 'at the back of or behind a ship or boat -> ở phía đuôi tàu\n'
+      + 'very careful and with great attention to every detail -> tỉ mỉ\n'
+      + 'a soft murmuring or rustling sound -> tiếng xào xạc\n'
+      + 'to take care of or be in charge of someone or something -> trông nom\n\n'
+      + 'Answer with a JSON array of strings, one per definition, in order. '
+      + 'Nothing else.',
+    messages: [{
+      role: 'user',
+      content: 'Word: ' + word + (pos ? ' (' + pos + ')' : '') + '\n\n' + lines.join('\n')
+    }]
+  };
+
+  var r = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
+    method: 'post',
+    contentType: 'application/json',
+    headers: {
+      'x-api-key': key,
+      'anthropic-version': '2023-06-01',
+      'anthropic-beta': 'server-side-fallback-2026-07-01'
+    },
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  });
+  if (r.getResponseCode() !== 200) {
+    throw new Error('Claude answered ' + r.getResponseCode() + ' '
+      + String(r.getContentText()).slice(0, 120));
+  }
+
+  var body = JSON.parse(r.getContentText());
+  if (body.stop_reason === 'refusal') throw new Error('Claude declined this word');
+  var text = '';
+  for (var j = 0; j < (body.content || []).length; j++) {
+    if (body.content[j].type === 'text') text += body.content[j].text;
+  }
+  var m = text.match(/\[[\s\S]*\]/);
+  if (!m) throw new Error('Claude did not answer with a list');
+  var list = JSON.parse(m[0]);
+  var out = [];
+  for (var k = 0; k < list.length; k++) out.push(shortVi(String(list[k])));
+  return out;
+}
+
+/**
  * What the Fill button asks for. Nothing is written anywhere: the entry comes
  * back for the form to show, and it is the person at the keyboard who decides
  * whether it is worth keeping.
+ *
+ * Cambridge first, always. Merriam-Webster only for the words Cambridge has no
+ * entry for, and it is said out loud in the form when that happens.
  */
 function draftEntry(term) {
   var slug = slugOf(term);
   if (!slug) return { ok: false, error: 'No word to look up' };
 
+  var props = PropertiesService.getScriptProperties();
   var headers = { 'x-return-format': 'html' };
-  var rkey = PropertiesService.getScriptProperties().getProperty(PROP_READER);
+  var rkey = props.getProperty(PROP_READER);
   if (rkey) headers.Authorization = 'Bearer ' + rkey;
-  var opts = { headers: headers, muteHttpExceptions: true, followRedirects: true };
+  var one = function (path) {
+    return { url: READER + CAMBRIDGE + path + '/' + slug, headers: headers,
+             muteHttpExceptions: true, followRedirects: true };
+  };
 
-  var res;
+  var res = null;
   try {
-    res = UrlFetchApp.fetchAll([
-      { url: READER + CAMBRIDGE + 'english/' + slug, headers: headers,
-        muteHttpExceptions: true, followRedirects: true },
-      { url: READER + CAMBRIDGE + 'english-vietnamese/' + slug, headers: headers,
-        muteHttpExceptions: true, followRedirects: true }
-    ]);
+    res = UrlFetchApp.fetchAll([one('english'), one('english-vietnamese')]);
   } catch (err) {
-    return { ok: false, error: 'Could not reach Cambridge: ' + String(err) };
+    res = null;
   }
 
-  var enCode = res[0].getResponseCode();
-  if (enCode === 429) {
-    return { ok: false, error: 'The reader is busy right now — try again in a moment.' };
-  }
-  if (enCode !== 200) {
-    return { ok: false, error: 'Cambridge answered ' + enCode + ' for "' + slug + '".' };
-  }
-
-  var en = cParse(res[0].getContentText(), false);
-  if (!en.senses.length) {
-    return { ok: false, error: 'Cambridge has no entry for "' + slug + '".' };
-  }
-  if (res[1].getResponseCode() === 200) {
-    var vi = cParse(res[1].getContentText(), true).senses;
-    for (var i = 0; i < en.senses.length && i < vi.length; i++) {
-      en.senses[i].vi = vi[i].vi;
+  var en = null, source = 'Cambridge', viSenses = null, why = '';
+  if (res && res[0].getResponseCode() === 200) {
+    var parsed = cParse(res[0].getContentText(), false);
+    if (parsed.senses.length) {
+      en = parsed;
+      if (res[1].getResponseCode() === 200) {
+        viSenses = cParse(res[1].getContentText(), true).senses;
+      }
     }
+  } else if (res) {
+    why = 'Cambridge answered ' + res[0].getResponseCode();
   }
 
-  // Cambridge's English-Vietnamese dictionary is much the smaller of the two,
-  // so a sense often comes back with nothing in that column. Rather than leave
-  // the row half empty, the definition is put through Google Translate and the
-  // count comes back with it, for the form to own up to.
-  var machine = 0;
-  for (var j = 0; j < en.senses.length; j++) {
-    if (en.senses[j].vi) continue;
-    try {
-      var t = shortVi(LanguageApp.translate(en.senses[j].def, 'en', 'vi'));
-      if (t) { en.senses[j].vi = t; machine++; }
-    } catch (err) { /* a sense with no Vietnamese is better than no draft */ }
+  if (!en) {
+    en = readMerriam(slug);
+    source = 'Merriam-Webster';
+  }
+  if (!en) {
+    return { ok: false, error: 'No entry for "' + slug + '" in Cambridge'
+      + (why ? ' (' + why + ')' : '') + ' or Merriam-Webster.' };
+  }
+
+  if (viSenses) {
+    for (var i = 0; i < en.senses.length && i < viSenses.length; i++) {
+      en.senses[i].vi = viSenses[i].vi;
+    }
   }
 
   var pos = en.pos.toLowerCase();
@@ -724,7 +842,37 @@ function draftEntry(term) {
   } else if (pos === 'idiom') {
     entry.type = 'idiom';
   }
-  return { ok: true, entry: entry, source: 'Cambridge', translated: machine };
+
+  // The gloss: Claude where there is a key for it, Google Translate where
+  // there is not, and both only for the senses Cambridge left empty.
+  var gaps = [];
+  for (var g = 0; g < entry.senses.length; g++) {
+    if (!entry.senses[g].vi) gaps.push(g);
+  }
+  var glossed = 0, machine = 0, warning = '';
+  var aikey = props.getProperty(PROP_AI);
+  if (gaps.length && aikey) {
+    try {
+      var defs = [];
+      for (var d = 0; d < gaps.length; d++) defs.push(entry.senses[gaps[d]].def);
+      var got = glossesFromClaude(entry.word, entry.pos, defs, aikey);
+      for (var k = 0; k < gaps.length; k++) {
+        if (got[k]) { entry.senses[gaps[k]].vi = got[k]; glossed++; }
+      }
+    } catch (err) {
+      warning = String(err && err.message ? err.message : err);
+    }
+  }
+  for (var t = 0; t < entry.senses.length; t++) {
+    if (entry.senses[t].vi) continue;
+    try {
+      var mt = shortVi(LanguageApp.translate(entry.senses[t].def, 'en', 'vi'));
+      if (mt) { entry.senses[t].vi = mt; machine++; }
+    } catch (err2) { /* a sense with no Vietnamese is better than no draft */ }
+  }
+
+  return { ok: true, entry: entry, source: source,
+           glossed: glossed, translated: machine, warning: warning };
 }
 
 /* ------------------------------- reading the sheet (mirrors parse_sheet.py) */
