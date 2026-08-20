@@ -482,6 +482,42 @@ function page(store, posts, reply) {
   ok('  and prose around the list does not throw the list away',
      oa.entry.senses[0].vi === 'k\u1ebb v\u00f4 d\u1ee5ng');
 
+  /* A Gemini key is the free one, and speaks its own shape again. */
+  two.props.SOTRATU_AI_KEY = 'AIzaNotARealKey';
+  two.net.calls = [];
+  two.net.payloads = [];
+  two.net.reply = url => /generativelanguage\.googleapis\.com/.test(url)
+    ? { code: 200, body: JSON.stringify({
+        candidates: [{ finishReason: 'STOP', content: { role: 'model',
+          parts: [{ text: '["kẻ ăn bám"]' }] } }] }) }
+    : notInCambridge(url);
+  const gem = call2({ key: CFG.key, action: 'draft', word: 'zzz' });
+  ok('a Gemini key is taken as well, and asked at its own address',
+     gem.entry.senses[0].vi === 'kẻ ăn bám' && gem.glossed === 1 &&
+     gem.by === 'Gemini' && two.net.translated.length === 0 &&
+     /models\/gemini-2\.5-flash:generateContent$/.test(two.net.calls[two.net.calls.length - 1]),
+     gem.entry.senses[0].vi + ' / ' + two.net.calls[two.net.calls.length - 1]);
+  const toGemini = two.net.payloads[two.net.payloads.length - 1];
+  ok('  the house style goes in as the system instruction, the words as the turn',
+     /One to five words/.test(toGemini.system_instruction.parts[0].text) &&
+     /a thing of no account/.test(toGemini.contents[0].parts[0].text) &&
+     toGemini.generationConfig.responseMimeType === 'application/json',
+     JSON.stringify(toGemini.generationConfig));
+
+  /* A word Gemini will not answer for is a warning, not a lost draft. */
+  two.net.reply = url => /generativelanguage\.googleapis\.com/.test(url)
+    ? { code: 200, body: JSON.stringify({ promptFeedback: { blockReason: 'SAFETY' } }) }
+    : notInCambridge(url);
+  const shy = call2({ key: CFG.key, action: 'draft', word: 'zzz' });
+  ok('  a word it will not answer for falls back to Google Translate, and says why',
+     shy.ok && shy.glossed === 0 && shy.translated === 1 &&
+     /SAFETY/.test(shy.warning) && !!shy.entry.senses[0].vi, shy.warning);
+
+  two.props.SOTRATU_AI_KEY = 'sk-proj-not-a-real-key';
+  two.net.reply = url => /api\.openai\.com/.test(url)
+    ? { code: 200, body: JSON.stringify({
+        choices: [{ message: { role: 'assistant', content: '["x"]' } }] }) }
+    : notInCambridge(url);
   two.props.SOTRATU_AI_MODEL = 'gpt-5-mini';
   const pinned = call2({ key: CFG.key, action: 'draft', word: 'zzz' });
   ok('  a model named in the script properties is the one asked',
@@ -530,11 +566,19 @@ function page(store, posts, reply) {
      three2.props.SOTRATU_AI_MODEL === 'claude-sonnet-5' &&
      /Claude/.test(three2.shown.alert[1]));
 
+  answers.push({ button: 'OK', text: 'AIzaFreeOne' }, { button: 'OK', text: '' });
+  three2.__setAiKey();
+  ok('  a Gemini key is saved the same way, and named in what it says back',
+     three2.props.SOTRATU_AI_KEY === 'AIzaFreeOne' &&
+     three2.props.SOTRATU_AI_MODEL === undefined &&
+     /Gemini/.test(three2.shown.alert[1]), three2.shown.alert[1].slice(0, 60));
+
   answers.push({ button: 'OK', text: 'my chatgpt password' });
   three2.__setAiKey();
   ok('  something that is not an API key is refused, and the old one left alone',
-     three2.props.SOTRATU_AI_KEY === 'sk-ant-xyz' &&
-     /platform.openai.com/.test(three2.shown.alert[1]));
+     three2.props.SOTRATU_AI_KEY === 'AIzaFreeOne' &&
+     /aistudio.google.com/.test(three2.shown.alert[1]),
+     three2.shown.alert[1].slice(0, 60));
 
   answers.push({ button: 'OK', text: '' });
   three2.__setAiKey();

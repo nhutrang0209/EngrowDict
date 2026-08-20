@@ -121,8 +121,10 @@ function setAiKey() {
   var had = props.getProperty(PROP_AI);
 
   var r = ui.prompt('Key for the Vietnamese column',
-    'Paste an API key. One beginning sk-ant- goes to Claude '
-    + '(console.anthropic.com), anything else to OpenAI (platform.openai.com).\n\n'
+    'Paste an API key. One beginning AIza goes to Gemini '
+    + '(aistudio.google.com), which is free up to a daily limit; one beginning '
+    + 'sk-ant- to Claude (console.anthropic.com); anything else, and it is '
+    + 'billed, to OpenAI (platform.openai.com).\n\n'
     + (had ? 'A key is already saved. Pasting another replaces it; leaving this '
           + 'empty removes it and the column falls back to Google Translate.'
           : 'Leave it empty to carry on without one.'),
@@ -137,19 +139,19 @@ function setAiKey() {
       ui.ButtonSet.OK);
     return;
   }
-  if (key.indexOf('sk-') !== 0) {
+  if (key.indexOf('sk-') !== 0 && key.indexOf('AIza') !== 0) {
     ui.alert('That does not look like an API key',
-      'Both kinds start with sk-. A ChatGPT Plus subscription is not one of '
-      + 'these: the key has to come from platform.openai.com, which is billed '
-      + 'separately.', ui.ButtonSet.OK);
+      'A Gemini key starts with AIza and comes from aistudio.google.com; the '
+      + 'other two start with sk-. A ChatGPT Plus or Gemini subscription is not '
+      + 'one of these: an API key is issued separately, and Gemini is the only '
+      + 'one of the three that gives one away.', ui.ButtonSet.OK);
     return;
   }
 
-  var claude = key.indexOf('sk-ant-') === 0;
   props.setProperty(PROP_AI, key);
 
   var m = ui.prompt('Model',
-    'Leave blank for the default (' + (claude ? 'claude-opus-5' : 'gpt-4o-mini')
+    'Leave blank for the default (' + aiDefaultModel(key)
     + '). Fill it in only if that one is not available to you.',
     ui.ButtonSet.OK_CANCEL);
   if (m.getSelectedButton() === ui.Button.OK && m.getResponseText().trim()) {
@@ -159,8 +161,8 @@ function setAiKey() {
   }
 
   ui.alert('Saved',
-    'Auto Fill will ask ' + (claude ? 'Claude' : 'OpenAI') + ' for the Vietnamese '
-    + 'from now on. The key stays in this script and never reaches the web page.',
+    'Auto Fill will ask ' + aiName(key) + ' for the Vietnamese from now on. The '
+    + 'key stays in this script and never reaches the web page.',
     ui.ButtonSet.OK);
 }
 
@@ -760,10 +762,30 @@ function readMerriam(slug) {
  * giảm đi", not a translation of the whole definition. The model is asked for
  * exactly that, all the senses of the word in one request.
  *
- * Either kind of key works: one beginning sk-ant- goes to Claude, anything
- * else to OpenAI. Set SOTRATU_AI_MODEL to name a particular model; the
- * defaults below are only defaults.
+ * Three kinds of key work: one beginning sk-ant- goes to Claude, one beginning
+ * AIza to Gemini, anything else to OpenAI. Gemini is the one with a free tier,
+ * which is why it is worth having its own branch rather than a wrapper service.
+ * Set SOTRATU_AI_MODEL to name a particular model; the defaults below are only
+ * defaults.
  */
+function aiKind(key) {
+  var k = String(key);
+  if (k.indexOf('sk-ant-') === 0) return 'claude';
+  if (k.indexOf('AIza') === 0) return 'gemini';
+  return 'openai';
+}
+
+function aiName(key) {
+  var kind = aiKind(key);
+  return kind === 'claude' ? 'Claude' : kind === 'gemini' ? 'Gemini' : 'OpenAI';
+}
+
+function aiDefaultModel(key) {
+  var kind = aiKind(key);
+  return kind === 'claude' ? 'claude-opus-5'
+    : kind === 'gemini' ? 'gemini-2.5-flash' : 'gpt-4o-mini';
+}
+
 function glossRules() {
   return 'You write the Vietnamese column of an English-Vietnamese vocabulary '
     + 'notebook. For each numbered English definition, give the gloss a Vietnamese '
@@ -806,10 +828,10 @@ function glossList(text, howMany) {
 }
 
 function glossesFromAI(word, pos, defs, key, model) {
-  var anthropic = String(key).indexOf('sk-ant-') === 0;
+  var kind = aiKind(key);
   var url, opts;
 
-  if (anthropic) {
+  if (kind === 'claude') {
     opts = {
       method: 'post', contentType: 'application/json', muteHttpExceptions: true,
       headers: {
@@ -827,6 +849,21 @@ function glossesFromAI(word, pos, defs, key, model) {
       })
     };
     url = 'https://api.anthropic.com/v1/messages';
+  } else if (kind === 'gemini') {
+    /* The key rides in a header rather than the query string, so it stays out
+       of anything that logs URLs. Asking for JSON back means the answer is the
+       list itself and not a list wrapped in a sentence about the list. */
+    opts = {
+      method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+      headers: { 'x-goog-api-key': key },
+      payload: JSON.stringify({
+        system_instruction: { parts: [{ text: glossRules() }] },
+        contents: [{ role: 'user', parts: [{ text: glossAsk(word, pos, defs) }] }],
+        generationConfig: { temperature: 0.2, responseMimeType: 'application/json' }
+      })
+    };
+    url = 'https://generativelanguage.googleapis.com/v1beta/models/'
+      + (model || 'gemini-2.5-flash') + ':generateContent';
   } else {
     opts = {
       method: 'post', contentType: 'application/json', muteHttpExceptions: true,
@@ -843,7 +880,7 @@ function glossesFromAI(word, pos, defs, key, model) {
   }
 
   var r = UrlFetchApp.fetch(url, opts);
-  var who = anthropic ? 'Claude' : 'OpenAI';
+  var who = aiName(key);
   if (r.getResponseCode() !== 200) {
     throw new Error(who + ' answered ' + r.getResponseCode() + ' '
       + String(r.getContentText()).slice(0, 120));
@@ -851,10 +888,24 @@ function glossesFromAI(word, pos, defs, key, model) {
 
   var body = JSON.parse(r.getContentText());
   var text = '';
-  if (anthropic) {
+  if (kind === 'claude') {
     if (body.stop_reason === 'refusal') throw new Error('Claude declined this word');
     for (var j = 0; j < (body.content || []).length; j++) {
       if (body.content[j].type === 'text') text += body.content[j].text;
+    }
+  } else if (kind === 'gemini') {
+    var cand = (body.candidates || [])[0];
+    var blocked = body.promptFeedback && body.promptFeedback.blockReason;
+    if (!cand) {
+      throw new Error(blocked ? 'Gemini would not answer for this word ('
+        + blocked + ')' : 'Gemini sent nothing back');
+    }
+    var parts = (cand.content && cand.content.parts) || [];
+    for (var g = 0; g < parts.length; g++) {
+      if (parts[g].text) text += parts[g].text;
+    }
+    if (!text) {
+      throw new Error('Gemini stopped at ' + (cand.finishReason || 'nothing at all'));
     }
   } else {
     var choice = (body.choices || [])[0];
@@ -972,7 +1023,7 @@ function draftEntry(term, opts) {
       for (var k = 0; k < gaps.length; k++) {
         if (got[k]) { entry.senses[gaps[k]].vi = got[k]; glossed++; }
       }
-      if (glossed) writer = String(aikey).indexOf('sk-ant-') === 0 ? 'Claude' : 'OpenAI';
+      if (glossed) writer = aiName(aikey);
     } catch (err) {
       warning = String(err && err.message ? err.message : err);
     }

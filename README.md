@@ -170,11 +170,14 @@ smaller of the two, so most senses arrive with that column empty. What fills it:
 2. Otherwise **a model**, asked for the gloss a learner would write down — one
    to five words, not a translation of the wording — with the sheet's own
    entries shown to it as the house style. Turn it on with **EngrowDict → Key
-   for the Vietnamese column** in the sheet; without a key, step 3. Either kind
-   works: one beginning `sk-ant-` goes to Claude, anything else to OpenAI, and
-   the same menu item asks for a model name where the default is not the one
-   you can use. The key is kept in the script's own properties, so the public
-   page never sees it.
+   for the Vietnamese column** in the sheet; without a key, step 3. Three kinds
+   of key work: one beginning `AIza` goes to **Gemini**, one beginning
+   `sk-ant-` to Claude, anything else to OpenAI, and the same menu item asks
+   for a model name where the default is not the one you can use. Gemini is
+   the one to start with if none of this is to be paid for: an AI Studio key
+   costs nothing up to a daily limit, which a notebook filled a word at a time
+   is unlikely to reach. The key is kept in the script's own properties, so the
+   public page never sees it.
 3. Otherwise `LanguageApp` (Google Translate), cut back to a gloss. Accurate, but
    it reads like a translation: *abaft* comes out "ở phía sau hoặc bên hông tàu
    hoặc thuyền" where Claude writes "ở phía đuôi tàu".
