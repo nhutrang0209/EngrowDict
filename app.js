@@ -1891,6 +1891,8 @@
     dlg.querySelector("[name=ipa]").value = "";
     dlg.querySelector("[name=type]").value = "word";
     dlg.querySelector("[name=note]").value = "";
+    document.getElementById("fill-eg").checked = false;
+    document.getElementById("fill-vi").checked = false;
     var list = document.getElementById("sense-list");
     list.textContent = "";
     list.appendChild(newSenseRow(1));
@@ -1918,13 +1920,18 @@
       formMsg("This goes through the sheet's Web App link — set it in Settings first.", "");
       return;
     }
+    var want = {
+      eg: document.getElementById("fill-eg").checked,
+      vi: document.getElementById("fill-vi").checked
+    };
     var btn = document.getElementById("form-fill");
     var label = btn.textContent;
     btn.disabled = true;
     btn.textContent = "Looking up…";
     formMsg("Looking " + word + " up in Cambridge…", "warn");
-    callSheet({ action: "draft", word: word }).then(function (res) {
-      applyDraft(res.entry);
+    var ask = { action: "draft", word: word, eg: want.eg, vi: want.vi };
+    callSheet(ask).then(function (res) {
+      applyDraft(res.entry, want);
       var bits = [res.source === "Cambridge"
         ? "Filled from Cambridge."
         : "Cambridge had no entry — filled from " + (res.source || "the dictionary") + "."];
@@ -1949,8 +1956,12 @@
 
   /* One sense per box, the examples under their own definition the way the
      sheet writes them. */
-  function applyDraft(e) {
+  function applyDraft(e, want) {
     if (!e) return;
+    /* Left to itself a draft carries everything it found; the boxes beside the
+       button decide how much of it lands in the form. */
+    var wantEg = want ? !!want.eg : true;
+    var wantVi = want ? !!want.vi : true;
     var dlg = document.getElementById("form-dlg");
     dlg.querySelector("[name=word]").value = e.type === "phrasal"
       ? (e.verb + " " + e.particle).trim() : (e.word || "");
@@ -1962,9 +1973,9 @@
     (e.senses || []).forEach(function (s, i) {
       var box = newSenseRow(i + 1);
       var def = s.def || "";
-      (s.eg || []).forEach(function (x) { def += "\n- " + x; });
+      if (wantEg) (s.eg || []).forEach(function (x) { def += "\n- " + x; });
       box.querySelector("[name=def]").value = def;
-      box.querySelector("[name=vi]").value = s.vi || "";
+      box.querySelector("[name=vi]").value = wantVi ? (s.vi || "") : "";
       list.appendChild(box);
     });
     if (!list.children.length) list.appendChild(newSenseRow(1));
@@ -2494,11 +2505,18 @@
     dlg.appendChild(head);
 
     var body = el("div", "dlg-body");
-    var g = el("div", "grid-3");
+    /* The word and the button that looks it up sit on one line: what you type
+       and the thing that acts on it, side by side. Everything the lookup only
+       ever fills in — part of speech, phonetics — waits on the line below. */
+    var g = el("div", "grid-word");
     g.appendChild(field("Word", "word", "abate", false));
-    g.appendChild(field("Part of speech", "pos", "v", false));
-    g.appendChild(field("Phonetics", "ipa", "/əˈbeɪt/", true));
+    g.appendChild(buildFillBox());
     body.appendChild(g);
+
+    var g1 = el("div", "grid-2");
+    g1.appendChild(field("Part of speech", "pos", "v", false));
+    g1.appendChild(field("Phonetics", "ipa", "/əˈbeɪt/", true));
+    body.appendChild(g1);
 
     var g2 = el("div", "grid-3");
     var ft = el("label", "field");
@@ -2542,11 +2560,6 @@
     toSheetRow.appendChild(cb);
     toSheetRow.appendChild(el("span", null, "Write straight into the sheet"));
     foot.appendChild(toSheetRow);
-    var fill = el("button", "btn", "Auto Fill");
-    fill.type = "button";
-    fill.id = "form-fill";
-    fill.addEventListener("click", fillFromCambridge);
-    foot.appendChild(fill);
     var msg = el("span", "dlg-msg");
     msg.id = "form-msg";
     foot.appendChild(msg);
@@ -2562,6 +2575,32 @@
     foot.appendChild(save);
     dlg.appendChild(foot);
     return dlg;
+  }
+
+  /* Auto Fill, and the two things it may bring along. Both start unticked: a
+     draft is a definition and nothing else unless you ask for more. */
+  function buildFillBox() {
+    var box = el("div", "fill-box");
+    var fill = el("button", "btn", "Auto Fill");
+    fill.type = "button";
+    fill.id = "form-fill";
+    fill.addEventListener("click", fillFromCambridge);
+    box.appendChild(fill);
+    var opts = el("div", "fill-opts");
+    opts.appendChild(fillOpt("fill-eg", "Include examples"));
+    opts.appendChild(fillOpt("fill-vi", "Include Vietnamese meaning"));
+    box.appendChild(opts);
+    return box;
+  }
+
+  function fillOpt(id, label) {
+    var row = el("label", "checkrow");
+    var cb = el("input");
+    cb.type = "checkbox";
+    cb.id = id;
+    row.appendChild(cb);
+    row.appendChild(el("span", null, label));
+    return row;
   }
 
   function field(label, name, placeholder, mono) {

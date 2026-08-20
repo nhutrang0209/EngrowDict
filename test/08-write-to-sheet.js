@@ -345,6 +345,35 @@ function page(store, posts, reply) {
   ok('  and nothing was written to any sheet',
      two.sheets.Vocabulary.grid.every(r => String(r[0]).indexOf('susurrus') !== 0));
 
+  /* The form's two boxes, unticked: a definition and nothing else. */
+  two.net.calls = [];
+  two.net.translated = [];
+  const bare = call2({ key: CFG.key, action: 'draft', word: 'susurrus',
+                       eg: false, vi: false });
+  ok('  asked for neither, the draft is the definition alone',
+     bare.ok && bare.entry.senses[0].def === 'a soft, low noise like someone whispering' &&
+     bare.entry.senses[0].eg.length === 0 && bare.entry.senses[0].vi === '',
+     JSON.stringify(bare.entry.senses[0]));
+  ok('    the Vietnamese page is not even read, and nothing is translated',
+     two.net.calls.length === 1 && !/english-vietnamese/.test(two.net.calls[0]) &&
+     two.net.translated.length === 0 && bare.translated === 0,
+     two.net.calls.join(' , '));
+
+  two.net.calls = [];
+  const egOnly = call2({ key: CFG.key, action: 'draft', word: 'susurrus',
+                         eg: true, vi: false });
+  ok('  examples on their own come without the Vietnamese',
+     egOnly.entry.senses[0].eg[0] === 'the susurrus of the leaves' &&
+     egOnly.entry.senses[0].vi === '',
+     JSON.stringify(egOnly.entry.senses[0]));
+
+  const viOnly = call2({ key: CFG.key, action: 'draft', word: 'susurrus',
+                         eg: false, vi: true });
+  ok('  and the Vietnamese on its own comes without the examples',
+     viOnly.entry.senses[0].vi === 'tiếng xào xạc' &&
+     viOnly.entry.senses[0].eg.length === 0,
+     JSON.stringify(viOnly.entry.senses[0]));
+
   const phrasal = CAMB_EN.replace('>noun<', '>phrasal verb<')
     .replace('>susurrus<', '>look after<');
   two.net.reply = url => ({ code: /english-vietnamese/.test(url) ? 404 : 200, body: phrasal });
@@ -531,9 +560,13 @@ function page(store, posts, reply) {
   click(f.window, f.doc.getElementById('add-word'));
   const fdlg = f.doc.getElementById('form-dlg');
   fdlg.querySelector('[name=word]').value = 'susurrus';
-  ok('the button says Auto Fill',
-     f.doc.getElementById('form-fill').textContent === 'Auto Fill',
+  ok('the button says Auto Fill, and stands with the word rather than in the foot',
+     f.doc.getElementById('form-fill').textContent === 'Auto Fill' &&
+     f.doc.querySelector('.grid-word .fill-box #form-fill') !== null,
      f.doc.getElementById('form-fill').textContent);
+  ok('  its two boxes start unticked',
+     f.doc.getElementById('fill-eg').checked === false &&
+     f.doc.getElementById('fill-vi').checked === false);
   click(f.window, f.doc.getElementById('form-fill'));
   ok('  while it is looking, the line turns amber',
      /warn/.test(f.doc.getElementById('form-msg').className) &&
@@ -548,15 +581,33 @@ function page(store, posts, reply) {
   ok('Fill asks the sheet for a draft of the word typed in',
      postsFill.length === 1 && postsFill[0].body.action === 'draft' &&
      postsFill[0].body.word === 'susurrus', JSON.stringify(postsFill[0] && postsFill[0].body));
+  ok('  and says it wants neither examples nor Vietnamese',
+     postsFill[0].body.eg === false && postsFill[0].body.vi === false,
+     JSON.stringify(postsFill[0].body));
   ok('  the head fields come back filled in',
      fdlg.querySelector('[name=pos]').value === 'n' &&
      fdlg.querySelector('[name=ipa]').value === DRAFT.entry.ipa,
      fdlg.querySelector('[name=pos]').value + ' ' + fdlg.querySelector('[name=ipa]').value);
-  ok('  the example sits under its definition, the way the sheet writes it',
+  ok('  unticked, the definition arrives on its own, with no example under it',
+     f.doc.querySelector('#sense-list [name=def]').value === 'a soft murmuring sound',
+     JSON.stringify(f.doc.querySelector('#sense-list [name=def]').value));
+  ok('  and the Vietnamese box is left empty',
+     f.doc.querySelector('#sense-list [name=vi]').value === '',
+     JSON.stringify(f.doc.querySelector('#sense-list [name=vi]').value));
+
+  // ticked, the same draft brings the rest of itself along
+  f.doc.getElementById('fill-eg').checked = true;
+  f.doc.getElementById('fill-vi').checked = true;
+  click(f.window, f.doc.getElementById('form-fill'));
+  await wait(300);
+  ok('  ticking both asks for both',
+     postsFill[1].body.eg === true && postsFill[1].body.vi === true,
+     JSON.stringify(postsFill[1].body));
+  ok('  the example then sits under its definition, the way the sheet writes it',
      f.doc.querySelector('#sense-list [name=def]').value ===
        'a soft murmuring sound\n- the susurrus of the leaves',
      JSON.stringify(f.doc.querySelector('#sense-list [name=def]').value));
-  ok('  and the Vietnamese with it',
+  ok('  and the Vietnamese comes with it',
      f.doc.querySelector('#sense-list [name=vi]').value === 'tiếng xào xạc');
   ok('  nothing is saved yet: the form is still open and no word was sent',
      fdlg.open && !postsFill.some(x => x.body.action === 'add'));

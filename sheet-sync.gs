@@ -278,7 +278,9 @@ function doPost(e) {
 
     if (body.action === 'ping') return out({ ok: true, pong: true });
     if (body.action === 'sync') return out(syncForWeb());
-    if (body.action === 'draft') return out(draftEntry(body.word));
+    if (body.action === 'draft') {
+      return out(draftEntry(body.word, { eg: body.eg, vi: body.vi }));
+    }
     if (body.action !== 'add') return out({ ok: false, error: 'Unknown request' });
 
     var lock = LockService.getScriptLock();
@@ -869,9 +871,14 @@ function glossesFromAI(word, pos, defs, key, model) {
  * Cambridge first, always. Merriam-Webster only for the words Cambridge has no
  * entry for, and it is said out loud in the form when that happens.
  */
-function draftEntry(term) {
+function draftEntry(term, opts) {
   var slug = slugOf(term);
   if (!slug) return { ok: false, error: 'No word to look up' };
+
+  // The form's two boxes. An old caller that sends neither gets the lot, the
+  // way Fill worked before they existed.
+  var wantEg = !opts || opts.eg !== false;
+  var wantVi = !opts || opts.vi !== false;
 
   var props = PropertiesService.getScriptProperties();
   var headers = { 'x-return-format': 'html' };
@@ -882,9 +889,11 @@ function draftEntry(term) {
              muteHttpExceptions: true, followRedirects: true };
   };
 
+  var asks = [one('english')];
+  if (wantVi) asks.push(one('english-vietnamese'));   // not asked for, not read
   var res = null;
   try {
-    res = UrlFetchApp.fetchAll([one('english'), one('english-vietnamese')]);
+    res = UrlFetchApp.fetchAll(asks);
   } catch (err) {
     res = null;
   }
@@ -894,7 +903,7 @@ function draftEntry(term) {
     var parsed = cParse(res[0].getContentText(), false);
     if (parsed.senses.length) {
       en = parsed;
-      if (res[1].getResponseCode() === 200) {
+      if (wantVi && res[1] && res[1].getResponseCode() === 200) {
         viSenses = cParse(res[1].getContentText(), true).senses;
       }
     }
@@ -933,6 +942,17 @@ function draftEntry(term) {
     entry.ipa = '';                       // the sheet keeps phonetics off these
   } else if (pos === 'idiom') {
     entry.type = 'idiom';
+  }
+
+  if (!wantEg) {
+    for (var x = 0; x < entry.senses.length; x++) entry.senses[x].eg = [];
+  }
+  if (!wantVi) {
+    // No Vietnamese asked for: nothing to gloss, nothing to translate, and no
+    // model called about it either.
+    for (var y = 0; y < entry.senses.length; y++) entry.senses[y].vi = '';
+    return { ok: true, entry: entry, source: source, by: '',
+             glossed: 0, translated: 0, warning: '' };
   }
 
   // The gloss: Claude where there is a key for it, Google Translate where

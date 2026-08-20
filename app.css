@@ -595,6 +595,15 @@ dialog::backdrop { background: rgba(8, 14, 11, .5); backdrop-filter: blur(2px); 
 .dlg-msg.warn { color: var(--term); }
 
 .grid-3 { display: grid; grid-template-columns: 2fr 1fr 1.4fr; gap: 13px; }
+.grid-2 { display: grid; grid-template-columns: 1fr 1.6fr; gap: 13px; }
+.grid-word { display: grid; grid-template-columns: 1fr auto; gap: 13px; align-items: end; }
+.fill-box {
+  display: flex; align-items: center; gap: 13px;
+  border: 1px solid var(--rule); border-radius: var(--r-m);
+  background: var(--tint); padding: 9px 12px;
+}
+.fill-opts { display: flex; flex-direction: column; gap: 6px; }
+.fill-opts .checkrow { font-size: 12px; }
 .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .field > span { font-family: var(--mono); font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--faint); }
 .field input, .field select, .field textarea {
@@ -714,6 +723,8 @@ a.btn[hidden] { display: none; }
   body[data-view="detail"] .list, body[data-view="detail"] .alpha { display: none; }
   body[data-view="detail"] .back { display: inline-flex; }
   body:not([data-view="detail"]) .detail { display: none; }
+  .grid-word { grid-template-columns: 1fr; }
+  .fill-box { justify-content: space-between; }
 }
 
 @media (prefers-reduced-motion: reduce) {
