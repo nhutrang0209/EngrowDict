@@ -723,6 +723,8 @@ function glossesFromClaude(word, pos, defs, key) {
       + 'through it.\n'
       + '- Natural Vietnamese, the register of a dictionary margin.\n'
       + '- Two close readings may be joined with " / ", at most.\n'
+      + '- A short parenthetical is welcome where the gloss would otherwise be '
+      + 'vague: phía sau (tàu / thuyền), lợn đất (thú ăn kiến).\n'
       + '- Keep any part of speech the English has: a verb glosses as a verb.\n'
       + '- No quotation marks, no "nghĩa là", no explanation.\n\n'
       + 'Examples:\n'
@@ -866,16 +868,11 @@ function draftEntry(term) {
   for (var t = 0; t < entry.senses.length; t++) {
     if (entry.senses[t].vi) continue;
     try {
+      // The definition, and only the definition. Translating the headword on its
+      // own is shorter but throws the sense away: abaft came back as "sau",
+      // which is not what abaft means. A clause you can trim beats a word that
+      // is wrong.
       var mt = shortVi(LanguageApp.translate(entry.senses[t].def, 'en', 'vi'));
-      // Translating the definition gives a clause, not a gloss. The headword on
-      // its own usually lands much closer to what the column wants, so it wins
-      // whenever it comes back translated and short.
-      if (mt.length > 24) {
-        var head = shortVi(LanguageApp.translate(entry.word, 'en', 'vi'));
-        if (head && head.length <= 24 && head.toLowerCase() !== entry.word.toLowerCase()) {
-          mt = head;
-        }
-      }
       if (mt) { entry.senses[t].vi = mt; machine++; }
     } catch (err2) { /* a sense with no Vietnamese is better than no draft */ }
   }

@@ -354,12 +354,13 @@ function page(store, posts, reply) {
      pvDraft.entry.particle === 'after' && pvDraft.entry.ipa === '',
      JSON.stringify(pvDraft.entry).slice(0, 80));
   ok('  a word the Vietnamese dictionary does not carry is translated instead',
-     pvDraft.entry.senses[0].vi === '[vi] look after' && pvDraft.translated === 1,
+     pvDraft.entry.senses[0].vi === '[vi] a soft, low noise like someone whispering'
+     && pvDraft.translated === 1,
      pvDraft.entry.senses[0].vi + ' / translated: ' + pvDraft.translated);
-  ok('    the definition is tried first, the headword only when that runs long',
-     two.net.translated.length === 2 &&
-     two.net.translated[0] === 'a soft, low noise like someone whispering' &&
-     two.net.translated[1] === 'look after', two.net.translated.join(' | '));
+  ok('    the definition is what gets translated: the headword alone loses the sense',
+     two.net.translated.length === 1 &&
+     two.net.translated[0] === 'a soft, low noise like someone whispering',
+     two.net.translated.join(' | '));
 
   // a translation that runs on is cut down to a gloss
   two.net.translation = () => 'trông nom ai đó hoặc cái gì '

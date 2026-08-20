@@ -180,10 +180,12 @@ fails costs you the gloss, not the draft. That one line under the form carries
 the state in its colour: amber while it is looking, green when a draft came
 back, red when neither dictionary had the word.
 
-Without a key, step 3 translates the definition and falls back to the headword
-when that reads like a clause rather than a gloss — but *abaft* still arrives as
-"ở phía sau" where Claude writes "ở phía đuôi tàu". The key is what makes this
-column good.
+Without a key, step 3 translates the definition and leaves it at that. It reads
+like a translation — *abaft* arrives as "ở phía sau hoặc bên hông tàu hoặc
+thuyền" — but it is at least the meaning, and you can trim it in the form.
+Translating the headword instead was tried and dropped: it gave "sau", which is
+shorter and wrong. Condensing a definition into "phía sau (tàu / thuyền)" is a
+judgement, and that is what the key buys.
 
 The reader is free and needs no account. If it starts answering **429**, put a
 key from jina.ai in the script property `SOTRATU_READER` for a private rate
