@@ -297,6 +297,31 @@ function doPost(e) {
                    ai: pkey ? aiName(pkey) : '',
                    aiModel: pkey ? (pp.getProperty(PROP_AI_MODEL) || aiDefaultModel(pkey)) : '' });
     }
+    /* Putting the key in from the page, which is the one place that already
+       knows which script it is talking to. Finding that script by hand is the
+       step everybody gets wrong: a sheet may hold a copy of this file, and a
+       key set in the copy does nothing. Nothing reads the key back out — the
+       ping answers with its kind, never with the key. */
+    if (body.action === 'setai') {
+      var props2 = PropertiesService.getScriptProperties();
+      var newKey = String(body.aiKey === undefined ? '' : body.aiKey).trim();
+      if (!newKey) {
+        props2.deleteProperty(PROP_AI);
+        props2.deleteProperty(PROP_AI_MODEL);
+        return out({ ok: true, ai: '', aiModel: '' });
+      }
+      if (newKey.length < 20 || /\s/.test(newKey)) {
+        return out({ ok: false,
+                     error: 'That does not look like an API key: it should be '
+                       + 'one long unbroken string' });
+      }
+      props2.setProperty(PROP_AI, newKey);
+      var newModel = String(body.aiModel === undefined ? '' : body.aiModel).trim();
+      if (newModel) props2.setProperty(PROP_AI_MODEL, newModel);
+      else props2.deleteProperty(PROP_AI_MODEL);
+      return out({ ok: true, ai: aiName(newKey),
+                   aiModel: newModel || aiDefaultModel(newKey) });
+    }
     if (body.action === 'sync') return out(syncForWeb());
     if (body.action === 'draft') {
       return out(draftEntry(body.word, { eg: body.eg, vi: body.vi }));
@@ -528,11 +553,14 @@ function publishToRepo() {
   if (!data.entries.length) {
     return { ok: false, error: 'No entries could be read. Check the tab names.' };
   }
-  var payload = { entries: data.entries, readings: [] };
+  var payload = { entries: data.entries, readings: data.readings };
   if (!repo || !token) {
     return { ok: true, published: false, entries: data.entries.length, payload: payload,
              error: 'No GitHub repo set up yet — use EngrowDict → Set up GitHub repo.' };
   }
+  // A sheet with no Reading Passage tab must not take the passages off the
+  // site: what is published stays published unless the sheet has its own.
+  if (!payload.readings.length) payload.readings = publishedReadings(repo, token, branch);
   var json = JSON.stringify(payload);
   var sha = shaOf(repo, token, branch, TARGET);
   var res = ghPut(repo, token, branch, TARGET, json, sha,
@@ -1200,5 +1228,86 @@ function buildData() {
   }
 
   for (i = 0; i < entries.length; i++) entries[i].id = 's' + i;
-  return { entries: entries, readings: [] };
+  return { entries: entries, readings: readingsFrom() };
 }
+
+/* ---------------------------------------------- the passages, as read here */
+
+/* Two rows to a piece: the numbered row carries the title, the row under it
+   the whole body, one paragraph to a line. Mirrors parse_sheet.py, which is
+   what the site is built from when it is built from a terminal instead. */
+function readingsFrom() {
+  var rows = grid('Reading Passage');
+  var out = [], pend = null;
+  for (var i = 1; i < rows.length; i++) {
+    var body = txt(rows[i][1]);
+    if (!body) continue;
+    if (txt(rows[i][0])) {
+      pend = { index: txt(rows[i][0]).replace('.0', ''), title: flat(body) };
+    } else if (pend) {
+      var parts = body.split('\n'), paras = [];
+      for (var p = 0; p < parts.length; p++) {
+        var one = flat(parts[p]);
+        if (one) paras.push(one);
+      }
+      pend.paras = labelParas(paras);
+      out.push(pend);
+      pend = null;
+    }
+  }
+  return out;
+}
+
+/* Some passages are the IELTS sort, with paragraphs lettered A, B, C… The
+   letter is glued to the text and sometimes doubled ("A A In 1977"). It only
+   counts as a label when the letters actually run in order down the passage —
+   otherwise a paragraph opening with the article "A" would lose it. */
+function labelParas(paras) {
+  var i, out = [], runs = 0;
+  for (i = 0; i < paras.length && i < 26; i++) {
+    if (leads(paras[i], letterAt(i))) runs++;
+  }
+  if (paras.length < 3 || runs < Math.max(3, Math.floor(paras.length * 0.6))) {
+    for (i = 0; i < paras.length; i++) out.push({ text: paras[i] });
+    return out;
+  }
+  for (i = 0; i < paras.length; i++) {
+    var L = i < 26 ? letterAt(i) : '';
+    // "A A In 1977" carries its letter twice; both come off
+    var rest = L ? stripLetter(stripLetter(paras[i], L), L) : '';
+    if (rest) out.push({ mark: L, text: rest });
+    else out.push({ text: paras[i] });
+  }
+  return out;
+}
+
+/* The letter is a label only where it stands on its own, never where the
+   paragraph simply opens with the word "A". */
+function leads(p, L) {
+  return p.charAt(0) === L && (p.length === 1 || p.charAt(1) === ' ');
+}
+
+function stripLetter(p, L) {
+  return leads(p, L) ? txt(p.slice(1)) : p;
+}
+
+function letterAt(i) { return String.fromCharCode(65 + i); }
+
+/* What the site is already serving. Read only when the sheet has no passages
+   of its own to publish: a sync is about the words, and it has no business
+   taking the passages off the site on its way past. */
+function publishedReadings(repo, token, branch) {
+  try {
+    var url = 'https://raw.githubusercontent.com/' + repo + '/' + branch + '/' + TARGET;
+    var res = UrlFetchApp.fetch(url, {
+      muteHttpExceptions: true,
+      headers: token ? { Authorization: 'token ' + token } : {}
+    });
+    if (res.getResponseCode() !== 200) return [];
+    var got = JSON.parse(res.getContentText());
+    return (got && got.readings) || [];
+  } catch (err) {
+    return [];                       // no answer is not a reason to lose them
+  }
+}
+

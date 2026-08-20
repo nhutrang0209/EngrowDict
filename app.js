@@ -2939,6 +2939,33 @@
       "Shown with that link.", true));
     inner.appendChild(links);
 
+    /* The key for the Vietnamese column belongs to the script, not to this
+       browser, so it is typed here and sent straight on — this page is the one
+       place that already knows which script it is talking to, and a sheet may
+       hold a copy of that script whose properties do nothing. Sent, never
+       stored, never read back: what comes back is only which service it is. */
+    var aiRow = el("div", "setrow");
+    aiRow.id = "row-ai";
+    aiRow.appendChild(el("span", "setlabel", "Key for the Vietnamese column"));
+    var aiLine = el("div", "setline");
+    var aiIn = el("input", "mono");
+    aiIn.id = "ai-in";
+    aiIn.type = "password";
+    aiIn.placeholder = "Gemini, Claude or OpenAI key";
+    aiIn.autocomplete = "off";
+    aiIn.spellcheck = false;
+    aiLine.appendChild(aiIn);
+    var aiSend = el("button", "btn", "Send to the sheet");
+    aiSend.type = "button";
+    aiSend.id = "ai-send";
+    aiSend.addEventListener("click", sendAiKey);
+    aiLine.appendChild(aiSend);
+    aiRow.appendChild(aiLine);
+    aiRow.appendChild(el("span", "hint",
+      "Kept in the script, not in this browser. Empty sends nothing; "
+      + "Test connection says which service is answering."));
+    links.appendChild(aiRow);
+
     fold.appendChild(inner);
     body.appendChild(fold);
 
@@ -3030,6 +3057,31 @@
     });
     foot.appendChild(save);
     dlg.appendChild(foot);
+
+    /* Straight into the script's own properties. An empty box takes the key
+       back out, which is the way to go back to Google Translate. */
+    function sendAiKey() {
+      var box = document.getElementById("ai-in");
+      var btn = document.getElementById("ai-send");
+      readForm();
+      if (!settings.webApp || !settings.key) {
+        setMsg("The Web App link and the Sync key are needed first.", false);
+        return;
+      }
+      var raw = box.value.trim();
+      btn.disabled = true;
+      setMsg(raw ? "Sending the key to the script…" : "Taking the key out…", true);
+      callSheet({ action: "setai", aiKey: raw }).then(function (res) {
+        box.value = "";
+        setMsg(res.ai
+          ? "Saved in the script. Auto Fill asks " + res.ai
+            + (res.aiModel ? " (" + res.aiModel + ")" : "") + " for the Vietnamese."
+          : "The key is out. The Vietnamese column is Google Translate again.",
+          true);
+      }, function (err) {
+        setMsg("Not saved: " + (err && err.message ? err.message : err), false);
+      }).then(function () { btn.disabled = false; });
+    }
 
     function readForm() {
       ["sheet:sheetUrl", "webapp:webApp", "key:key",
@@ -3139,6 +3191,7 @@
     document.getElementById("setgroup-books").classList.toggle("disabled", !unlocked());
     var btns = document.querySelectorAll("#setgroup .edit-btn, #setgroup-books .edit-btn");
     for (var i = 0; i < btns.length; i++) btns[i].disabled = !on;
+    document.getElementById("ai-send").disabled = !on;
     document.getElementById("set-test").disabled = !on;
     document.getElementById("set-save").disabled = !on;
 

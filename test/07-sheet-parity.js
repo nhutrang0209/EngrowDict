@@ -71,7 +71,30 @@ const egs = a => a.reduce((n, e) => n + e.senses.reduce((m, s) => m + s.eg.lengt
 ok('same example count', egs(fromSheet) === egs(fromPython),
    egs(fromSheet) + ' against ' + egs(fromPython));
 
-ok('the sync payload carries no passages', sandbox.__buildData().readings.length === 0);
+/* The passages ride along with the words: a sync that published none of them
+   took them off the site, and the Passages tab went with them. */
+const readSheet = sandbox.__buildData().readings;
+const readPython = JSON.parse(read('dataset.json')).readings;
+ok('the passages come through the sync too', readSheet.length === readPython.length,
+   readSheet.length + ' (Apps Script) against ' + readPython.length + ' (Python)');
+
+const pkey = r => [r.index, r.title,
+  (r.paras || []).map(p => (p.mark || '') + '|' + p.text).join('¶')].join('◊');
+let rdiff = 0, rfirst = '';
+for (let i = 0; i < Math.min(readSheet.length, readPython.length); i++) {
+  if (pkey(readSheet[i]) !== pkey(readPython[i])) {
+    if (!rdiff) {
+      rfirst = '#' + i + '  gs: ' + pkey(readSheet[i]).slice(0, 110)
+        + '\n            py: ' + pkey(readPython[i]).slice(0, 110);
+    }
+    rdiff++;
+  }
+}
+ok('  every passage matches, paragraph labels and all', rdiff === 0,
+   rdiff ? rdiff + ' differ, first: ' + rfirst : readSheet.length + ' identical');
+ok('  the lettered ones keep their letters',
+   readSheet.some(r => (r.paras || []).some(p => p.mark === 'B')),
+   readSheet.filter(r => (r.paras || []).some(p => p.mark)).length + ' lettered');
 
 const find = (a, w) => a.find(e => e.word === w);
 for (const w of ['aardvark', 'make up for', 'zenith', 'abject']) {

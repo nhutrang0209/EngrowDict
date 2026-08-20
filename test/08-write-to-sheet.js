@@ -91,6 +91,32 @@ function page(store, posts, reply) {
      withAi.doc.getElementById('set-msg').textContent);
   withAi.doc.getElementById('set-dlg').close();
 
+  /* The key for the Vietnamese column goes to the script, not into this
+     browser: typed here, sent, and never read back. */
+  const posts2 = [];
+  const sender = page(unlockedStore({ webApp: CFG.webApp, key: CFG.key, sheetUrl: CFG.sheetUrl }),
+    posts2, () => ({ ok: true, ai: 'Gemini', aiModel: 'gemini-2.5-flash' }));
+  await wait(900);
+  click(sender.window, sender.doc.getElementById('settings-btn'));
+  sender.doc.getElementById('ai-in').value = ' AQ.Ab8RN6NotARealKeyAtAll ';
+  click(sender.window, sender.doc.getElementById('ai-send'));
+  await wait(60);
+  ok('Settings sends the AI key to the script that answers this link',
+     posts2.length === 1 && posts2[0].body.action === 'setai' &&
+     posts2[0].body.aiKey === 'AQ.Ab8RN6NotARealKeyAtAll',
+     JSON.stringify(posts2[0] && posts2[0].body));
+  ok('  the box is emptied and the answer says which service is answering',
+     sender.doc.getElementById('ai-in').value === '' &&
+     /Auto Fill asks Gemini \(gemini-2\.5-flash\)/
+       .test(sender.doc.getElementById('set-msg').textContent),
+     sender.doc.getElementById('set-msg').textContent);
+  ok('  and the key is not kept in this browser',
+     !JSON.stringify(sender.store).includes('AQ.Ab8RN6'),
+     JSON.stringify(sender.store).slice(0, 80));
+  ok('  the field never shows what the script holds',
+     sender.doc.getElementById('ai-in').type === 'password');
+  sender.doc.getElementById('set-dlg').close();
+
   click(w, btn(doc, '#set-dlg .dlg-foot .btn', 'Save'));
   await wait(60);
   setDlg.close();
@@ -169,6 +195,34 @@ function page(store, posts, reply) {
   ok('doPost answers a ping with the right key', pong.ok === true);
   ok('  and names the script that answered, so a copy of it can be told apart',
      pong.script === 'script-id-under-test' && pong.ai === '', JSON.stringify(pong));
+
+  /* setai is how the page puts a key in without anybody hunting for the right
+     Apps Script project. */
+  const set1 = call({ key: CFG.key, action: 'setai', aiKey: ' AQ.Ab8RN6ALongEnoughFakeKey ' });
+  ok('setai puts the key in the script that answers, trimmed',
+     set1.ok && set1.ai === 'Gemini' && set1.aiModel === 'gemini-2.5-flash' &&
+     sandbox.props.SOTRATU_AI_KEY === 'AQ.Ab8RN6ALongEnoughFakeKey',
+     JSON.stringify(set1));
+  ok('  and the ping now says a key is set, still without sending it',
+     JSON.stringify(call({ key: CFG.key, action: 'ping' })) ===
+     JSON.stringify({ ok: true, pong: true, script: 'script-id-under-test',
+                      ai: 'Gemini', aiModel: 'gemini-2.5-flash' }),
+     JSON.stringify(call({ key: CFG.key, action: 'ping' })));
+  ok('  a key with a space in it, or a short one, is refused',
+     call({ key: CFG.key, action: 'setai', aiKey: 'my chatgpt password' }).ok === false &&
+     call({ key: CFG.key, action: 'setai', aiKey: 'sk-tiny' }).ok === false &&
+     sandbox.props.SOTRATU_AI_KEY === 'AQ.Ab8RN6ALongEnoughFakeKey');
+  ok('  a named model is kept, and dropped again when none is named',
+     call({ key: CFG.key, action: 'setai', aiKey: 'AQ.Ab8RN6ALongEnoughFakeKey',
+            aiModel: 'gemini-3-flash-preview' }).aiModel === 'gemini-3-flash-preview' &&
+     call({ key: CFG.key, action: 'setai', aiKey: 'AQ.Ab8RN6ALongEnoughFakeKey' })
+       .aiModel === 'gemini-2.5-flash');
+  ok('  and an empty key takes it back out',
+     call({ key: CFG.key, action: 'setai', aiKey: '' }).ai === '' &&
+     sandbox.props.SOTRATU_AI_KEY === undefined);
+  ok('  none of which works without the sync key',
+     call({ key: 'nope', action: 'setai', aiKey: 'AQ.Ab8RN6ALongEnoughFakeKey' }).ok === false &&
+     sandbox.props.SOTRATU_AI_KEY === undefined);
 
   // Sample words must not already exist, or find() would pick up an old entry.
   const existing = new Set(sandbox.__buildData().entries.map(e => e.word));

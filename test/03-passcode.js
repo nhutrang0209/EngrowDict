@@ -132,8 +132,11 @@ const mk = store => boot({
   // --- the sheet section folds, and says how to swap workbooks -----------
   const fold = a.doc.getElementById('sheet-fold');
   ok('the three links live in one collapsible section',
-     !!fold && fold.querySelectorAll('.setrow').length === 3 &&
-     a.doc.querySelectorAll('#setgroup .edit-btn').length === 3);
+     !!fold && a.doc.querySelectorAll('#setgroup .edit-btn').length === 3);
+  ok('  with the key for the Vietnamese column under them, and no Edit on it',
+     fold.querySelectorAll('.setrow').length === 4 &&
+     !!a.doc.getElementById('ai-send') && !a.doc.querySelector('#row-ai .edit-btn'),
+     fold.querySelectorAll('.setrow').length + ' rows');
   ok('  it opens itself while anything is still missing', fold.open,
      'webApp is not set here');
   const steps = [...a.doc.querySelectorAll('#sheet-fold > .setfold-body > .steps > li')]

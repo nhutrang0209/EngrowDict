@@ -200,7 +200,8 @@ json.dump(data, open(os.path.join(HERE, 'dataset.json'), 'w', encoding='utf-8'),
 # A raw snapshot of each tab, so the tests can compare what Apps Script
 # (sheet-sync.gs) reads against what this script reads. Derived, not committed.
 grids = {}
-for name in ('Vocabulary', 'Phrasal Verb', 'Idioms', 'Common', 'Grammar'):
+for name in ('Vocabulary', 'Phrasal Verb', 'Idioms', 'Common', 'Grammar',
+             'Reading Passage'):
     ws = wb[name]
     g = []
     for row in ws.iter_rows(values_only=True):
