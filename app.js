@@ -1228,6 +1228,18 @@
     if (book.mine) {
       var nav = el("div", "entry-nav");
       nav.appendChild(el("span", "grow"));
+      /* A book added before the token was set, or added with the tick clear,
+         is still only on this device: this is the way it gets to the others
+         without being picked all over again. */
+      if (canPublishBooks()) {
+        var up = el("button", "btn",
+          onSite(book.slug) ? "Replace on the site" : "Save to the site");
+        up.type = "button";
+        up.addEventListener("click", function () { sendBook(book, up); });
+        nav.appendChild(up);
+      } else if (onSite(book.slug)) {
+        nav.appendChild(el("span", "shelf-msg good", "On the site"));
+      }
       var rm = el("button", "btn", "Remove from this device");
       rm.type = "button";
       rm.addEventListener("click", function () { forgetBook(book); });
@@ -1361,6 +1373,15 @@
     return canAddBooks() && unlocked() && !!settings.ghToken && !!ghRepo();
   }
 
+  /* The shelf the site published, read when the page opened. A book on it is
+     on every device already, which is what the buttons below go by. */
+  function onSite(slug) {
+    for (var i = 0; i < SHELF_NET.length; i++) {
+      if (SHELF_NET[i] && SHELF_NET[i].slug === slug) return true;
+    }
+    return false;
+  }
+
   /* The API wants base64 of the bytes, and btoa wants one byte per character,
      so the text goes through UTF-8 first — a book of Vietnamese notes or curly
      quotes would come out wrong otherwise. */
@@ -1426,13 +1447,22 @@
   }
 
   /* The book first and the shelf after it: a shelf is read by every device
-     that opens the page, and it must never name a file that is not there. */
-  function publishBook(book) {
+     that opens the page, and it must never name a file that is not there.
+
+     The repo is asked what it already has before anything is written. A book
+     of that name up there is either this book or a better copy of it, and
+     which one wins is not for a file picker to decide — so it comes back
+     already: true, and replacing it takes a second, deliberate press. */
+  function publishBook(book, replace) {
     var file = BOOKS_DIR + book.slug + ".json";
     return ghRead(file).then(function (got) {
+      if (got && !replace) return { already: true };
       return ghWrite(file, JSON.stringify(book), got && got.sha,
-        "Add " + book.title + " to the shelf");
-    }).then(function () { return putOnShelf(book, 0); });
+        got ? "Replace " + book.title + " on the shelf"
+            : "Add " + book.title + " to the shelf")
+        .then(function () { return putOnShelf(book, 0); })
+        .then(function () { return { already: false, replaced: !!got }; });
+    });
   }
 
   function putOnShelf(book, tried) {
@@ -1539,8 +1569,16 @@
         /* The book is readable here already; the site is the slow half, so it
            is reported when it lands rather than waited for first. */
         if (!alsoSite) return null;
-        return publishBook(book).then(function () {
+        return publishBook(book).then(function (res) {
           if (tick) tick.checked = false;
+          if (res.already) {
+            markOnSite(book);
+            bookMsg(book.title + " is on the site already — nothing was sent. "
+              + "Open it and press Replace on the site to put this copy up "
+              + "instead.", "warn");
+            return;
+          }
+          markOnSite(book);
           bookMsg(book.title + " is on the site — every device has it once "
             + "GitHub Pages has published the commit, a minute or so.", "good");
         }, function (err) {
@@ -1554,6 +1592,43 @@
     }).then(function () {
       if (add) add.disabled = false;
     });
+  }
+
+  /* The shelf entry knows the chapter names and not one word of the text, so
+     the book is read back out of this device's storage before it is sent. */
+  function sendBook(book, btn) {
+    var replacing = onSite(book.slug);
+    var was = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = replacing ? "Replacing…" : "Saving…";
+    loadBook(book).then(function (full) {
+      return publishBook(full, replacing).then(function (res) {
+        if (res.already) {
+          toast(book.title + " is on the site already");
+        } else {
+          toast(book.title + (res.replaced ? " replaced on the site" : " is on the site")
+            + " — a minute for GitHub Pages to publish it");
+        }
+        markOnSite(full);
+      });
+    }).catch(function (err) {
+      btn.disabled = false;
+      btn.textContent = was;
+      toast("Not sent — " + (err && err.message ? err.message : "unknown"));
+    });
+  }
+
+  /* The site's shelf is read once, when the page opens, so what was just put
+     on it is put on this copy of it too — the button reads its state from
+     there, and so does the next book added with the same name. */
+  function markOnSite(full) {
+    if (!onSite(full.slug)) {
+      var entry = onShelf(full);
+      delete entry.mine;
+      SHELF_NET = SHELF_NET.concat([entry]);
+      indexShelf();
+    }
+    drawDetail();
   }
 
   function forgetBook(book) {

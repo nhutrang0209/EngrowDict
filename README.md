@@ -278,9 +278,10 @@ straight from the browser: the file is read where it is picked — nothing is
 uploaded anywhere — and the book is kept in that browser's own storage, so it
 is on the device it was added on and no other. Beside the button is **Put it on
 the site too**, which sends the same book to `docs/books/` in this repo, and
-from there every device has it; it needs a GitHub token, and how to get one is
-under *Books for every device* in Settings. `import_books.py --publish` does
-the same two writes from a terminal.
+from there every device has it; a book already on a device gets there the same
+way with **Save to the site**, on its contents page. Both need a GitHub token,
+and how to get one is under *Books for every device* in Settings.
+`import_books.py --publish` does the same two writes from a terminal.
 
     pip install pymupdf
     python import_books.py books/your-book.pdf            # -> books/out/
@@ -326,12 +327,23 @@ the token is only for a custom domain, which says nothing about what is behind
 it.
 
 The book goes up before the shelf, so the shelf never names a file that is not
-there yet, and re-sending a book replaces the one entry rather than adding a
-second. GitHub Pages then takes a minute to publish the commit, and an installed
-copy is cache-first, so a phone that already has the page may show yesterday's
-shelf once and the new book the next time it is opened. The tick is off every
-time: `docs/` is public, and putting a book there is a decision worth making on
-purpose rather than by leaving a box ticked.
+there yet. Nothing is ever written over by accident: the repo is asked what it
+holds first, and a book of that name already up there stops the send and says
+so. Replacing it is a second press — **Replace on the site**, on the contents
+page of the book — because a second copy of a book is usually a better scan of
+it and sometimes a worse one, and only the person looking at it knows which.
+
+A book that was added before the token was, or added with the tick clear, is
+not stranded: open it and **Save to the site** sends the copy in this browser's
+storage, no file to pick again. The button reads the shelf the site published,
+so it says *Save to the site* for a book only this device has and *Replace on
+the site* for one every device has.
+
+GitHub Pages then takes a minute to publish the commit, and an installed copy is
+cache-first, so a phone that already has the page may show yesterday's shelf once
+and the new book the next time it is opened. The tick is off every time: `docs/`
+is public, and putting a book there is a decision worth making on purpose rather
+than by leaving a box ticked.
 
 ## Installing it on a phone
 

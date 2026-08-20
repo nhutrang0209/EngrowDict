@@ -4,8 +4,10 @@ The quick way to add a book is the **Add a book** button in the Books tab of
 the page itself: pick a PDF or an EPUB and it is read in the browser, kept in
 that browser's storage, and readable straight away. It stays on that device —
 unless **Put it on the site too** is ticked beside the button, which commits the
-book to `docs/books/` for every device. That needs a GitHub token with
-Contents: write, set once in Settings.
+book to `docs/books/` for every device. A book already sitting on a device goes
+up the same way with **Save to the site** on its contents page, and one the site
+already has is left alone until **Replace on the site** is pressed. All of that
+needs a GitHub token with Contents: write, set once in Settings.
 
 This folder is the other way round, for doing the same from a terminal — a
 shelf of ten books at once, or a machine with no token in its browser. Drop a

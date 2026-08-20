@@ -192,6 +192,7 @@ function shelfPage(repo, book, extra) {
      list.map(b => b.slug).join(',') === 'a-test-book,apples,zebra',
      list.map(b => b.slug).join(','));
 
+  /* --- a book the site already has ---------------------------------------- */
   const g4 = shelfPage(repo, Object.assign({}, BOOK, { author: 'Someone Else' }));
   await wait(900);
   click(g4.window, g4.doc.getElementById('tab-books'));
@@ -200,10 +201,31 @@ function shelfPage(repo, book, extra) {
   pickFile(g4, 'a-test-book.epub');
   await wait(400);
   list = JSON.parse(repo.text('docs/books/index.json'));
-  ok('the same book sent twice is one entry, the second one standing',
+  ok('a book of that name up there already is not written over',
+     list.length === 3 &&
+     list.filter(b => b.slug === 'a-test-book')[0].author === 'Nobody',
+     list.map(b => b.slug + ':' + b.author).join(', '));
+  ok('  the page says so, and says what to press instead',
+     /already/.test(msg(g4)) && /Replace on the site/.test(msg(g4)), msg(g4));
+
+  /* --- replacing it, on purpose ------------------------------------------- */
+  const nav = () => [...g4.doc.querySelectorAll('.entry-nav .btn')];
+  ok('the book that was refused offers to replace the one up there',
+     nav().some(b => b.textContent === 'Replace on the site'),
+     nav().map(b => b.textContent).join(' / '));
+  click(g4.window, nav().find(b => b.textContent === 'Replace on the site'));
+  await wait(400);
+  list = JSON.parse(repo.text('docs/books/index.json'));
+  ok('  pressed, it writes this copy over the old one',
      list.length === 3 &&
      list.filter(b => b.slug === 'a-test-book')[0].author === 'Someone Else',
      list.map(b => b.slug + ':' + b.author).join(', '));
+  ok('  under a commit message that says it replaced something',
+     repo.log.filter(c => c.method === 'PUT')
+       .some(c => c.message === 'Replace A Test Book on the shelf'),
+     repo.log.filter(c => c.method === 'PUT').map(c => c.message).join(' / '));
+  ok('  and there is still one file per book',
+     Object.keys(repo.kept).length === 4, Object.keys(repo.kept).join(', '));
 
   /* --- a token that is refused -------------------------------------------- */
   const bad = fakeRepo();
@@ -220,6 +242,53 @@ function shelfPage(repo, book, extra) {
      g5.doc.querySelector('.hit.passage .hw')?.textContent === 'A Test Book');
   ok('  and nothing was written to the repo', !Object.keys(bad.kept).length,
      Object.keys(bad.kept).join(', '));
+
+  /* --- a book added long before the token was ----------------------------- */
+  const late = fakeRepo();
+  const g9 = boot({
+    html: shell, full: true, idbSeed: [BOOK],
+    url: 'https://nhutrang0209.github.io/EngrowDict/',
+    store: unlockedStore({ ghToken: 'github_pat_test' }),
+    fetchStub: stubs(late), bookify: () => BOOK,
+  });
+  await wait(900);
+  click(g9.window, g9.doc.getElementById('tab-books'));
+  await wait(40);
+  click(g9.window, g9.doc.querySelector('.hit'));
+  await wait(60);
+  const nav9 = () => [...g9.doc.querySelectorAll('.entry-nav .btn')];
+  ok('a book already on the device offers to be saved to the site',
+     nav9().map(b => b.textContent).join(' / ') ===
+     'Save to the site / Remove from this device',
+     nav9().map(b => b.textContent).join(' / '));
+
+  click(g9.window, nav9().find(b => b.textContent === 'Save to the site'));
+  await wait(400);
+  ok('  pressed, the book and the shelf go up',
+     !!late.text('docs/books/a-test-book.json') &&
+     JSON.parse(late.text('docs/books/index.json')).length === 1,
+     Object.keys(late.kept).join(', '));
+  ok('  the text came out of this device, not off the network',
+     late.text('docs/books/a-test-book.json') === JSON.stringify(BOOK));
+  ok('  and the button now offers a replacement instead of a first copy',
+     nav9().some(b => b.textContent === 'Replace on the site'),
+     nav9().map(b => b.textContent).join(' / '));
+
+  const g10 = boot({
+    html: shell, full: true, idbSeed: [BOOK],
+    url: 'https://nhutrang0209.github.io/EngrowDict/',
+    store: unlockedStore(),
+    fetchStub: stubs(fakeRepo()), bookify: () => BOOK,
+  });
+  await wait(900);
+  click(g10.window, g10.doc.getElementById('tab-books'));
+  await wait(40);
+  click(g10.window, g10.doc.querySelector('.hit'));
+  await wait(60);
+  ok('with no token there is nothing to press but Remove',
+     [...g10.doc.querySelectorAll('.entry-nav .btn')]
+       .map(b => b.textContent).join(' / ') === 'Remove from this device',
+     [...g10.doc.querySelectorAll('.entry-nav .btn')].map(b => b.textContent).join(' / '));
 
   /* --- and none of it happens without the tick ---------------------------- */
   const quiet = fakeRepo();
