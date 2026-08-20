@@ -255,6 +255,7 @@ function appsScriptSandbox(grids, props, others) {
       getScriptProperties: () => ({
         getProperty: k => props[k] || null,
         setProperty: (k, v) => { props[k] = v; },
+        deleteProperty: k => { delete props[k]; },
       }),
     },
     LockService: { getScriptLock: () => ({ waitLock: () => {}, releaseLock: () => {} }) },

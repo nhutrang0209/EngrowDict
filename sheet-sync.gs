@@ -46,6 +46,7 @@ function onOpen() {
     .addItem('Publish to the web', 'syncToWeb')
     .addSeparator()
     .addItem('Set up GitHub repo', 'setupRepo')
+    .addItem('Key for the Vietnamese column', 'setAiKey')
     .addItem('Link for the web to write words', 'showWriteLink')
     .addItem('Preview the counts (no upload)', 'previewCounts')
     .addToUi();
@@ -108,6 +109,59 @@ function previewCounts() {
     + '\nEasily mixed up: ' + (n.compare || 0)
     + '\n\nReading passages are left out of the public copy.',
     SpreadsheetApp.getUi().ButtonSet.OK);
+}
+
+/**
+ * Where the key for the Vietnamese column is put in. It stays in this script's
+ * properties: the web page never sees it, so it cannot leak from a browser.
+ */
+function setAiKey() {
+  var ui = SpreadsheetApp.getUi();
+  var props = PropertiesService.getScriptProperties();
+  var had = props.getProperty(PROP_AI);
+
+  var r = ui.prompt('Key for the Vietnamese column',
+    'Paste an API key. One beginning sk-ant- goes to Claude '
+    + '(console.anthropic.com), anything else to OpenAI (platform.openai.com).\n\n'
+    + (had ? 'A key is already saved. Pasting another replaces it; leaving this '
+          + 'empty removes it and the column falls back to Google Translate.'
+          : 'Leave it empty to carry on without one.'),
+    ui.ButtonSet.OK_CANCEL);
+  if (r.getSelectedButton() !== ui.Button.OK) return;
+
+  var key = r.getResponseText().trim();
+  if (!key) {
+    props.deleteProperty(PROP_AI);
+    props.deleteProperty(PROP_AI_MODEL);
+    ui.alert('Removed', 'The Vietnamese column will be machine-translated again.',
+      ui.ButtonSet.OK);
+    return;
+  }
+  if (key.indexOf('sk-') !== 0) {
+    ui.alert('That does not look like an API key',
+      'Both kinds start with sk-. A ChatGPT Plus subscription is not one of '
+      + 'these: the key has to come from platform.openai.com, which is billed '
+      + 'separately.', ui.ButtonSet.OK);
+    return;
+  }
+
+  var claude = key.indexOf('sk-ant-') === 0;
+  props.setProperty(PROP_AI, key);
+
+  var m = ui.prompt('Model',
+    'Leave blank for the default (' + (claude ? 'claude-opus-5' : 'gpt-4o-mini')
+    + '). Fill it in only if that one is not available to you.',
+    ui.ButtonSet.OK_CANCEL);
+  if (m.getSelectedButton() === ui.Button.OK && m.getResponseText().trim()) {
+    props.setProperty(PROP_AI_MODEL, m.getResponseText().trim());
+  } else {
+    props.deleteProperty(PROP_AI_MODEL);
+  }
+
+  ui.alert('Saved',
+    'Auto Fill will ask ' + (claude ? 'Claude' : 'OpenAI') + ' for the Vietnamese '
+    + 'from now on. The key stays in this script and never reaches the web page.',
+    ui.ButtonSet.OK);
 }
 
 /* ------------------------------------------- the way back: web -> sheet */

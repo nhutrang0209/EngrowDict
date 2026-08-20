@@ -169,11 +169,12 @@ smaller of the two, so most senses arrive with that column empty. What fills it:
 1. Cambridge's own Vietnamese, where the word is in that dictionary.
 2. Otherwise **a model**, asked for the gloss a learner would write down — one
    to five words, not a translation of the wording — with the sheet's own
-   entries shown to it as the house style. Put a key in the script property
-   `SOTRATU_AI_KEY` to turn this on; without it, step 3. Either kind of key
-   works: one beginning `sk-ant-` goes to Claude, anything else to OpenAI.
-   `SOTRATU_AI_MODEL` names a particular model if the default is not the one
-   you want.
+   entries shown to it as the house style. Turn it on with **EngrowDict → Key
+   for the Vietnamese column** in the sheet; without a key, step 3. Either kind
+   works: one beginning `sk-ant-` goes to Claude, anything else to OpenAI, and
+   the same menu item asks for a model name where the default is not the one
+   you can use. The key is kept in the script's own properties, so the public
+   page never sees it.
 3. Otherwise `LanguageApp` (Google Translate), cut back to a gloss. Accurate, but
    it reads like a translation: *abaft* comes out "ở phía sau hoặc bên hông tàu
    hoặc thuyền" where Claude writes "ở phía đuôi tàu".

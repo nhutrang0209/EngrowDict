@@ -471,6 +471,49 @@ function page(store, posts, reply) {
      broke.warning);
   delete two.props.SOTRATU_AI_KEY;
 
+  /* --------------- G. putting the key in from the sheet's own menu */
+  const three2 = appsScriptSandbox(grids, { SOTRATU_KEY: CFG.key });
+  vm.createContext(three2);
+  vm.runInContext(read('sheet-sync.gs') + '\nthis.__setAiKey = setAiKey;', three2);
+
+  const answers = [];
+  three2.SpreadsheetApp.getUi = () => ({
+    prompt: () => {
+      const a = answers.shift();
+      return { getSelectedButton: () => a.button, getResponseText: () => a.text };
+    },
+    alert: function () { three2.shown.alert = [].slice.call(arguments); },
+    Button: { OK: 'OK', CANCEL: 'CANCEL' },
+    ButtonSet: { OK: 'OK', OK_CANCEL: 'OK_CANCEL' },
+  });
+
+  answers.push({ button: 'OK', text: ' sk-proj-abc123 ' }, { button: 'OK', text: '' });
+  three2.__setAiKey();
+  ok('the menu item saves the key, trimmed, without a model',
+     three2.props.SOTRATU_AI_KEY === 'sk-proj-abc123' &&
+     three2.props.SOTRATU_AI_MODEL === undefined &&
+     /OpenAI/.test(three2.shown.alert[1]), three2.shown.alert[1].slice(0, 60));
+
+  answers.push({ button: 'OK', text: 'sk-ant-xyz' }, { button: 'OK', text: 'claude-sonnet-5' });
+  three2.__setAiKey();
+  ok('  a new key replaces the old one, and a named model is kept',
+     three2.props.SOTRATU_AI_KEY === 'sk-ant-xyz' &&
+     three2.props.SOTRATU_AI_MODEL === 'claude-sonnet-5' &&
+     /Claude/.test(three2.shown.alert[1]));
+
+  answers.push({ button: 'OK', text: 'my chatgpt password' });
+  three2.__setAiKey();
+  ok('  something that is not an API key is refused, and the old one left alone',
+     three2.props.SOTRATU_AI_KEY === 'sk-ant-xyz' &&
+     /platform.openai.com/.test(three2.shown.alert[1]));
+
+  answers.push({ button: 'OK', text: '' });
+  three2.__setAiKey();
+  ok('  and an empty answer takes the key back out',
+     three2.props.SOTRATU_AI_KEY === undefined &&
+     three2.props.SOTRATU_AI_MODEL === undefined &&
+     /machine-translated/.test(three2.shown.alert[1]));
+
   /* ------------------- F. the Fill button, from the browser's side */
   const postsFill = [];
   const DRAFT = {
