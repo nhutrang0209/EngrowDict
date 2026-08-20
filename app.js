@@ -554,7 +554,9 @@
 
   function showDetail() {
     document.body.dataset.view = "detail";
-    document.querySelector(".detail").scrollTop = 0;
+    var box = detailBox();
+    if (box) box.scrollTop = 0;
+    restorePlace();
   }
 
   /* ---- A–Z rail ----------------------------------------------------------- */
@@ -587,12 +589,15 @@
     host.className = "detail-inner" + (wide ? " wide" : "");
     if (view === "read") {
       host.appendChild(selectedRead ? readingView(selectedRead) : blankView());
+      restorePlace();
       return;
     }
     if (view === "book") {
       host.appendChild(selectedBook ? bookView(selectedBook) : blankView());
+      restorePlace();
       return;
     }
+    if (cameFrom) host.appendChild(backRow());
     var e = byId[selectedId];
     if (e && !e.senses) e = null;            // a passage id left over from the other view
     host.appendChild(e ? entryView(e) : blankView());
@@ -859,6 +864,7 @@
     var full = el("button", "btn", "Open in the dictionary");
     full.type = "button";
     full.addEventListener("click", function () {
+      markPlace();
       closePopDict();
       view = "vocab";
       selectedId = e.id;
@@ -903,6 +909,127 @@
     b.hidden = view !== "read";
     b.setAttribute("aria-pressed", String(popOpen()));
     b.className = popOpen() ? "btn btn-primary" : "btn";
+  }
+
+  /* ---- where you got to, and the way back ---------------------------------
+
+     A passage runs longer than a screen, so leaving one and coming back used
+     to mean hunting for the line you had reached. How far down you were is
+     kept per passage — and per chapter of a book — and put back when it opens
+     again. A fraction of the way down rather than a count of pixels: the same
+     passage is a different height on a phone.
+
+     The other half of the same problem: looking a word up from a passage took
+     you to the Dictionary tab and left the passage behind. Where you were is
+     marked before the jump, and the entry carries a button back to it. */
+  var PLACE_KEY = "engrowdict:place:v1";
+  var places = null, placeTimer = 0, cameFrom = null;
+
+  function detailBox() { return document.querySelector(".detail"); }
+
+  function readPlaces() {
+    if (places) return places;
+    try { places = JSON.parse(localStorage.getItem(PLACE_KEY) || "{}"); }
+    catch (err) { places = {}; }
+    if (!places || typeof places !== "object") places = {};
+    return places;
+  }
+
+  /* What the pane is showing, if it is showing something you read at all. */
+  function placeKey() {
+    if (view === "read" && selectedRead) return "r:" + selectedRead.id;
+    if (view === "book" && selectedBook && openChapter) {
+      return "b:" + selectedBook.slug + ":" + openChapter;
+    }
+    return "";
+  }
+
+  function savePlace() {
+    var key = placeKey(), box = detailBox();
+    if (!key || !box) return;
+    var room = box.scrollHeight - box.clientHeight;
+    if (room <= 0) return;                  // nothing to scroll, nothing to keep
+    var at = box.scrollTop / room;
+    var all = readPlaces();
+    // the top is where it starts anyway, and the end is read: both open fresh
+    if (at < 0.02 || at > 0.98) delete all[key];
+    else all[key] = Math.round(at * 1000) / 1000;
+    try { localStorage.setItem(PLACE_KEY, JSON.stringify(all)); } catch (err) { /* quota */ }
+  }
+
+  /* Called every time the pane is redrawn, so a passage with nothing kept for
+     it starts at the top rather than wherever the last one was left. */
+  function restorePlace() {
+    var key = placeKey(), box = detailBox();
+    if (!key || !box) return;
+    var at = readPlaces()[key];
+    var to = down(box, at);
+    box.scrollTop = to;
+    // The page's fonts are swapped in when they arrive, and the passage is a
+    // different height once they are: on a cold load the line the reader
+    // stopped at has moved by then. Put it back a second time, unless they
+    // have taken over the scrolling themselves in the meantime.
+    if (document.fonts && document.fonts.ready && document.fonts.ready.then) {
+      document.fonts.ready.then(function () {
+        if (placeKey() !== key || Math.abs(box.scrollTop - to) > 4) return;
+        box.scrollTop = down(box, at);
+      });
+    }
+  }
+
+  function down(box, at) {
+    var room = box.scrollHeight - box.clientHeight;
+    return (at && room > 0) ? at * room : 0;
+  }
+
+  function watchPlace(box) {
+    box.addEventListener("scroll", function () {
+      if (placeTimer) return;               // a scroll is hundreds of events
+      placeTimer = setTimeout(function () { placeTimer = 0; savePlace(); }, 250);
+    }, { passive: true });
+  }
+
+  /* Where the dictionary was opened from, remembered so it can be got back to. */
+  function markPlace() {
+    if (view === "read" && selectedRead) {
+      cameFrom = { view: "read", id: selectedRead.id, chapter: 0,
+                   label: selectedRead.title };
+    } else if (view === "book" && selectedBook && openChapter) {
+      cameFrom = { view: "book", id: selectedBook.id, chapter: openChapter,
+                   label: "Chapter " + openChapter + " of " + selectedBook.title };
+    } else {
+      cameFrom = null;
+      return;
+    }
+    savePlace();
+  }
+
+  function goBack() {
+    var to = cameFrom;
+    if (!to) return;
+    cameFrom = null;
+    view = to.view;
+    selectedRead = null;
+    selectedBook = null;
+    openChapter = 0;
+    query = "";
+    if (qInput) qInput.value = "";
+    syncViewButtons();
+    refresh();
+    select(to.id);
+    if (to.chapter) { openChapter = to.chapter; drawDetail(); }
+    showDetail();
+  }
+
+  function backRow() {
+    var row = el("div", "back-row");
+    var b = el("button", "btn", "← Back to " + cameFrom.label);
+    b.type = "button";
+    b.id = "back-to-reading";
+    b.title = "Back to what you were reading";
+    b.addEventListener("click", goBack);
+    row.appendChild(b);
+    return row;
   }
 
   /* ---- the divider: drag to resize, click the chevron to fold away -------- */
@@ -1027,6 +1154,7 @@
       b.dataset.view = t[0];
       b.addEventListener("click", function () {
         if (view === t[0]) return;
+        if (t[0] === "vocab") markPlace(); else cameFrom = null;
         view = t[0];
         selectedRead = null;
         selectedBook = null;
@@ -1291,9 +1419,7 @@
       if (to) {
         b.addEventListener("click", function () {
           openChapter = to.n;
-          drawDetail();
-          var box = document.getElementById("detail");
-          if (box) box.scrollTop = 0;
+          drawDetail();          // which puts the pane where this chapter was left
         });
       }
       nav.appendChild(b);
@@ -2464,6 +2590,7 @@
     restoreList();
 
     scrollBox.addEventListener("scroll", function () { paint(false); }, { passive: true });
+    watchPlace(detail);
     window.addEventListener("resize", function () { paint(true); });
 
     qInput.addEventListener("input", function () { query = qInput.value; refresh(); });

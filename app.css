@@ -366,6 +366,10 @@ body.resizing { cursor: col-resize; user-select: none; }
 .detail-inner.wide .read { max-width: none; }
 .entry { max-width: 62ch; }
 
+/* the way back to a passage the dictionary was opened from */
+.back-row { margin-bottom: 20px; }
+.back-row .btn { max-width: 100%; overflow: hidden; text-overflow: ellipsis; display: block; white-space: nowrap; }
+
 .entry-nav { display: flex; align-items: center; gap: 7px; margin-bottom: 28px; font-family: var(--mono); font-size: 10.5px; color: var(--faint); }
 .entry-nav .pos-in-list { font-variant-numeric: tabular-nums; }
 .entry-nav .grow { flex: 1; }
