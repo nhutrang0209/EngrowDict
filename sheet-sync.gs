@@ -833,8 +833,18 @@ function aiName(key) {
 function aiDefaultModel(key) {
   var kind = aiKind(key);
   return kind === 'claude' ? 'claude-opus-5'
-    : kind === 'gemini' ? 'gemini-2.5-flash' : 'gpt-4o-mini';
+    : kind === 'gemini' ? GEMINI_MODELS[0] : 'gpt-4o-mini';
 }
+
+/* Google retires a model name and then answers 404 to everyone still asking
+   for it — gemini-2.5-flash went that way — and a preview under load answers
+   503. Either is worth trying the next name for rather than losing the gloss,
+   so the default is a list and the first that answers wins. A name set in
+   SOTRATU_AI_MODEL is asked on its own: it was chosen on purpose.
+
+   gemini-flash-latest always exists but thinks for twenty seconds; the numbered
+   one answers in two, so it goes first. */
+var GEMINI_MODELS = ['gemini-3.5-flash', 'gemini-flash-latest', 'gemini-3-flash-preview'];
 
 function glossRules() {
   return 'You write the Vietnamese column of an English-Vietnamese vocabulary '
@@ -877,6 +887,53 @@ function glossList(text, howMany) {
   return out;
 }
 
+function glossesFromGemini(word, pos, defs, key, names) {
+  var opts = {
+    method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+    headers: { 'x-goog-api-key': key },
+    payload: JSON.stringify({
+      system_instruction: { parts: [{ text: glossRules() }] },
+      contents: [{ role: 'user', parts: [{ text: glossAsk(word, pos, defs) }] }],
+      generationConfig: { temperature: 0.2, responseMimeType: 'application/json' }
+    })
+  };
+
+  var trouble = '';
+  for (var n = 0; n < names.length; n++) {
+    var r = UrlFetchApp.fetch(
+      'https://generativelanguage.googleapis.com/v1beta/models/' + names[n]
+      + ':generateContent', opts);
+    var code = r.getResponseCode();
+    if (code === 200) return glossList(geminiText(r.getContentText()), defs.length);
+    trouble = 'Gemini answered ' + code + ' for ' + names[n] + ': '
+      + String(r.getContentText()).replace(/\s+/g, ' ').slice(0, 120);
+    // a name that is gone, busy or rate-limited is worth the next name; a
+    // refused key or a malformed request is not
+    if (code !== 404 && code !== 429 && code !== 503) break;
+  }
+  throw new Error(trouble || 'Gemini sent nothing back');
+}
+
+function geminiText(raw) {
+  var body = JSON.parse(raw);
+  var cand = (body.candidates || [])[0];
+  if (!cand) {
+    var blocked = body.promptFeedback && body.promptFeedback.blockReason;
+    throw new Error(blocked
+      ? 'Gemini would not answer for this word (' + blocked + ')'
+      : 'Gemini sent nothing back');
+  }
+  var parts = (cand.content && cand.content.parts) || [];
+  var text = '';
+  for (var g = 0; g < parts.length; g++) {
+    if (parts[g].text) text += parts[g].text;
+  }
+  if (!text) {
+    throw new Error('Gemini stopped at ' + (cand.finishReason || 'nothing at all'));
+  }
+  return text;
+}
+
 function glossesFromAI(word, pos, defs, key, model) {
   var kind = aiKind(key);
   var url, opts;
@@ -903,17 +960,8 @@ function glossesFromAI(word, pos, defs, key, model) {
     /* The key rides in a header rather than the query string, so it stays out
        of anything that logs URLs. Asking for JSON back means the answer is the
        list itself and not a list wrapped in a sentence about the list. */
-    opts = {
-      method: 'post', contentType: 'application/json', muteHttpExceptions: true,
-      headers: { 'x-goog-api-key': key },
-      payload: JSON.stringify({
-        system_instruction: { parts: [{ text: glossRules() }] },
-        contents: [{ role: 'user', parts: [{ text: glossAsk(word, pos, defs) }] }],
-        generationConfig: { temperature: 0.2, responseMimeType: 'application/json' }
-      })
-    };
-    url = 'https://generativelanguage.googleapis.com/v1beta/models/'
-      + (model || 'gemini-2.5-flash') + ':generateContent';
+    return glossesFromGemini(word, pos, defs, key,
+      model ? [model] : GEMINI_MODELS);
   } else {
     opts = {
       method: 'post', contentType: 'application/json', muteHttpExceptions: true,
@@ -942,20 +990,6 @@ function glossesFromAI(word, pos, defs, key, model) {
     if (body.stop_reason === 'refusal') throw new Error('Claude declined this word');
     for (var j = 0; j < (body.content || []).length; j++) {
       if (body.content[j].type === 'text') text += body.content[j].text;
-    }
-  } else if (kind === 'gemini') {
-    var cand = (body.candidates || [])[0];
-    var blocked = body.promptFeedback && body.promptFeedback.blockReason;
-    if (!cand) {
-      throw new Error(blocked ? 'Gemini would not answer for this word ('
-        + blocked + ')' : 'Gemini sent nothing back');
-    }
-    var parts = (cand.content && cand.content.parts) || [];
-    for (var g = 0; g < parts.length; g++) {
-      if (parts[g].text) text += parts[g].text;
-    }
-    if (!text) {
-      throw new Error('Gemini stopped at ' + (cand.finishReason || 'nothing at all'));
     }
   } else {
     var choice = (body.choices || [])[0];

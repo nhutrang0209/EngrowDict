@@ -200,13 +200,13 @@ function page(store, posts, reply) {
      Apps Script project. */
   const set1 = call({ key: CFG.key, action: 'setai', aiKey: ' AQ.Ab8RN6ALongEnoughFakeKey ' });
   ok('setai puts the key in the script that answers, trimmed',
-     set1.ok && set1.ai === 'Gemini' && set1.aiModel === 'gemini-2.5-flash' &&
+     set1.ok && set1.ai === 'Gemini' && set1.aiModel === 'gemini-3.5-flash' &&
      sandbox.props.SOTRATU_AI_KEY === 'AQ.Ab8RN6ALongEnoughFakeKey',
      JSON.stringify(set1));
   ok('  and the ping now says a key is set, still without sending it',
      JSON.stringify(call({ key: CFG.key, action: 'ping' })) ===
      JSON.stringify({ ok: true, pong: true, script: 'script-id-under-test',
-                      ai: 'Gemini', aiModel: 'gemini-2.5-flash' }),
+                      ai: 'Gemini', aiModel: 'gemini-3.5-flash' }),
      JSON.stringify(call({ key: CFG.key, action: 'ping' })));
   ok('  a key with a space in it, or a short one, is refused',
      call({ key: CFG.key, action: 'setai', aiKey: 'my chatgpt password' }).ok === false &&
@@ -216,7 +216,7 @@ function page(store, posts, reply) {
      call({ key: CFG.key, action: 'setai', aiKey: 'AQ.Ab8RN6ALongEnoughFakeKey',
             aiModel: 'gemini-3-flash-preview' }).aiModel === 'gemini-3-flash-preview' &&
      call({ key: CFG.key, action: 'setai', aiKey: 'AQ.Ab8RN6ALongEnoughFakeKey' })
-       .aiModel === 'gemini-2.5-flash');
+       .aiModel === 'gemini-3.5-flash');
   ok('  and an empty key takes it back out',
      call({ key: CFG.key, action: 'setai', aiKey: '' }).ai === '' &&
      sandbox.props.SOTRATU_AI_KEY === undefined);
@@ -575,7 +575,7 @@ function page(store, posts, reply) {
   ok('a Google key is taken as well, whatever shape it is in, and asked at its own address',
      gem.entry.senses[0].vi === 'kẻ ăn bám' && gem.glossed === 1 &&
      gem.by === 'Gemini' && two.net.translated.length === 0 &&
-     /models\/gemini-2\.5-flash:generateContent$/.test(two.net.calls[two.net.calls.length - 1]),
+     /models\/gemini-3\.5-flash:generateContent$/.test(two.net.calls[two.net.calls.length - 1]),
      gem.entry.senses[0].vi + ' / ' + two.net.calls[two.net.calls.length - 1]);
   const toGemini = two.net.payloads[two.net.payloads.length - 1];
   ok('  the house style goes in as the system instruction, the words as the turn',
@@ -583,6 +583,39 @@ function page(store, posts, reply) {
      /a thing of no account/.test(toGemini.contents[0].parts[0].text) &&
      toGemini.generationConfig.responseMimeType === 'application/json',
      JSON.stringify(toGemini.generationConfig));
+
+  /* A name Google has retired answers 404 to everyone still asking for it, so
+     the next name is tried rather than the gloss being lost. */
+  two.net.calls = [];
+  two.net.reply = url => /gemini-3\.5-flash/.test(url)
+    ? { code: 404, body: '{"error":{"message":"no longer available to new users"}}' }
+    : /gemini-flash-latest/.test(url)
+      ? { code: 200, body: JSON.stringify({ candidates: [{ content:
+          { parts: [{ text: '["ở phía đuôi tàu"]' }] } }] }) }
+      : notInCambridge(url);
+  const moved = call2({ key: CFG.key, action: 'draft', word: 'zzz' });
+  ok('a model Google has retired is followed by the next name, not by a lost gloss',
+     moved.glossed === 1 && moved.entry.senses[0].vi === 'ở phía đuôi tàu' &&
+     two.net.calls.filter(u => /generativelanguage/.test(u)).length === 2,
+     two.net.calls.filter(u => /generativelanguage/.test(u)).join(' → '));
+
+  /* A refused key is not worth a second name. */
+  two.net.calls = [];
+  two.net.reply = url => /generativelanguage/.test(url)
+    ? { code: 400, body: '{"error":{"message":"API key not valid"}}' }
+    : notInCambridge(url);
+  const dud = call2({ key: CFG.key, action: 'draft', word: 'zzz' });
+  ok('  but a refused key stops at the first, and says what was answered',
+     dud.glossed === 0 && dud.translated === 1 &&
+     /400/.test(dud.warning) && /API key not valid/.test(dud.warning) &&
+     two.net.calls.filter(u => /generativelanguage/.test(u)).length === 1,
+     dud.warning);
+
+  two.net.reply = url => /generativelanguage\.googleapis\.com/.test(url)
+    ? { code: 200, body: JSON.stringify({
+        candidates: [{ finishReason: 'STOP', content: { role: 'model',
+          parts: [{ text: '["kẻ ăn bám"]' }] } }] }) }
+    : notInCambridge(url);
 
   /* A word Gemini will not answer for is a warning, not a lost draft. */
   two.net.reply = url => /generativelanguage\.googleapis\.com/.test(url)
