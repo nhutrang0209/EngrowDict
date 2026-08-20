@@ -525,6 +525,18 @@ function page(store, posts, reply) {
   delete two.props.SOTRATU_AI_MODEL;
   two.props.SOTRATU_AI_KEY = 'sk-ant-not-a-real-key';
 
+  /* No key at all is worth saying: "machine-translated" alone reads as though
+     a model had been asked and had answered like that. */
+  delete two.props.SOTRATU_AI_KEY;
+  delete two.props.SOTRATU_AI_MODEL;
+  two.net.reply = url => notInCambridge(url);
+  const nokey = call2({ key: CFG.key, action: 'draft', word: 'zzz' });
+  ok('with no key at all the draft says where the Vietnamese came from',
+     nokey.ok && nokey.glossed === 0 && nokey.translated === 1 &&
+     /No AI key is set/.test(nokey.warning) &&
+     /Key for the Vietnamese column/.test(nokey.warning), nokey.warning);
+  two.props.SOTRATU_AI_KEY = 'sk-ant-not-a-real-key';
+
   /* A key that does not work must not cost you the draft. */
   two.net.reply = url => /api\.anthropic\.com/.test(url)
     ? { code: 401, body: '{"error":{"message":"invalid x-api-key"}}' }

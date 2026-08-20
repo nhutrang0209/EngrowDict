@@ -1022,6 +1022,12 @@ function draftEntry(term, opts) {
   }
   var glossed = 0, machine = 0, warning = '', writer = '';
   var aikey = props.getProperty(PROP_AI);
+  /* Said out loud, because "machine-translated" on its own reads like the
+     model was asked and did that: there was no model to ask. */
+  if (gaps.length && !aikey) {
+    warning = 'No AI key is set in the sheet, so that is Google Translate: '
+      + 'EngrowDict menu, Key for the Vietnamese column.';
+  }
   if (gaps.length && aikey) {
     try {
       var defs = [];
