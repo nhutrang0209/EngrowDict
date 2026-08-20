@@ -17,6 +17,10 @@ const CFG = {
   key: 'a-secret-key',
 };
 const REAL = JSON.parse(read('docs/data.json'));
+// the published copy grows every time the sheet is synced, so the counts on
+// screen are read off it rather than written down here
+const NOW = REAL.entries.length.toLocaleString('en-US');
+const PLUS1 = (REAL.entries.length + 1).toLocaleString('en-US');
 
 /** A page whose POSTs are answered by `reply`, and whose data.json fetches
  *  return whatever `dataNow()` currently says. */
@@ -62,7 +66,7 @@ function page(store, posts, reply, dataNow) {
   })(), [...a.doc.querySelectorAll('.acts > *')].map(n => n.id || n.textContent.trim()).join(' | '));
   ok('it shows once the link is set', !a.doc.getElementById('sync-sheet').hidden);
   ok('the site starts on the old data',
-     a.doc.getElementById('count').textContent.includes('11,401'),
+     a.doc.getElementById('count').textContent.includes(NOW),
      a.doc.getElementById('count').textContent);
 
   served = grown;                                  // GitHub now serves the new file
@@ -73,7 +77,7 @@ function page(store, posts, reply, dataNow) {
      JSON.stringify(posts[0] && posts[0].body).slice(0, 60));
   ok('the request carries the key', posts[0].body.key === CFG.key);
   ok('the page picks up the republished data',
-     a.doc.getElementById('count').textContent.includes('11,402'),
+     a.doc.getElementById('count').textContent.includes(PLUS1),
      a.doc.getElementById('count').textContent);
   const q = a.doc.getElementById('q');
   q.value = 'zugzwang';
@@ -102,7 +106,7 @@ function page(store, posts, reply, dataNow) {
   click(b.window, b.doc.getElementById('sync-sheet'));
   await wait(400);
   ok('after syncing it appears exactly once',
-     b.doc.getElementById('count').textContent.includes('11,402'),
+     b.doc.getElementById('count').textContent.includes(PLUS1),
      b.doc.getElementById('count').textContent);
   ok('  and is dropped from the local list', JSON.parse(b.store[BACKUP_KEY]).length === 0,
      b.store[BACKUP_KEY]);
@@ -118,7 +122,7 @@ function page(store, posts, reply, dataNow) {
   click(c.window, c.doc.getElementById('sync-sheet'));
   await wait(300);
   ok('with no repo set up the entries still arrive',
-     c.doc.getElementById('count').textContent.includes('11,402'),
+     c.doc.getElementById('count').textContent.includes(PLUS1),
      c.doc.getElementById('count').textContent);
   ok('  and the page says it only lasts this visit',
      c.doc.getElementById('banner').textContent.includes('this visit only'),
@@ -141,10 +145,30 @@ function page(store, posts, reply, dataNow) {
   ok('  returns the whole sheet inline instead',
      !!res.data && res.data.entries.length === 11401,
      res.data ? res.data.entries.length + ' entries' : 'nothing');
-  ok('  with no reading passages in it', res.data.readings.length === 0);
+  ok('  with the reading passages in it', res.data.readings.length === 33,
+     res.data.readings.length + ' passages');
   ok('  read by the same code as the menu item',
      res.data.entries[0].word === JSON.parse(read('dataset.json')).entries[0].word,
      res.data.entries[0].word);
+  /* A sync is about the words. A sheet with no passages in it has none to
+     publish, and none to take off the site either. */
+  const noPassages = Object.assign({}, grids);
+  delete noPassages['Reading Passage'];
+  const bareSheet = appsScriptSandbox(noPassages,
+    { SOTRATU_KEY: CFG.key, SOTRATU_REPO: 'someone/EngrowDict', SOTRATU_TOKEN: 'ghp_x' });
+  vm.createContext(bareSheet);
+  vm.runInContext(read('sheet-sync.gs') + '\nthis.__publish = publishToRepo;', bareSheet);
+  bareSheet.net.reply = url => /raw.githubusercontent.com/.test(url)
+    ? { code: 200, body: JSON.stringify({ entries: [], readings: [{ index: '1', title: 'Kept' }] }) }
+    : { code: 200, body: JSON.stringify({ content: { sha: 'abc' } }) };
+  const bareRes = bareSheet.__publish();
+  const sent = bareSheet.net.payloads[bareSheet.net.payloads.length - 1];
+  ok('a sheet with no passages keeps the ones already on the site',
+     bareRes.ok === true &&
+     JSON.parse(Buffer.from(sent.content, 'base64').toString('utf8'))
+       .readings[0].title === 'Kept',
+     JSON.stringify(sent && Object.keys(sent)));
+
   ok('a wrong key still gets nothing',
      JSON.parse(sandbox.__doPost({
        postData: { contents: JSON.stringify({ key: 'nope', action: 'sync' }) },

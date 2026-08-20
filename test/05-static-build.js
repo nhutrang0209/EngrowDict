@@ -4,6 +4,11 @@ const { read, boot, ok, done, wait, click, addWord, unlockedStore, BACKUP_KEY,
         deleteWord } = require('./helpers');
 
 const shell = read('docs/index.html');
+// the published data grows every time the sheet is synced, so the counts on
+// screen are read off it rather than written down here
+const REAL = JSON.parse(read('docs/data.json'));
+const NOW = REAL.entries.length.toLocaleString('en-US');
+const PLUS1 = (REAL.entries.length + 1).toLocaleString('en-US');
 const store = unlockedStore();
 const mk = () => boot({
   html: shell, full: true, store,
@@ -29,7 +34,7 @@ const mk = () => boot({
   ok('no claude runtime here', typeof w.claude === 'undefined');
   ok('it loads and builds', !!doc.querySelector('.top .mark'),
      doc.getElementById('count').textContent);
-  ok('all the data arrived', doc.getElementById('count').textContent.includes('11,401'),
+  ok('all the data arrived', doc.getElementById('count').textContent.includes(NOW),
      doc.getElementById('count').textContent);
   ok('the add button is available once unlocked',
      doc.getElementById('add-word').textContent === '+ Add word');
@@ -55,13 +60,13 @@ const mk = () => boot({
      doc.querySelector('.headword')?.textContent + ' — ' + doc.querySelector('.vi')?.textContent);
   ok('it is written to localStorage', !!store[BACKUP_KEY],
      (store[BACKUP_KEY] || '').slice(0, 58));
-  ok('the total goes up by one', doc.getElementById('count').textContent.includes('11,402'),
+  ok('the total goes up by one', doc.getElementById('count').textContent.includes(PLUS1),
      doc.getElementById('count').textContent);
 
   const b = mk();
   await wait(900);
   ok('the word survives a page reload',
-     b.doc.getElementById('count').textContent.includes('11,402'),
+     b.doc.getElementById('count').textContent.includes(PLUS1),
      b.doc.getElementById('count').textContent);
   const q = b.doc.getElementById('q');
   q.value = 'mui dat sau mua';
@@ -78,7 +83,7 @@ const mk = () => boot({
   q.value = '';                       // the count line reports the current filter
   q.dispatchEvent(new b.window.Event('input'));
   await wait(30);
-  ok('deleting works', b.doc.getElementById('count').textContent.includes('11,401'),
+  ok('deleting works', b.doc.getElementById('count').textContent.includes(NOW),
      b.doc.getElementById('count').textContent);
   ok('localStorage is empty again', store[BACKUP_KEY] === '[]', store[BACKUP_KEY]);
 
