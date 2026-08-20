@@ -22,7 +22,8 @@ var PROP_BRANCH = 'SOTRATU_BRANCH';
 var PROP_KEY = 'SOTRATU_KEY';       // shared secret for the web-to-sheet path
 var PROP_BOOK = 'SOTRATU_BOOK';     // the workbook the web page last pointed at
 var PROP_READER = 'SOTRATU_READER'; // optional r.jina.ai key, for a private rate limit
-var PROP_AI = 'SOTRATU_AI_KEY';     // optional Anthropic key, for the short Vietnamese
+var PROP_AI = 'SOTRATU_AI_KEY';     // optional Claude or OpenAI key, for the short Vietnamese
+var PROP_AI_MODEL = 'SOTRATU_AI_MODEL';   // optional, to name a model of your own
 var TARGET = 'docs/data.json';
 
 /**
@@ -700,75 +701,110 @@ function readMerriam(slug) {
 
 /**
  * The Vietnamese column holds a gloss a person would jot down — "yếu đi /
- * giảm đi", not a translation of the whole definition. Claude is asked for
- * exactly that, all the senses in one request. Without a key in
- * SOTRATU_AI_KEY the column falls back to Google Translate, which is accurate
- * but reads like a translation.
+ * giảm đi", not a translation of the whole definition. The model is asked for
+ * exactly that, all the senses of the word in one request.
+ *
+ * Either kind of key works: one beginning sk-ant- goes to Claude, anything
+ * else to OpenAI. Set SOTRATU_AI_MODEL to name a particular model; the
+ * defaults below are only defaults.
  */
-function glossesFromClaude(word, pos, defs, key) {
+function glossRules() {
+  return 'You write the Vietnamese column of an English-Vietnamese vocabulary '
+    + 'notebook. For each numbered English definition, give the gloss a Vietnamese '
+    + 'learner would write down: the meaning itself, not a translation of the '
+    + 'wording.\n\n'
+    + 'Rules:\n'
+    + '- One to five words. Never a sentence, never a clause with "hoặc" strung '
+    + 'through it.\n'
+    + '- Natural Vietnamese, the register of a dictionary margin.\n'
+    + '- Two close readings may be joined with " / ", at most.\n'
+    + '- A short parenthetical is welcome where the gloss would otherwise be '
+    + 'vague: phía sau (tàu / thuyền), lợn đất (thú ăn kiến).\n'
+    + '- Keep any part of speech the English has: a verb glosses as a verb.\n'
+    + '- No quotation marks, no "nghĩa là", no explanation.\n\n'
+    + 'Examples:\n'
+    + 'to become less strong -> yếu đi / giảm đi\n'
+    + 'at the back of or behind a ship or boat -> ở phía đuôi tàu\n'
+    + 'very careful and with great attention to every detail -> tỉ mỉ\n'
+    + 'a soft murmuring or rustling sound -> tiếng xào xạc\n'
+    + 'to take care of or be in charge of someone or something -> trông nom\n\n'
+    + 'Answer with a JSON array of strings, one per definition, in order. '
+    + 'Nothing else.';
+}
+
+/** The list of definitions, numbered, as the model is shown them. */
+function glossAsk(word, pos, defs) {
   var lines = [];
   for (var i = 0; i < defs.length; i++) lines.push((i + 1) + '. ' + defs[i]);
+  return 'Word: ' + word + (pos ? ' (' + pos + ')' : '') + '\n\n' + lines.join('\n');
+}
 
-  var payload = {
-    model: 'claude-opus-5',
-    max_tokens: 4000,
-    output_config: { effort: 'low' },
-    fallbacks: 'default',
-    system: 'You write the Vietnamese column of an English-Vietnamese vocabulary '
-      + 'notebook. For each numbered English definition, give the gloss a Vietnamese '
-      + 'learner would write down: the meaning itself, not a translation of the '
-      + 'wording.\n\n'
-      + 'Rules:\n'
-      + '- One to five words. Never a sentence, never a clause with "hoặc" strung '
-      + 'through it.\n'
-      + '- Natural Vietnamese, the register of a dictionary margin.\n'
-      + '- Two close readings may be joined with " / ", at most.\n'
-      + '- A short parenthetical is welcome where the gloss would otherwise be '
-      + 'vague: phía sau (tàu / thuyền), lợn đất (thú ăn kiến).\n'
-      + '- Keep any part of speech the English has: a verb glosses as a verb.\n'
-      + '- No quotation marks, no "nghĩa là", no explanation.\n\n'
-      + 'Examples:\n'
-      + 'to become less strong -> yếu đi / giảm đi\n'
-      + 'at the back of or behind a ship or boat -> ở phía đuôi tàu\n'
-      + 'very careful and with great attention to every detail -> tỉ mỉ\n'
-      + 'a soft murmuring or rustling sound -> tiếng xào xạc\n'
-      + 'to take care of or be in charge of someone or something -> trông nom\n\n'
-      + 'Answer with a JSON array of strings, one per definition, in order. '
-      + 'Nothing else.',
-    messages: [{
-      role: 'user',
-      content: 'Word: ' + word + (pos ? ' (' + pos + ')' : '') + '\n\n' + lines.join('\n')
-    }]
-  };
+/** Whatever came back, pulled out of the wrapper and cut to a gloss. */
+function glossList(text, howMany) {
+  var m = String(text).match(/\[[\s\S]*\]/);
+  if (!m) throw new Error('The model did not answer with a list');
+  var list = JSON.parse(m[0]);
+  var out = [];
+  for (var i = 0; i < list.length && i < howMany; i++) out.push(shortVi(String(list[i])));
+  return out;
+}
 
-  var r = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
-    method: 'post',
-    contentType: 'application/json',
-    headers: {
-      'x-api-key': key,
-      'anthropic-version': '2023-06-01',
-      'anthropic-beta': 'server-side-fallback-2026-07-01'
-    },
-    payload: JSON.stringify(payload),
-    muteHttpExceptions: true
-  });
+function glossesFromAI(word, pos, defs, key, model) {
+  var anthropic = String(key).indexOf('sk-ant-') === 0;
+  var url, opts;
+
+  if (anthropic) {
+    opts = {
+      method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+      headers: {
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+        'anthropic-beta': 'server-side-fallback-2026-07-01'
+      },
+      payload: JSON.stringify({
+        model: model || 'claude-opus-5',
+        max_tokens: 4000,
+        output_config: { effort: 'low' },
+        fallbacks: 'default',
+        system: glossRules(),
+        messages: [{ role: 'user', content: glossAsk(word, pos, defs) }]
+      })
+    };
+    url = 'https://api.anthropic.com/v1/messages';
+  } else {
+    opts = {
+      method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+      headers: { Authorization: 'Bearer ' + key },
+      payload: JSON.stringify({
+        model: model || 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: glossRules() },
+          { role: 'user', content: glossAsk(word, pos, defs) }
+        ]
+      })
+    };
+    url = 'https://api.openai.com/v1/chat/completions';
+  }
+
+  var r = UrlFetchApp.fetch(url, opts);
+  var who = anthropic ? 'Claude' : 'OpenAI';
   if (r.getResponseCode() !== 200) {
-    throw new Error('Claude answered ' + r.getResponseCode() + ' '
+    throw new Error(who + ' answered ' + r.getResponseCode() + ' '
       + String(r.getContentText()).slice(0, 120));
   }
 
   var body = JSON.parse(r.getContentText());
-  if (body.stop_reason === 'refusal') throw new Error('Claude declined this word');
   var text = '';
-  for (var j = 0; j < (body.content || []).length; j++) {
-    if (body.content[j].type === 'text') text += body.content[j].text;
+  if (anthropic) {
+    if (body.stop_reason === 'refusal') throw new Error('Claude declined this word');
+    for (var j = 0; j < (body.content || []).length; j++) {
+      if (body.content[j].type === 'text') text += body.content[j].text;
+    }
+  } else {
+    var choice = (body.choices || [])[0];
+    text = choice && choice.message ? String(choice.message.content || '') : '';
   }
-  var m = text.match(/\[[\s\S]*\]/);
-  if (!m) throw new Error('Claude did not answer with a list');
-  var list = JSON.parse(m[0]);
-  var out = [];
-  for (var k = 0; k < list.length; k++) out.push(shortVi(String(list[k])));
-  return out;
+  return glossList(text, defs.length);
 }
 
 /**
@@ -851,16 +887,18 @@ function draftEntry(term) {
   for (var g = 0; g < entry.senses.length; g++) {
     if (!entry.senses[g].vi) gaps.push(g);
   }
-  var glossed = 0, machine = 0, warning = '';
+  var glossed = 0, machine = 0, warning = '', writer = '';
   var aikey = props.getProperty(PROP_AI);
   if (gaps.length && aikey) {
     try {
       var defs = [];
       for (var d = 0; d < gaps.length; d++) defs.push(entry.senses[gaps[d]].def);
-      var got = glossesFromClaude(entry.word, entry.pos, defs, aikey);
+      var got = glossesFromAI(entry.word, entry.pos, defs, aikey,
+        props.getProperty(PROP_AI_MODEL));
       for (var k = 0; k < gaps.length; k++) {
         if (got[k]) { entry.senses[gaps[k]].vi = got[k]; glossed++; }
       }
+      if (glossed) writer = String(aikey).indexOf('sk-ant-') === 0 ? 'Claude' : 'OpenAI';
     } catch (err) {
       warning = String(err && err.message ? err.message : err);
     }
@@ -877,7 +915,7 @@ function draftEntry(term) {
     } catch (err2) { /* a sense with no Vietnamese is better than no draft */ }
   }
 
-  return { ok: true, entry: entry, source: source,
+  return { ok: true, entry: entry, source: source, by: writer,
            glossed: glossed, translated: machine, warning: warning };
 }
 

@@ -1374,7 +1374,7 @@
         : "Cambridge had no entry — filled from " + (res.source || "the dictionary") + "."];
       if (res.glossed) {
         bits.push("The Vietnamese for " + plural(res.glossed, "sense", "senses")
-          + " was written by Claude.");
+          + " was written by " + (res.by || "the model") + ".");
       }
       if (res.translated) {
         bits.push(plural(res.translated, "sense", "senses")

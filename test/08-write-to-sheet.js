@@ -429,6 +429,37 @@ function page(store, posts, reply) {
      /y\u1ebfu \u0111i \/ gi\u1ea3m \u0111i/.test(sentToClaude.system) &&
      /One to five words/.test(sentToClaude.system));
 
+  /* An OpenAI key is taken just as happily, and goes to OpenAI. */
+  two.props.SOTRATU_AI_KEY = 'sk-proj-not-a-real-key';
+  two.net.calls = [];
+  two.net.payloads = [];
+  two.net.reply = url => /api\.openai\.com/.test(url)
+    ? { code: 200, body: JSON.stringify({
+        choices: [{ message: { role: 'assistant',
+          content: 'Here you go:\n["k\u1ebb v\u00f4 d\u1ee5ng"]' } }] }) }
+    : notInCambridge(url);
+  const oa = call2({ key: CFG.key, action: 'draft', word: 'zzz' });
+  ok('an OpenAI key is taken too, and asked in its own shape',
+     oa.entry.senses[0].vi === 'k\u1ebb v\u00f4 d\u1ee5ng' && oa.glossed === 1 &&
+     oa.by === 'OpenAI' &&
+     two.net.calls.filter(u => /api\.openai\.com\/v1\/chat\/completions$/.test(u)).length === 1,
+     oa.entry.senses[0].vi + ' / by ' + oa.by);
+  const toOpenAI = two.net.payloads[two.net.payloads.length - 1];
+  ok('  the same rules are given to it, as a system message',
+     toOpenAI.messages.length === 2 && toOpenAI.messages[0].role === 'system' &&
+     /One to five words/.test(toOpenAI.messages[0].content) &&
+     /a thing of no account/.test(toOpenAI.messages[1].content),
+     toOpenAI.model);
+  ok('  and prose around the list does not throw the list away',
+     oa.entry.senses[0].vi === 'k\u1ebb v\u00f4 d\u1ee5ng');
+
+  two.props.SOTRATU_AI_MODEL = 'gpt-5-mini';
+  const pinned = call2({ key: CFG.key, action: 'draft', word: 'zzz' });
+  ok('  a model named in the script properties is the one asked',
+     two.net.payloads[two.net.payloads.length - 1].model === 'gpt-5-mini' && pinned.ok);
+  delete two.props.SOTRATU_AI_MODEL;
+  two.props.SOTRATU_AI_KEY = 'sk-ant-not-a-real-key';
+
   /* A key that does not work must not cost you the draft. */
   two.net.reply = url => /api\.anthropic\.com/.test(url)
     ? { code: 401, body: '{"error":{"message":"invalid x-api-key"}}' }
