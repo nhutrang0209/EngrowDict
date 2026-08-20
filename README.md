@@ -159,8 +159,11 @@ pages per word, fetched together: the English dictionary for everything except
 the last column, and the English–Vietnamese one for that. Only the Advanced
 Learner's entry is read — the page stacks the Academic and Business dictionaries
 underneath, and taking all three would fill the form with the same sense written
-three ways. A word the smaller English–Vietnamese dictionary does not carry
-simply comes back with that column empty.
+three ways. The English–Vietnamese dictionary is much the smaller of the
+two, so a sense often has nothing in that column; the definition then goes
+through `LanguageApp` (Google Translate) and is cut back to a gloss, and the
+form says how many senses that happened to so you know which ones to read
+twice.
 
 The reader is free and needs no account. If it starts answering **429**, put a
 key from jina.ai in the script property `SOTRATU_READER` for a private rate

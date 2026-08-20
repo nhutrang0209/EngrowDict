@@ -340,6 +340,8 @@ function page(store, posts, reply) {
      draft.entry.senses[0].vi);
   ok('  the other dictionaries stacked on the page are left alone',
      draft.entry.senses.length === 1, draft.entry.senses.length + ' senses');
+  ok('  when Cambridge carries the Vietnamese, nothing is machine-translated',
+     draft.translated === 0 && two.net.translated.length === 0);
   ok('  and nothing was written to any sheet',
      two.sheets.Vocabulary.grid.every(r => String(r[0]).indexOf('susurrus') !== 0));
 
@@ -351,8 +353,25 @@ function page(store, posts, reply) {
      pvDraft.ok && pvDraft.entry.type === 'phrasal' && pvDraft.entry.verb === 'look' &&
      pvDraft.entry.particle === 'after' && pvDraft.entry.ipa === '',
      JSON.stringify(pvDraft.entry).slice(0, 80));
-  ok('  a word the Vietnamese dictionary does not carry still comes back',
-     pvDraft.entry.senses[0].vi === '' && !!pvDraft.entry.senses[0].def);
+  ok('  a word the Vietnamese dictionary does not carry is translated instead',
+     pvDraft.entry.senses[0].vi === '[vi] a soft, low noise like someone whispering'
+     && pvDraft.translated === 1,
+     pvDraft.entry.senses[0].vi + ' / translated: ' + pvDraft.translated);
+  ok('    the definition is what gets translated, not the headword',
+     two.net.translated.length === 1 &&
+     two.net.translated[0] === 'a soft, low noise like someone whispering',
+     two.net.translated[0]);
+
+  // a translation that runs on is cut down to a gloss
+  two.net.translation = () => 'trông nom ai đó hoặc cái gì '
+    + 'đó, phụ trách ai đó hoặc cái gì '
+    + 'đó trong một khoảng thời gian dài.';
+  const longVi = call2({ key: CFG.key, action: 'draft', word: 'look after' });
+  ok('    and a translation that runs on is cut back to a gloss',
+     longVi.entry.senses[0].vi.length < 40 &&
+     longVi.entry.senses[0].vi.indexOf(',') === -1,
+     longVi.entry.senses[0].vi);
+  two.net.translation = t => '[vi] ' + t;
 
   two.net.reply = () => ({ code: 404, body: '' });
   const missing = call2({ key: CFG.key, action: 'draft', word: 'zzzznotaword' });

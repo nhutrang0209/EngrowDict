@@ -631,6 +631,17 @@ function cParse(html, wantVi) {
   return out;
 }
 
+/**
+ * The column holds a gloss, not a sentence: the leading "to ..." goes, and a
+ * translation that runs on is cut at the first break rather than filling the
+ * cell with a paragraph.
+ */
+function shortVi(text) {
+  var t = txt(text).replace(/\s+/g, ' ').replace(/\.$/, '').trim();
+  if (t.length > 64) t = t.split(/[;:,]/)[0].trim();
+  return t;
+}
+
 /** Cambridge writes the long form out; the sheet writes the short one. */
 var POS_SHORT = {
   noun: 'n', verb: 'v', adjective: 'adj', adverb: 'adv', preposition: 'prep',
@@ -683,6 +694,19 @@ function draftEntry(term) {
     }
   }
 
+  // Cambridge's English-Vietnamese dictionary is much the smaller of the two,
+  // so a sense often comes back with nothing in that column. Rather than leave
+  // the row half empty, the definition is put through Google Translate and the
+  // count comes back with it, for the form to own up to.
+  var machine = 0;
+  for (var j = 0; j < en.senses.length; j++) {
+    if (en.senses[j].vi) continue;
+    try {
+      var t = shortVi(LanguageApp.translate(en.senses[j].def, 'en', 'vi'));
+      if (t) { en.senses[j].vi = t; machine++; }
+    } catch (err) { /* a sense with no Vietnamese is better than no draft */ }
+  }
+
   var pos = en.pos.toLowerCase();
   var word = en.word.replace(/\s+(someone|something|sb|sth)(\/(someone|something|sb|sth))*$/i, '')
     .trim() || txt(term);
@@ -700,7 +724,7 @@ function draftEntry(term) {
   } else if (pos === 'idiom') {
     entry.type = 'idiom';
   }
-  return { ok: true, entry: entry, source: 'Cambridge' };
+  return { ok: true, entry: entry, source: 'Cambridge', translated: machine };
 }
 
 /* ------------------------------- reading the sheet (mirrors parse_sheet.py) */

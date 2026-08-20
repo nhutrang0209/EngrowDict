@@ -191,7 +191,10 @@ function appsScriptSandbox(grids, props, others) {
   // what the menu functions put on screen, so a test can read it back
   const shown = { dialog: null, alert: null };
   // what UrlFetchApp is asked for, and what the test wants it to answer with
-  const net = { calls: [], reply: () => ({ code: 404, body: '' }) };
+  const net = {
+    calls: [], reply: () => ({ code: 404, body: '' }),
+    translated: [], translation: t => '[vi] ' + t,
+  };
 
   const sandbox = {
     sheets,
@@ -205,6 +208,12 @@ function appsScriptSandbox(grids, props, others) {
       Charset: { UTF_8: 'utf8' },
     },
     ScriptApp: { getService: () => ({ getUrl: () => props.DEPLOYED_URL || '' }) },
+    LanguageApp: {
+      translate: (text, from, to) => {
+        net.translated.push(text);
+        return net.translation(text);
+      },
+    },
     UrlFetchApp: {
       fetchAll: reqs => reqs.map(r => {
         net.calls.push(r.url);

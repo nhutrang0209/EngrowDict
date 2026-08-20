@@ -1362,7 +1362,12 @@
     msg.textContent = "Reading Cambridge… this takes a few seconds.";
     callSheet({ action: "draft", word: word }).then(function (res) {
       applyDraft(res.entry);
-      msg.textContent = "Filled from Cambridge. Check it, then press Save word.";
+      var n = res.translated || 0;
+      msg.textContent = "Filled from Cambridge. "
+        + (n ? "Cambridge has no Vietnamese for "
+             + plural(n, "sense", "senses") + " — machine-translated, so look those over. "
+             : "")
+        + "Then press Save word.";
     }, function (err) {
       msg.textContent = (err && err.message) ? err.message : String(err);
     }).then(function () {
