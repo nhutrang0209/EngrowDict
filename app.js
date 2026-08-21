@@ -1627,7 +1627,7 @@
     pick.accept = ".pdf,.epub,application/pdf,application/epub+zip";
     pick.hidden = true;
 
-    var b = el("button", "chip add", "Add a book");
+    var b = el("button", "btn add-book", "＋ Add a book");
     b.type = "button";
     b.id = "book-add";
     b.addEventListener("click", function () { pick.value = ""; pick.click(); });
@@ -1637,6 +1637,7 @@
     var pub = el("label", "shelf-pub");
     pub.id = "book-pub-row";
     pub.hidden = true;
+    pub.title = "Commit it to docs/books/, where every device reads the shelf";
     var tick = el("input");
     tick.type = "checkbox";
     tick.id = "book-pub";

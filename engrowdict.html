@@ -494,19 +494,40 @@ body.resizing { cursor: col-resize; user-select: none; }
   margin-top: 18px; padding: 11px 14px; border-radius: var(--r-m);
   background: var(--accent-soft); color: var(--accent-hi); font-size: 12.5px;
 }
-/* Adding a book: one button where the kind-chips sit in the dictionary, and a
-   line beside it that says what is happening — reading a 300-page PDF takes
-   long enough that silence would read as nothing happening. */
-.shelf-add { display: flex; align-items: center; gap: 10px; padding: 0 0 10px; flex-wrap: wrap; }
-.chip.add { cursor: pointer; }
-.chip.add:disabled { opacity: .5; cursor: default; }
-.shelf-pub {
-  display: flex; align-items: center; gap: 6px;
-  font-family: var(--mono); font-size: 10.5px; color: var(--faint);
-  cursor: pointer; user-select: none;
+/* Adding a book: a strip of its own where the kind-chips sit in the
+   dictionary, with the line that says what is happening on the row below —
+   reading a 300-page PDF takes long enough that silence would read as nothing
+   happening, and long enough that the message must not shove the button about
+   when it appears.
+
+   display on the class beats the browser's own [hidden] rule, so hiding it is
+   spelled out: this strip belongs to the Books tab and to nothing else. */
+.shelf-add {
+  display: grid; grid-template-columns: auto 1fr; align-items: center;
+  gap: 8px 12px; margin-bottom: 12px; padding: 9px 11px;
+  border: 1px solid var(--rule); border-radius: var(--r-m); background: var(--tint);
 }
-.shelf-pub input { accent-color: var(--accent-hi); margin: 0; cursor: pointer; }
-.shelf-msg { font-family: var(--mono); font-size: 10.5px; color: var(--faint); min-width: 0; }
+.shelf-add[hidden] { display: none; }
+.add-book { padding: 7px 13px; }
+.add-book:disabled { opacity: .5; cursor: default; }
+.shelf-pub {
+  display: inline-flex; align-items: center; gap: 7px; justify-self: end;
+  padding: 5px 10px; border-radius: 999px;
+  border: 1px solid var(--rule); background: var(--surface);
+  font-size: 12px; color: var(--muted);
+  cursor: pointer; user-select: none; white-space: nowrap;
+}
+.shelf-pub[hidden] { display: none; }
+.shelf-pub:hover { color: var(--ink); border-color: var(--muted); }
+.shelf-pub:has(input:checked) {
+  background: var(--accent-soft); border-color: transparent; color: var(--accent-hi);
+}
+.shelf-pub input { accent-color: var(--accent); margin: 0; cursor: pointer; }
+.shelf-msg {
+  grid-column: 1 / -1; font-family: var(--mono); font-size: 10.5px;
+  color: var(--faint); min-width: 0;
+}
+.shelf-msg:empty { display: none; }
 .shelf-msg.warn { color: var(--term); }
 .shelf-msg.good { color: var(--accent-hi); }
 .shelf-msg.bad { color: var(--flag); }
@@ -2547,7 +2568,7 @@ a.btn[hidden] { display: none; }
     pick.accept = ".pdf,.epub,application/pdf,application/epub+zip";
     pick.hidden = true;
 
-    var b = el("button", "chip add", "Add a book");
+    var b = el("button", "btn add-book", "＋ Add a book");
     b.type = "button";
     b.id = "book-add";
     b.addEventListener("click", function () { pick.value = ""; pick.click(); });
@@ -2557,6 +2578,7 @@ a.btn[hidden] { display: none; }
     var pub = el("label", "shelf-pub");
     pub.id = "book-pub-row";
     pub.hidden = true;
+    pub.title = "Commit it to docs/books/, where every device reads the shelf";
     var tick = el("input");
     tick.type = "checkbox";
     tick.id = "book-pub";

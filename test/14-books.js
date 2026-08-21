@@ -189,7 +189,7 @@ const BOOK = {
   await wait(60);
   ok('  the button to add one sits above the list',
      !cd.getElementById('shelf-add').hidden &&
-     cd.getElementById('book-add').textContent === 'Add a book',
+     /Add a book/.test(cd.getElementById('book-add').textContent),
      cd.getElementById('book-add').textContent);
   ok('  and it takes a PDF or an EPUB',
      cd.getElementById('book-file').accept.includes('.pdf') &&
@@ -229,6 +229,8 @@ const BOOK = {
   await wait(30);
   ok('  and the add button stays out of the dictionary',
      cd.getElementById('shelf-add').hidden);
+  ok('    which the stylesheet agrees with, [hidden] and all',
+     /\.shelf-add\[hidden\] \{ display: none; \}/.test(read('app.css')));
 
   /* --- nowhere to put one -------------------------------------------------- */
   const art = read('engrowdict.html');
