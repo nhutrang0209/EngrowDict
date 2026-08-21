@@ -175,6 +175,7 @@ function fakeSheet(rows) {
     insertRowsBefore: (at, n) => {
       for (let i = 0; i < n; i++) g.splice(at - 1, 0, ['', '', '', '']);
     },
+    deleteRows: (at, n) => { g.splice(at - 1, n); },
     getRange: (row, col, nRows, nCols) => {
       nRows = nRows === undefined ? 1 : nRows;
       nCols = nCols === undefined ? 1 : nCols;

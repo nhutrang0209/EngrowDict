@@ -326,6 +326,15 @@ function doPost(e) {
     if (body.action === 'draft') {
       return out(draftEntry(body.word, { eg: body.eg, vi: body.vi }));
     }
+    if (body.action === 'edit') {
+      var elock = LockService.getScriptLock();
+      elock.waitLock(20000);
+      try {
+        return out(editEntry(body.was, body.entry));
+      } finally {
+        elock.releaseLock();
+      }
+    }
     if (body.action !== 'add') return out({ ok: false, error: 'Unknown request' });
 
     var lock = LockService.getScriptLock();
@@ -537,6 +546,69 @@ function insertEntry(entry) {
              warning: 'Added, but the formatting did not apply: ' + String(err) };
   }
   return { ok: true, sheet: tab.sheet, row: at, rows: trimmed.length };
+}
+
+/**
+ * Correcting a word that is already in the sheet. The rows it stands on come
+ * out and the new ones go in, which is also what moves a word to another tab
+ * when its group is changed and what keeps the a→z order when it is renamed.
+ *
+ * `was` is the entry as the page found it: enough to know which rows to take
+ * out, no more.
+ */
+function editEntry(was, entry) {
+  if (!was || !entry) return { ok: false, error: 'Nothing to correct' };
+  var tab = TABS[was.type] || TABS.word;
+  var sh = book().getSheetByName(tab.sheet);
+  if (!sh) return { ok: false, error: 'No tab called ' + tab.sheet };
+
+  var found = findEntryRows(sh, tab, was);
+  if (!found) {
+    return { ok: false, error: 'Could not find "' + txt(was.word)
+      + '" in ' + tab.sheet + '. It may have been changed in the sheet since.' };
+  }
+  sh.deleteRows(found.row, found.rows);
+
+  var res = insertEntry(entry);
+  if (!res.ok) {
+    return { ok: false, error: 'The old rows came out but the new ones would '
+      + 'not go in: ' + res.error };
+  }
+  res.removed = found.rows;
+  return res;
+}
+
+/** The rows one entry stands on: its head row, and the senses under it. */
+function findEntryRows(sh, tab, was) {
+  var last = sh.getLastRow();
+  if (last < 2) return null;
+  var w = width(sh, tab);
+  var vals = sh.getRange(1, 1, last, w).getDisplayValues();
+  var want = was.type === 'phrasal'
+    ? (txt(was.verb || was.word) + ' ' + txt(was.particle)).trim().toLowerCase()
+    : txt(was.word).toLowerCase();
+
+  for (var i = 1; i < vals.length; i++) {
+    var head = txt(vals[i][0]);
+    // the Grammar tab numbers its groups in the first column and names the
+    // word in the second, so that is where the word is looked for
+    var name = was.type === 'compare' ? txt(vals[i][1]) : head;
+    if (!head && !(was.type === 'compare' && name)) continue;
+    if (head.length <= 2 && !txt(vals[i][1]) && !txt(vals[i][2])) continue;  // letter divider
+    var k = was.type === 'compare'
+      ? name.toLowerCase()
+      : head.split('\n')[0].replace(/\s*\([^()]*\)\s*$/, '').toLowerCase().trim();
+    if (was.type === 'phrasal') k = (k + ' ' + txt(vals[i][1])).trim().toLowerCase();
+    if (k !== want) continue;
+
+    var n = 1;                        // the senses under it carry no head
+    for (var j = i + 1; j < vals.length; j++) {
+      if (txt(vals[j][0]) || (was.type === 'compare' && txt(vals[j][1]))) break;
+      n++;
+    }
+    return { row: i + 1, rows: n };
+  }
+  return null;
 }
 
 /* ---------------------------------------------------------------- publish */
