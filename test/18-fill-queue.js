@@ -282,5 +282,56 @@ function ask(g, word) {
      dlg(g).open === false && doc.getElementById('card-rail').hidden,
      rail(g).join(' | '));
 
+  /* --- hidden while it is being written to the sheet ----------------------- */
+  /* The sheet is somebody else's server and takes its own second or two. */
+  let letSheetFinish = null;
+  const savedTo = [];
+  const realStub = net.fetch;
+  net.fetch = (url, opts) => {
+    const body = opts && opts.method === 'POST' && JSON.parse(opts.body);
+    if (body && body.action === 'add') {
+      savedTo.push(body.entry.word);
+      return new Promise(resolve => {
+        letSheetFinish = () => resolve({ ok: true, json: () => Promise.resolve({ ok: true }) });
+      });
+    }
+    return realStub(url, opts);
+  };
+  g.window.fetch = (url, opts) => net.fetch(url, opts) || realFetch(url, opts);
+
+  press(g, 'add-word');
+  type(g, '#form-dlg [name=word]', 'gangland');
+  type(g, '#sense-list [name=def]', 'the people and places of violent crime');
+  press(g, 'form-save');
+  await wait(30);
+  ok('a word on its way to the sheet can be hidden like any other',
+     savedTo.join(',') === 'gangland' && dlg(g).open === true &&
+     [...doc.querySelectorAll('#form-dlg .dlg-foot .btn')]
+       .some(b => b.textContent === 'Writing to the sheet…'),
+     savedTo.join(','));
+  press(g, 'form-hide');
+  await wait(20);
+  ok('  and the rail says that is what it is doing',
+     rail(g).some(r => r === 'gangland:writing to the sheet…'), rail(g).join(' | '));
+
+  click(w, [...doc.querySelectorAll('#card-list .card-open')]
+    .find(b => b.querySelector('.card-word').textContent === 'gangland'));
+  await wait(40);
+  ok('  brought back mid-write it still says so, and cannot be sent twice',
+     doc.getElementById('form-save').disabled === true &&
+     doc.getElementById('form-save').textContent === 'Writing to the sheet…',
+     doc.getElementById('form-save').textContent);
+  press(g, 'form-hide');
+  await wait(20);
+
+  letSheetFinish();
+  await wait(200);
+  ok('  when the sheet answers, the card leaves the rail and the toast says so',
+     !rail(g).some(r => r.startsWith('gangland')) &&
+     /Wrote “gangland” into the sheet/.test(doc.getElementById('toast').textContent),
+     doc.getElementById('toast').textContent + ' | ' + rail(g).join(' | '));
+  ok('  and the form it was written from is not dragged back open',
+     dlg(g).open === false);
+
   done(g.errs);
 })();

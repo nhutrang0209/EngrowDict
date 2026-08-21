@@ -2988,6 +2988,7 @@ a.btn[hidden] { display: none; }
   function newCard(word) {
     var card = {
       id: "c" + (++cardSeq),
+      saving: null,          // "sheet" or "device" while Save word is running
       word: word || "",
       pos: "", ipa: "", type: "word", note: "",
       senses: [],
@@ -3003,6 +3004,7 @@ a.btn[hidden] { display: none; }
   }
 
   function cardState(card) {
+    if (card.saving) return card.saving === "sheet" ? "writing" : "saving";
     return card.fill ? card.fill.state : "draft";
   }
 
@@ -3025,7 +3027,9 @@ a.btn[hidden] { display: none; }
   }
 
   function stateWord(state) {
-    return state === "filling" ? "looking up…"
+    return state === "writing" ? "writing to the sheet…"
+      : state === "saving" ? "saving…"
+      : state === "filling" ? "looking up…"
       : state === "waiting" ? "in line"
       : state === "failed" ? "no luck"
       : state === "ready" ? "ready" : "draft";
@@ -3246,6 +3250,7 @@ a.btn[hidden] { display: none; }
     dlg.querySelector("[name=word]").value = card.word || "";
     dlg.querySelector("[name=note]").value = card.note || "";
     formMsg(card.msg || "", card.msgTone || "");
+    paintSaveButton(card);
   }
 
   function showCard(card) {
@@ -3457,16 +3462,36 @@ a.btn[hidden] { display: none; }
     };
   }
 
+  /* The Save button says what the card is doing, so a card put on the rail
+     mid-write and brought back again does not look idle. */
+  function paintSaveButton(card) {
+    var btn = document.getElementById("form-save");
+    if (!btn) return;
+    var doing = card && card.saving;
+    btn.disabled = !!doing;
+    btn.textContent = doing === "sheet" ? "Writing to the sheet…"
+      : doing ? "Saving…" : "Save word";
+  }
+
+  /* Writing a word to the sheet is a second or two of somebody else's server,
+     and there is no reason to watch that either: Hide puts the card on the
+     rail mid-write, the rail says what it is doing, and the toast at the
+     bottom says when it is done. */
   function saveForm() {
     var got = collectForm();
-    var msg = document.getElementById("form-msg");
     if (got.err) { formMsg(got.err, ""); return; }
-    var btn = document.getElementById("form-save");
+    var card = current;
     var box = document.getElementById("to-sheet");
     var wantSheet = canWriteSheet() && box && box.checked;
-    btn.disabled = true;
-    btn.textContent = wantSheet ? "Writing to the sheet…" : "Saving…";
-    msg.textContent = "";
+    if (card) {
+      snapCurrent();
+      card.saving = wantSheet ? "sheet" : "device";
+      card.msg = "";
+      card.msgTone = "";
+    }
+    paintSaveButton(card);
+    formMsg("", "");
+    drawRail();
 
     var sheetErr = null;
     var toSheet = wantSheet
@@ -3480,23 +3505,30 @@ a.btn[hidden] { display: none; }
     toSheet.then(function () {
       var next = ADDED.concat([got.entry]);
       return persist(next).then(function (res) {
-        btn.disabled = false;
-        btn.textContent = "Save word";
-        document.getElementById("form-dlg").close();
-        /* Straight on to the next word that came back while this one was being
-           read: the form reopens on it rather than on an empty page. */
-        if (current) {
-          cards = cards.filter(function (c) { return c !== current; });
-          current = null;
-          drawRail();
+        /* The card is done with, wherever it was when it finished. */
+        if (card) {
+          card.saving = null;
+          cards = cards.filter(function (c) { return c !== card; });
         }
-        setTimeout(openNextCard, 0);
+        var onScreen = current === card || !card;
+        if (onScreen) {
+          current = null;
+          var dlg = document.getElementById("form-dlg");
+          if (dlg.open) dlg.close();
+        }
+        paintSaveButton(null);
+        drawRail();
+        /* Straight on to the next word that came back while this one was being
+           read — but only if it was this form that was on screen. */
+        if (onScreen) setTimeout(openNextCard, 0);
         if (res.ok && res.reload) { toast("Saved “" + got.entry.word + "”"); return; }
         ADDED = next;
         rebuild();
         refresh();
-        select(got.entry.id);
-        showDetail();
+        if (onScreen) {
+          select(got.entry.id);
+          showDetail();
+        }
         if (!res.ok) { banner(res.msg, "Sync", syncPending); return; }
         if (got.entry.inSheet) { toast("Wrote “" + got.entry.word + "” into the sheet"); return; }
         if (sheetErr) {

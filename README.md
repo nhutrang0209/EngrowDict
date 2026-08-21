@@ -170,8 +170,12 @@ started, and where it was left is where the next card off the rail opens. Given
 a size of its own it becomes a column — head and foot keep what they need and
 the senses take the rest, so a taller form shows more senses rather than more
 white. **Hide**
-keeps the card, **Cancel** throws it away and calls off the lookup with it, and
-saving a word opens the next card that came back. The Vietnamese box is ticked
+keeps the card — the × and Escape do the same — **Cancel** throws it away and
+calls off the lookup with it, and saving a word opens the next card that came
+back. Writing to the sheet is somebody else's server and can be hidden the same
+way: the rail says *writing to the sheet…* while it goes, the card leaves the
+rail when the sheet answers, and the line at the bottom says which word went
+in. The Vietnamese box is ticked
 to begin with, being the column the notebook is kept for; the examples box is
 not. Nothing survives a reload: the rail is a few minutes of impatience, not
 state.
