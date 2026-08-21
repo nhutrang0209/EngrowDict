@@ -2184,6 +2184,22 @@
   var MIN_W = 380;
   var MIN_H = 260;
 
+  /* Dragging fires a mousemove for every pixel and the form is a fixed box
+     with a wide shadow: writing its style on each one asks the browser to lay
+     it out again dozens of times a frame, which is exactly what it looked
+     like. One write per frame instead. */
+  var formFrame = 0;
+
+  function placeFormSoon() {
+    if (formFrame) return;
+    var soon = window.requestAnimationFrame
+      || function (fn) { return setTimeout(fn, 16); };
+    formFrame = soon(function () {
+      formFrame = 0;
+      placeForm();
+    });
+  }
+
   function placeForm() {
     var dlg = document.getElementById("form-dlg");
     if (!dlg) return;
@@ -2236,13 +2252,16 @@
       var dy = ev.clientY - box.top;
       ev.preventDefault();
       head.classList.add("dragging");
+      dlg.classList.add("moving");
       var move = function (on) {
         formPos = { left: on.clientX - dx, top: on.clientY - dy };
         clampForm(box);
-        placeForm();
+        placeFormSoon();
       };
       var up = function () {
         head.classList.remove("dragging");
+        dlg.classList.remove("moving");
+        placeForm();
         document.removeEventListener("mousemove", move);
         document.removeEventListener("mouseup", up);
       };
@@ -2301,10 +2320,11 @@
       }
       formSize = { w: w, h: h };
       formPos = { left: left, top: top };
-      placeForm();
+      placeFormSoon();
     };
     var up = function () {
       dlg.classList.remove("resizing");
+      placeForm();
       document.removeEventListener("mousemove", move);
       document.removeEventListener("mouseup", up);
     };
@@ -2342,13 +2362,19 @@
      a separate question from whether the thing on screen goes away: a form
      that stays put when Hide is pressed is the one thing this must not do. */
   function hideCurrent() {
-    if (current) {
-      snapCurrent();
-      current = null;
+    /* Keeping the card is worth a try; shutting the window is not optional. A
+       fault in the first must not swallow the second, and must not be silent
+       either — a button that does nothing at all is the worst kind. */
+    try {
+      if (current) snapCurrent();
+    } catch (err) {
+      toast("The form was hidden, but what was typed in it could not be kept: "
+        + (err && err.message ? err.message : err));
     }
+    current = null;
     var dlg = document.getElementById("form-dlg");
-    if (dlg.open) dlg.close();
-    drawRail();
+    if (dlg && dlg.open) dlg.close();
+    try { drawRail(); } catch (err2) { /* the rail redraws on the next change */ }
   }
 
   function paintCard(card) {
@@ -2796,6 +2822,27 @@
 
   /* ---- notices -------------------------------------------------------------- */
   var toastTimer = null;
+  /* A page kept open all day on a phone has no console to look at, and a
+     script that falls over quietly looks exactly like a button that does
+     nothing. The first few faults are said out loud; after that they would be
+     noise. */
+  var faultsSaid = 0;
+  function sayFault(what) {
+    if (faultsSaid >= 3) return;
+    faultsSaid++;
+    toast("Something went wrong: " + what);
+  }
+
+  function watchFaults() {
+    window.addEventListener("error", function (ev) {
+      if (ev && ev.error) sayFault(ev.message || String(ev.error));
+    });
+    window.addEventListener("unhandledrejection", function (ev) {
+      var why = ev && ev.reason;
+      sayFault((why && why.message) || String(why || "a promise was dropped"));
+    });
+  }
+
   function toast(text) {
     var t = document.getElementById("toast");
     t.textContent = text;
@@ -3075,6 +3122,7 @@
     app.appendChild(buildSettings());
     refreshChrome();
     restoreList();
+    watchFaults();
 
     scrollBox.addEventListener("scroll", function () { paint(false); }, { passive: true });
     watchPlace(detail);

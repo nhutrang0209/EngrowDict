@@ -218,6 +218,7 @@ function ask(g, word) {
   grab(300, 60, 'mousedown');
   slide(420, 120, 'mousemove');
   slide(420, 120, 'mouseup');
+  await wait(30);      // the move is written once a frame, not once a pixel
   ok('the form is dragged by its head, the way a window is',
      dlg(g).style.left === '120px' && dlg(g).style.top === '60px' &&
      dlg(g).style.transform === 'none',

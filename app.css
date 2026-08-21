@@ -658,7 +658,12 @@ dialog::backdrop { background: rgba(8, 14, 11, .5); backdrop-filter: blur(2px); 
    them rather than more white. */
 #form-dlg.sized { display: flex; flex-direction: column; }
 #form-dlg.sized .dlg-body { flex: 1 1 auto; max-height: none; min-height: 0; }
-#form-dlg.resizing { user-select: none; }
+
+/* While it is being moved or pulled about: no text selection, no hovering over
+   what is inside it, and a cheap shadow. A 60px blur redrawn on every frame is
+   what a drag feels like when it stutters. */
+#form-dlg.resizing, #form-dlg.moving { user-select: none; box-shadow: var(--lift-1); }
+#form-dlg.resizing .dlg-body, #form-dlg.moving .dlg-body { pointer-events: none; }
 
 /* Eight strips over the border: four sides, four corners. */
 #form-dlg .rs { position: absolute; z-index: 3; }
