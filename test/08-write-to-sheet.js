@@ -396,7 +396,54 @@ function page(store, posts, reply) {
     + '<span class="trans dtrans dtrans-se">tiếng xào xạc</span>'
     + '</div></div></div>';
 
+  /* The two Cambridges are different books: the English-Vietnamese one carries
+     fewer senses, in its own order. Lined up by position, a definition about
+     wine that tastes cheap was given the gloss belonging to weather. */
+  const senseBlock = (def, vi) =>
+    '<div class="def-block ddef_block "><div class="def ddef_d db">' + def + '</div>'
+    + (vi ? '<span class="trans dtrans dtrans-se">' + vi + '</span>' : '')
+    + '</div>';
+  const ROUGH_EN =
+    '<div class="pr dictionary" data-id="cald4"><div class="entry-body__el">'
+    + '<div class="di-title">rough</div><span class="pos dpos">adjective</span>'
+    + [ 'not smooth but uneven',
+        'not exact or detailed',
+        'used to describe an alcoholic drink, especially wine, that tastes cheap',
+        'violent or not gentle',
+        'difficult and unpleasant to deal with',
+        'not yet finished or perfect',
+        'sleeping outdoors, without a home' ].map(d => senseBlock(d, '')).join('')
+    + '</div></div>';
+  const ROUGH_VI =
+    '<div class="pr dictionary" data-id="cald4"><div class="entry-body__el">'
+    + senseBlock('violent, not gentle', 'dữ dội')
+    + senseBlock('having an uneven surface, not smooth', 'nhám, ráp')
+    + senseBlock('approximate, not exact or detailed', 'đại khái')
+    + '</div></div>';
+
   two.net.calls = [];
+  two.net.translation = () => '';        // nothing standing in for a real gloss
+  two.net.reply = url => ({ code: 200, body: /english-vietnamese/.test(url) ? ROUGH_VI : ROUGH_EN });
+  const rough = call2({ key: CFG.key, action: 'draft', word: 'rough' });
+  ok('a word with seven senses comes back with seven, not with five',
+     rough.entry.senses.length === 7 && !rough.dropped,
+     rough.entry.senses.length + ' senses');
+  ok('  each Vietnamese goes to the sense whose English it was written for',
+     rough.entry.senses[0].vi === 'nhám, ráp' &&
+     rough.entry.senses[1].vi === 'đại khái' &&
+     rough.entry.senses[3].vi === 'dữ dội',
+     rough.entry.senses.map(x => x.vi).join(' | '));
+  ok('  and a sense the other book does not carry is left empty rather than wrong',
+     rough.entry.senses[2].vi === '' && rough.entry.senses[4].vi === '',
+     JSON.stringify(rough.entry.senses[2]));
+  ok('  no Vietnamese is used twice over',
+     new Set(rough.entry.senses.map(x => x.vi).filter(Boolean)).size === 3,
+     rough.entry.senses.map(x => x.vi).join(' | '));
+
+  two.net.translation = t => '[vi] ' + t;
+
+  two.net.calls = [];
+  two.net.translated = [];
   two.net.reply = url => ({ code: 200, body: /english-vietnamese/.test(url) ? CAMB_VI : CAMB_EN });
   const draft = call2({ key: CFG.key, action: 'draft', word: 'Susurrus ' });
   ok('a draft comes back for the word asked about',

@@ -737,6 +737,56 @@ function cParse(html, wantVi) {
   return out;
 }
 
+/* ---- lining the two dictionaries up -------------------------------------
+
+   The English-Vietnamese Cambridge is a different book from the English one:
+   fewer senses, in its own order. Laid side by side by position, "rough" got
+   the gloss "dữ dội; (thời tiết) xấu" against the definition about wine that
+   tastes cheap — the third sense of one book against the third of another.
+
+   Both books print the English definition, so that is what they are matched
+   on: the same words, or near enough. A sense with nothing near enough is left
+   empty on purpose, for the model or for Google Translate, either of which
+   beats a gloss belonging to another sense. */
+function defWords(text) {
+  var words = String(text).toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/);
+  var out = {}, n = 0, i;
+  var SKIP = { a: 1, an: 1, the: 1, of: 1, or: 1, to: 1, and: 1, in: 1, that: 1,
+               is: 1, for: 1, with: 1, on: 1, by: 1, as: 1, be: 1, it: 1 };
+  for (i = 0; i < words.length; i++) {
+    if (words[i] && !SKIP[words[i]] && !out[words[i]]) { out[words[i]] = 1; n++; }
+  }
+  return { set: out, n: n };
+}
+
+/** How much two definitions have in common, 0 to 1. */
+function defLikeness(a, b) {
+  var x = defWords(a), y = defWords(b);
+  if (!x.n || !y.n) return 0;
+  var shared = 0, w;
+  for (w in x.set) if (y.set[w]) shared++;
+  return shared / (x.n + y.n - shared);
+}
+
+/** Each Vietnamese sense goes to one English one, to its closest, or nowhere. */
+function pairVi(enSenses, viSenses) {
+  var taken = {};
+  for (var i = 0; i < enSenses.length; i++) {
+    var best = -1, score = 0;
+    for (var j = 0; j < viSenses.length; j++) {
+      if (taken[j] || !viSenses[j].vi) continue;
+      var how = defLikeness(enSenses[i].def, viSenses[j].def);
+      if (how > score) { score = how; best = j; }
+    }
+    // half the words in common is a low bar for a match and a high one for a
+    // coincidence: below it, the sense is better off with no Vietnamese at all
+    if (best > -1 && score >= 0.5) {
+      enSenses[i].vi = viSenses[best].vi;
+      taken[best] = 1;
+    }
+  }
+}
+
 /**
  * The column holds a gloss, not a sentence: the leading "to ..." goes, and a
  * translation that runs on is cut at the first break rather than filling the
@@ -749,6 +799,11 @@ function shortVi(text) {
 }
 
 /** Cambridge writes the long form out; the sheet writes the short one. */
+/* A word with seventeen senses in Cambridge is unusual and worth having whole;
+   the cap is only there so that one runaway entry cannot fill a form, a sheet
+   and a model request all at once. */
+var MAX_SENSES = 20;
+
 var POS_SHORT = {
   noun: 'n', verb: 'v', adjective: 'adj', adverb: 'adv', preposition: 'prep',
   conjunction: 'conj', pronoun: 'pron', determiner: 'det', exclamation: 'exclam',
@@ -1055,11 +1110,7 @@ function draftEntry(term, opts) {
       + (why ? ' (' + why + ')' : '') + ' or Merriam-Webster.' };
   }
 
-  if (viSenses) {
-    for (var i = 0; i < en.senses.length && i < viSenses.length; i++) {
-      en.senses[i].vi = viSenses[i].vi;
-    }
-  }
+  if (viSenses) pairVi(en.senses, viSenses);
 
   var pos = en.pos.toLowerCase();
   var word = en.word.replace(/\s+(someone|something|sb|sth)(\/(someone|something|sb|sth))*$/i, '')
@@ -1067,8 +1118,9 @@ function draftEntry(term, opts) {
   var entry = {
     type: 'word', word: word, verb: '', particle: '',
     pos: POS_SHORT[pos] || (pos === 'phrasal verb' || pos === 'idiom' ? '' : en.pos),
-    ipa: en.ipa, note: '', senses: en.senses.slice(0, 5)
+    ipa: en.ipa, note: '', senses: en.senses.slice(0, MAX_SENSES)
   };
+  var dropped = Math.max(0, en.senses.length - MAX_SENSES);
   if (pos === 'phrasal verb') {
     var bits = word.split(/\s+/);
     entry.type = 'phrasal';
@@ -1087,7 +1139,7 @@ function draftEntry(term, opts) {
     // model called about it either.
     for (var y = 0; y < entry.senses.length; y++) entry.senses[y].vi = '';
     return { ok: true, entry: entry, source: source, by: '',
-             glossed: 0, translated: 0, warning: '' };
+             glossed: 0, translated: 0, warning: '', dropped: dropped };
   }
 
   // The gloss: Claude where there is a key for it, Google Translate where
@@ -1131,7 +1183,8 @@ function draftEntry(term, opts) {
   }
 
   return { ok: true, entry: entry, source: source, by: writer,
-           glossed: glossed, translated: machine, warning: warning };
+           glossed: glossed, translated: machine, warning: warning,
+           dropped: dropped };
 }
 
 /* ------------------------------- reading the sheet (mirrors parse_sheet.py) */

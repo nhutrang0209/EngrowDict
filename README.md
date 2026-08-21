@@ -192,7 +192,15 @@ through to **Merriam-Webster**, which answers a plain request but prints its own
 respelling rather than IPA; the form says when that happened.
 
 **The Vietnamese column.** Cambridge's English–Vietnamese dictionary is much the
-smaller of the two, so most senses arrive with that column empty. What fills it:
+smaller of the two and keeps its own order, so the two are matched on the
+English definition both of them print rather than laid side by side by
+position — half the words in common is the bar. That is a low bar for a match
+and a high one for a coincidence; below it the sense is left empty on purpose,
+because the model or Google Translate beats a gloss that belongs to another
+sense. Lined up by position, *rough* gave the definition about wine that tastes
+cheap the gloss for weather.
+
+Most senses arrive with that column empty. What fills it:
 
 1. Cambridge's own Vietnamese, where the word is in that dictionary.
 2. Otherwise **a model**, asked for the gloss a learner would write down — one

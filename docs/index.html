@@ -3511,6 +3511,10 @@ a.btn[hidden] { display: none; }
       bits.push(plural(res.translated, "sense", "senses")
         + " came back machine-translated — look at those twice.");
     }
+    if (res.dropped) {
+      bits.push("Cambridge lists " + plural(res.dropped, "sense", "senses")
+        + " more than fitted here.");
+    }
     if (res.warning) bits.push(res.warning);
     bits.push("Then press Save word.");
     return bits.join(" ");
