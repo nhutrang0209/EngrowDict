@@ -3869,15 +3869,17 @@ a.btn[hidden] { display: none; }
         if (res.ok && res.reload) { toast("Saved “" + got.entry.word + "”", true); return; }
         ADDED = next;
         rebuild();
-        refresh();
-        /* Only the dictionary jumps to what was just saved. Doing it while a
-           passage was being read selected a word among a list of passages,
-           which is nothing at all: the passage went blank and the reader lost
-           their place for the sake of showing them a word they had just
-           typed out themselves. */
+        /* Only the dictionary redraws. Redrawing the list redraws the detail
+           with it, and the detail may be a passage somebody is halfway down: a
+           word saved out of it is no reason to render it again and put them
+           back at the top of it. The other views pick the new word up when
+           they are next looked at, which is when it matters to them. */
         if (view === "vocab") {
+          refresh();
           select(got.entry.id);
           showDetail();
+        } else {
+          refreshChrome();
         }
         if (!res.ok) { banner(res.msg, "Sync", syncPending); return; }
         if (got.entry.inSheet) {

@@ -424,6 +424,8 @@ function ask(g, word) {
   const paras = () => doc.querySelectorAll('.read .prose p').length;
   const reading = paras();
   ok('a passage is open and has its paragraphs', reading > 0, reading + ' paragraphs');
+  const box = doc.querySelector('.detail');
+  box.scrollTop = 300;                    // halfway down it
 
   press(g, 'add-word');
   type(g, '#form-dlg [name=word]', 'parole officer');
@@ -434,6 +436,8 @@ function ask(g, word) {
   ok('saving a word from a passage leaves the passage where it was',
      paras() === reading && doc.body.dataset.view === 'detail',
      paras() + ' paragraphs, view ' + doc.body.dataset.view);
+  ok('  and leaves the reader where they were in it',
+     box.scrollTop === 300, 'scrolled to ' + box.scrollTop);
   ok('  and says so rather than saying something went wrong',
      /parole officer/.test(toastOf(g).textContent) &&
      !/went wrong/.test(toastOf(g).textContent),
