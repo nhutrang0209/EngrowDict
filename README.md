@@ -164,8 +164,12 @@ luck*, *draft*.
 
 The form is shown without a backdrop for exactly that reason — the rail beside
 it and the Add word button above it have to stay live while it is open. It is
-dragged by its head like any other window, two taps on the head put it back in
-the middle, and where it was left is where the next card off the rail opens. **Hide**
+dragged by its head like any other window and pulled about by its four edges
+and four corners; two taps on the head put it back in the middle at the size it
+started, and where it was left is where the next card off the rail opens. Given
+a size of its own it becomes a column — head and foot keep what they need and
+the senses take the rest, so a taller form shows more senses rather than more
+white. **Hide**
 keeps the card, **Cancel** throws it away and calls off the lookup with it, and
 saving a word opens the next card that came back. The Vietnamese box is ticked
 to begin with, being the column the notebook is kept for; the examples box is

@@ -216,10 +216,47 @@ function ask(g, word) {
      dlg(g).style.left === '120px' && dlg(g).style.top === '60px',
      dlg(g).style.left + ',' + dlg(g).style.top);
 
+  /* --- and pulled about by its edges --------------------------------------- */
+  /* jsdom does no layout, so the form is told what size it is on screen. */
+  dlg(g).getBoundingClientRect = () => ({
+    left: 100, top: 80, width: 600, height: 400, right: 700, bottom: 480,
+  });
+  const grip = dir => doc.querySelector('#form-dlg .rs-' + dir);
+  const pull = (dir, from, to) => {
+    grip(dir).dispatchEvent(new w.MouseEvent('mousedown',
+      { clientX: from[0], clientY: from[1], button: 0, bubbles: true, cancelable: true }));
+    slide(to[0], to[1], 'mousemove');
+    slide(to[0], to[1], 'mouseup');
+  };
+
+  pull('e', [700, 280], [900, 280]);
+  ok('the right edge makes it wider and leaves the left where it was',
+     dlg(g).style.width === '800px' && dlg(g).style.left === '100px',
+     dlg(g).style.width + ' at ' + dlg(g).style.left);
+  ok('  and a form with a size of its own gives the extra room to the senses',
+     dlg(g).classList.contains('sized') && dlg(g).style.height === '400px',
+     dlg(g).className + ' ' + dlg(g).style.height);
+
+  pull('w', [100, 280], [220, 280]);
+  ok('the left edge narrows it and takes the form with it',
+     dlg(g).style.width === '480px' && dlg(g).style.left === '220px',
+     dlg(g).style.width + ' at ' + dlg(g).style.left);
+
+  pull('n', [400, 80], [400, 180]);
+  ok('the top edge does the same the other way round',
+     dlg(g).style.height === '300px' && dlg(g).style.top === '180px',
+     dlg(g).style.height + ' at ' + dlg(g).style.top);
+
+  pull('se', [700, 480], [200, 100]);
+  ok('  and nothing shrinks past the point of being usable',
+     dlg(g).style.width === '380px' && dlg(g).style.height === '260px',
+     dlg(g).style.width + ' by ' + dlg(g).style.height);
+
   head.dispatchEvent(new w.MouseEvent('dblclick', { bubbles: true, cancelable: true }));
-  ok('  two taps on the head put it back in the middle',
-     dlg(g).style.left === '' && dlg(g).style.transform === '',
-     JSON.stringify(dlg(g).style.left + ',' + dlg(g).style.transform));
+  ok('  two taps on the head put it back in the middle, at the size it was',
+     dlg(g).style.left === '' && dlg(g).style.transform === '' &&
+     dlg(g).style.width === '' && !dlg(g).classList.contains('sized'),
+     JSON.stringify(dlg(g).style.left + ',' + dlg(g).style.width));
 
   /* --- Cancel is not Hide -------------------------------------------------- */
   const cancel = [...doc.querySelectorAll('#form-dlg .dlg-foot .btn')]

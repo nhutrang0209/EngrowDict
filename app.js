@@ -2129,26 +2129,44 @@
      opens where you left the last one. Two taps on the head puts it back in
      the middle. */
   var formPos = null;
+  var formSize = null;
+  var MIN_W = 380;
+  var MIN_H = 260;
 
   function placeForm() {
     var dlg = document.getElementById("form-dlg");
     if (!dlg) return;
-    if (!formPos) {
+    if (formPos) {
+      dlg.style.left = formPos.left + "px";
+      dlg.style.top = formPos.top + "px";
+      dlg.style.transform = "none";
+    } else {
       dlg.style.left = "";
       dlg.style.top = "";
       dlg.style.transform = "";
-      return;
     }
-    dlg.style.left = formPos.left + "px";
-    dlg.style.top = formPos.top + "px";
-    dlg.style.transform = "none";
+    /* A form given a height of its own hands it to the middle section: the
+       head and the foot keep theirs and the senses take what is left. */
+    if (formSize) {
+      dlg.style.width = formSize.w + "px";
+      dlg.style.height = formSize.h + "px";
+      dlg.classList.add("sized");
+    } else {
+      dlg.style.width = "";
+      dlg.style.height = "";
+      dlg.classList.remove("sized");
+    }
   }
 
   /* Enough of it stays on screen to be caught again by whichever edge it was
      pushed towards. */
   function clampForm(box) {
+    if (formSize) {
+      formSize.w = Math.max(MIN_W, Math.min(formSize.w, window.innerWidth));
+      formSize.h = Math.max(MIN_H, Math.min(formSize.h, window.innerHeight));
+    }
     if (!formPos) return;
-    var w = (box && box.width) || 0;
+    var w = (formSize && formSize.w) || (box && box.width) || 0;
     formPos.left = Math.max(90 - w, Math.min(formPos.left, window.innerWidth - 90));
     formPos.top = Math.max(0, Math.min(formPos.top, window.innerHeight - 40));
   }
@@ -2184,8 +2202,63 @@
     head.addEventListener("dblclick", function (ev) {
       if (!onHeadItself(ev)) return;
       formPos = null;
+      formSize = null;
       placeForm();
     });
+  }
+
+  /* ---- and pulled about by its edges -------------------------------------
+
+     Eight strips laid over the border: the four sides and, since they cost
+     nothing once the sides are there, the four corners. A side moved inwards
+     takes the opposite side with it — pulling the left edge right moves the
+     form as well as narrows it, which is what an edge is expected to do. */
+  var GRIPS = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
+
+  function buildGrips(dlg) {
+    GRIPS.forEach(function (dir) {
+      var grip = el("div", "rs rs-" + dir);
+      grip.dataset.dir = dir;
+      grip.addEventListener("mousedown", function (ev) {
+        if (ev.button === 0) startResize(dir, ev);
+      });
+      dlg.appendChild(grip);
+    });
+  }
+
+  function startResize(dir, ev) {
+    var dlg = document.getElementById("form-dlg");
+    var box = dlg.getBoundingClientRect();
+    var x0 = ev.clientX, y0 = ev.clientY;
+    var from = { left: box.left, top: box.top, w: box.width, h: box.height };
+    ev.preventDefault();
+    dlg.classList.add("resizing");
+    var move = function (on) {
+      var dx = on.clientX - x0, dy = on.clientY - y0;
+      var left = from.left, top = from.top, w = from.w, h = from.h;
+      if (dir.indexOf("e") > -1) w = from.w + dx;
+      if (dir.indexOf("s") > -1) h = from.h + dy;
+      if (dir.indexOf("w") > -1) { w = from.w - dx; left = from.left + dx; }
+      if (dir.indexOf("n") > -1) { h = from.h - dy; top = from.top + dy; }
+      if (w < MIN_W) {
+        if (dir.indexOf("w") > -1) left -= MIN_W - w;
+        w = MIN_W;
+      }
+      if (h < MIN_H) {
+        if (dir.indexOf("n") > -1) top -= MIN_H - h;
+        h = MIN_H;
+      }
+      formSize = { w: w, h: h };
+      formPos = { left: left, top: top };
+      placeForm();
+    };
+    var up = function () {
+      dlg.classList.remove("resizing");
+      document.removeEventListener("mousemove", move);
+      document.removeEventListener("mouseup", up);
+    };
+    document.addEventListener("mousemove", move);
+    document.addEventListener("mouseup", up);
   }
 
   /* ---- moving a card on and off the screen -------------------------------- */
@@ -2949,6 +3022,7 @@
     head.appendChild(el("p", null, "A word can carry several senses."));
     dragForm(head);
     dlg.appendChild(head);
+    buildGrips(dlg);
 
     var body = el("div", "dlg-body");
     /* The word and the button that looks it up sit on one line: what you type
