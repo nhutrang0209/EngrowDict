@@ -436,6 +436,34 @@ function ask(g, word) {
      doc.getElementById('toast').textContent + ' | ' + rail(g).join(' | '));
   ok('  and the form it was written from is not dragged back open',
      dlg(g).open === false);
+  net.fetch = realStub;          // the sheet answers straight away again
+
+  /* --- a word added while a passage is being read --------------------------
+     Saving one used to select it in whatever list was on screen. In the
+     passages that is a word among passages, which is nothing: the passage went
+     blank and the place in it was lost. */
+  click(w, doc.getElementById('tab-passages'));
+  await wait(40);
+  click(w, doc.querySelector('.hit'));
+  await wait(60);
+  const paras = () => doc.querySelectorAll('.read .prose p').length;
+  const reading = paras();
+  ok('a passage is open and has its paragraphs', reading > 0, reading + ' paragraphs');
+
+  press(g, 'add-word');
+  type(g, '#form-dlg [name=word]', 'parole officer');
+  type(g, '#sense-list [name=def]', 'the officer who supervises a released prisoner');
+  type(g, '#sense-list [name=vi]', 'cán bộ quản chế');
+  press(g, 'form-save');
+  await wait(250);
+  ok('saving a word from a passage leaves the passage where it was',
+     paras() === reading && doc.body.dataset.view === 'detail',
+     paras() + ' paragraphs, view ' + doc.body.dataset.view);
+  ok('  and says so rather than saying something went wrong',
+     /parole officer/.test(doc.getElementById('toast').textContent) &&
+     !/went wrong/.test(doc.getElementById('toast').textContent),
+     doc.getElementById('toast').textContent);
+  ok('  with nothing thrown along the way', g.errs.length === 0, JSON.stringify(g.errs));
 
   done(g.errs);
 })();

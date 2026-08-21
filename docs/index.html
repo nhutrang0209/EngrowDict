@@ -1611,8 +1611,12 @@ a.btn[hidden] { display: none; }
 
   function select(id, keepScroll) {
     selectedId = id;
-    if (view === "read") selectedRead = byId[id] || null;
-    if (view === "book") { selectedBook = byId[id] || null; openChapter = 0; }
+    /* One id space for three kinds of thing, so what comes back is checked
+       against what the view can draw. A word selected while the passages were
+       on screen was handed to the passage renderer, which read a passage's
+       text off a word and threw — leaving the pane cleared and empty. */
+    if (view === "read") selectedRead = passageOrNothing(byId[id]);
+    if (view === "book") { selectedBook = bookOrNothing(byId[id]); openChapter = 0; }
     var ns = windowBox.querySelectorAll(".hit");
     for (var i = 0; i < ns.length; i++) {
       var e = hits[Number(ns[i].dataset.i)];
@@ -1662,6 +1666,9 @@ a.btn[hidden] { display: none; }
   }
 
   /* ---- detail pane -------------------------------------------------------- */
+  function passageOrNothing(x) { return x && x.paras ? x : null; }
+  function bookOrNothing(x) { return x && x.chapters ? x : null; }
+
   function drawDetail() {
     hideLookup();
     var host = document.getElementById("detail-inner");
@@ -3878,7 +3885,12 @@ a.btn[hidden] { display: none; }
         ADDED = next;
         rebuild();
         refresh();
-        if (onScreen) {
+        /* Only the dictionary jumps to what was just saved. Doing it while a
+           passage was being read selected a word among a list of passages,
+           which is nothing at all: the passage went blank and the reader lost
+           their place for the sake of showing them a word they had just
+           typed out themselves. */
+        if (onScreen && view === "vocab") {
           select(got.entry.id);
           showDetail();
         }
