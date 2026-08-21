@@ -1719,27 +1719,26 @@
     }).then(function () { btn.disabled = false; });
   }
 
-  /* Typed on a device that has none: the passcode is tried against the file
-     and, where it fits, the links are in place before the dialog is redrawn.
-     Where there is no file, or it does not fit, nothing is said — the passcode
-     was for unlocking, and it did that. */
+  /* Three answers, because they mean three different things to whoever typed
+     the passcode: there is no file, the file will not open with this, or here
+     are the links. Silence covered all three and told nobody anything. */
   function pickUpLinks(pass) {
     if (MODE !== "static" || !canCrypto() || typeof fetch !== "function") {
-      return Promise.resolve(false);
+      return Promise.resolve("none");
     }
     return fetch("link.json", { cache: "no-store" }).then(function (r) {
-      if (!r.ok) throw new Error("no link.json");
-      return r.text();
-    }).then(function (text) {
-      return openLinks(pass, text);
-    }).then(function (got) {
-      if (!got || !got.webApp || !got.key) return false;
-      settings.sheetUrl = got.sheetUrl || settings.sheetUrl;
-      settings.webApp = got.webApp;
-      settings.key = got.key;
-      writeSettings();
-      return true;
-    }, function () { return false; });
+      if (!r || !r.ok || typeof r.text !== "function") return "none";
+      return r.text().then(function (text) {
+        return openLinks(pass, text).then(function (got) {
+          if (!got || !got.webApp || !got.key) return "locked";
+          settings.sheetUrl = got.sheetUrl || settings.sheetUrl;
+          settings.webApp = got.webApp;
+          settings.key = got.key;
+          writeSettings();
+          return "got";
+        }, function () { return "locked"; });
+      });
+    }, function () { return "none"; });
   }
 
   /* ---- putting a book on the site ----------------------------------------
@@ -4053,26 +4052,49 @@
       go.addEventListener("click", function () {
         var typed = inp.value.trim();
         if (typed === settings.code) {
-          settings.unlocked = true;
-          writeSettings();
-          drawSettings();
-          refresh();
-          toast("Unlocked");
-          /* A device with no links of its own asks the site for them: the
-             passcode just typed is the only thing that can open the file. */
-          if (!settings.webApp || !settings.key) {
-            pickUpLinks(typed).then(function (got) {
-              if (!got) return;
-              drawSettings();
-              refreshChrome();
-              toast("The links came with the passcode — this device can sync", true);
-            });
-          }
-        } else {
-          setMsg("Wrong passcode.", false);
-          inp.select();
+          letIn(typed);
+          return;
         }
+        /* The passcode that opens the published links is a passcode for this
+           page as well. A browser that has never been set up knows only the
+           one the page shipped with, which is nobody's passcode: without this,
+           the right passcode is refused on exactly the devices it is for. */
+        setMsg("Trying that against the links on the site…", true);
+        pickUpLinks(typed).then(function (how) {
+          if (how !== "got") {
+            setMsg("Wrong passcode.", false);
+            inp.select();
+            return;
+          }
+          settings.code = typed;
+          letIn(typed, true);
+        });
       });
+
+      /* In, and then whatever is left to say about the links. */
+      function letIn(typed, hadLinks) {
+        settings.unlocked = true;
+        writeSettings();
+        drawSettings();
+        refresh();
+        if (hadLinks) {
+          toast("The links came with the passcode — this device can sync", true);
+          return;
+        }
+        toast("Unlocked");
+        if (settings.webApp && settings.key) return;
+        pickUpLinks(typed).then(function (how) {
+          drawSettings();
+          refreshChrome();
+          if (how === "got") {
+            toast("The links came with the passcode — this device can sync", true);
+          } else if (how === "locked") {
+            setMsg("The links published on the site were locked with a "
+              + "different passcode, so this device still needs them typed in.",
+              false);
+          }
+        });
+      }
       inp.addEventListener("keydown", function (ev) { if (ev.key === "Enter") go.click(); });
       row.appendChild(go);
       gate.appendChild(row);

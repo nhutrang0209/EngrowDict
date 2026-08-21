@@ -78,8 +78,9 @@ const unlock = (g, pass) => {
   const net = site();
 
   /* --- the device that has them ------------------------------------------- */
+  const MINE = 'a longer passcode of my own';
   const first = page(net, unlockedStore(
-    Object.assign({ ghToken: 'github_pat_test' }, CFG)));
+    Object.assign({ ghToken: 'github_pat_test', code: MINE }, CFG)));
   await wait(900);
   click(first.window, first.doc.getElementById('settings-btn'));
   const share = first.doc.getElementById('share-links');
@@ -112,9 +113,12 @@ const unlock = (g, pass) => {
   ok('a new device has no sync button, having no links',
      fresh.doc.getElementById('sync-sheet').hidden);
 
-  unlock(fresh, PASSCODE);
-  await wait(700);
-  ok('the right passcode brings the links down with it',
+  unlock(fresh, MINE);
+  await wait(900);
+  ok('the passcode the links were locked with lets a new device in',
+     fresh.doc.getElementById('add-word').textContent === '+ Add word',
+     fresh.doc.getElementById('add-word').textContent);
+  ok('  and brings the links down with it',
      fresh.doc.getElementById('val-webapp').textContent === CFG.webApp,
      fresh.doc.getElementById('val-webapp').textContent);
   ok('  the sheet link comes too',
@@ -135,11 +139,22 @@ const unlock = (g, pass) => {
   const nosy = page(net, {});
   await wait(900);
   unlock(nosy, 'not-the-passcode');
-  await wait(700);
+  await wait(900);
   ok('the wrong passcode opens neither the page nor the file',
      nosy.doc.getElementById('sync-sheet').hidden &&
      /Wrong passcode/.test(nosy.doc.getElementById('set-msg').textContent),
      nosy.doc.getElementById('set-msg').textContent);
+
+  /* --- the shipped passcode, against a file locked with another ----------- */
+  const stale = page(net, {});
+  await wait(900);
+  unlock(stale, PASSCODE);
+  await wait(900);
+  ok('the passcode this page shipped with still unlocks it',
+     stale.doc.getElementById('add-word').textContent === '+ Add word');
+  ok('  and says why the links did not come with it',
+     /locked with a different passcode/.test(stale.doc.getElementById('set-msg').textContent),
+     stale.doc.getElementById('set-msg').textContent);
 
   /* --- a site with no file published -------------------------------------- */
   const bare = site();

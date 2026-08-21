@@ -360,6 +360,11 @@ the passcode does two things at once — it unlocks the page, and it opens that
 file — so a new browser types the passcode and has the sync button. Anyone
 without it has a file of noise.
 
+The passcode that opens the file is a passcode for the page as well. It has to
+be: a browser that has never been set up knows only the one the page shipped
+with, which is nobody's passcode, so the right one would be refused on exactly
+the devices it was published for.
+
 Which puts the whole weight on the passcode, so make it a long one: the file is
 public and can be attacked offline for as long as somebody likes. Publishing
 needs the GitHub token — the file is a commit like any other — which lives

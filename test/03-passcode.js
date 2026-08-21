@@ -39,6 +39,9 @@ const mk = store => boot({
   // --- wrong passcode ----------------------------------------------------
   doc.getElementById('pass-in').value = '000000';
   click(w, doc.getElementById('pass-go'));
+  // one it does not know is tried against the links published on the site
+  // before it is refused, which is a fetch and a moment
+  await wait(60);
   ok('a wrong passcode is refused',
      doc.getElementById('set-msg').textContent.includes('Wrong'),
      doc.getElementById('set-msg').textContent);
