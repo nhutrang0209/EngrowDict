@@ -403,9 +403,12 @@ function page(store, posts, reply) {
     '<div class="def-block ddef_block "><div class="def ddef_d db">' + def + '</div>'
     + (vi ? '<span class="trans dtrans dtrans-se">' + vi + '</span>' : '')
     + '</div>';
+  /* Cambridge stacks an entry body per part of speech inside the one
+     dictionary: rough is an adjective, a verb, a noun and an adverb. */
   const ROUGH_EN =
     '<div class="pr dictionary" data-id="cald4"><div class="entry-body__el">'
     + '<div class="di-title">rough</div><span class="pos dpos">adjective</span>'
+    + '<span class="ipa dipa">rʌf</span>'
     + [ 'not smooth but uneven',
         'not exact or detailed',
         'used to describe an alcoholic drink, especially wine, that tastes cheap',
@@ -413,6 +416,12 @@ function page(store, posts, reply) {
         'difficult and unpleasant to deal with',
         'not yet finished or perfect',
         'sleeping outdoors, without a home' ].map(d => senseBlock(d, '')).join('')
+    + '</div>'
+    + '<div class="entry-body__el"><span class="pos dpos">verb</span>'
+    + senseBlock('to live temporarily in basic and uncomfortable conditions', '')
+    + '</div>'
+    + '<div class="entry-body__el"><span class="pos dpos">noun</span>'
+    + senseBlock('a first quick drawing of something', '')
     + '</div></div>';
   const ROUGH_VI =
     '<div class="pr dictionary" data-id="cald4"><div class="entry-body__el">'
@@ -425,9 +434,19 @@ function page(store, posts, reply) {
   two.net.translation = () => '';        // nothing standing in for a real gloss
   two.net.reply = url => ({ code: 200, body: /english-vietnamese/.test(url) ? ROUGH_VI : ROUGH_EN });
   const rough = call2({ key: CFG.key, action: 'draft', word: 'rough' });
-  ok('a word with seven senses comes back with seven, not with five',
-     rough.entry.senses.length === 7 && !rough.dropped,
+  ok('every part of speech on the page is read, not the first one only',
+     rough.entry.senses.length === 9 && !rough.dropped,
      rough.entry.senses.length + ' senses');
+  ok('  and they come back as one entry, the parts of speech listed on it',
+     rough.entry.pos === 'adj, v, n' && rough.more === undefined,
+     rough.entry.pos);
+  ok('  the word keeps the phonetics of the first, and its own name',
+     rough.entry.word === 'rough' && rough.entry.ipa === '/rʌf/',
+     rough.entry.word + ' ' + rough.entry.ipa);
+  ok('  the senses run in the order the page gives them',
+     rough.entry.senses[7].def === 'to live temporarily in basic and uncomfortable conditions' &&
+     rough.entry.senses[8].def === 'a first quick drawing of something',
+     rough.entry.senses.slice(7).map(x => x.def.slice(0, 24)).join(' | '));
   ok('  each Vietnamese goes to the sense whose English it was written for',
      rough.entry.senses[0].vi === 'nhám, ráp' &&
      rough.entry.senses[1].vi === 'đại khái' &&
@@ -445,7 +464,7 @@ function page(store, posts, reply) {
      one page instead of two is half the wait. */
   const GLOSSES = ['gồ ghề / nhám', 'khái quát / sơ bộ', '(rượu) rẻ tiền, gắt',
                    'thô bạo / thô lỗ', 'khó khăn / gian khổ', 'phác thảo / nháp',
-                   '(ngủ) ngoài trời'];
+                   '(ngủ) ngoài trời', 'sống tạm bợ', 'bản phác'];
   two.props.SOTRATU_AI_KEY = 'AQ.Ab8RN6NotARealKeyAtAllNotEven';
   two.net.calls = [];
   two.net.reply = url => /generativelanguage/.test(url)
@@ -458,7 +477,7 @@ function page(store, posts, reply) {
      !two.net.calls.some(u => /english-vietnamese/.test(u)),
      two.net.calls.filter(u => /cambridge/.test(u)).join(' , '));
   ok('  and every sense is glossed by the model, in one voice',
-     modelled.glossed === 7 && modelled.translated === 0 &&
+     modelled.glossed === 9 && modelled.translated === 0 &&
      modelled.by === 'Gemini' &&
      modelled.entry.senses.map(x => x.vi).join(' | ') === GLOSSES.join(' | '),
      modelled.by + ': ' + modelled.entry.senses.map(x => x.vi).join(' | '));

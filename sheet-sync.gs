@@ -1149,26 +1149,24 @@ function draftEntry(term, opts) {
       + (why ? ' (' + why + ')' : '') + ' or Merriam-Webster.' };
   }
 
-  /* One entry per part of speech: the sheet keeps a part of speech on the
-     entry, not on the sense, so rough the adjective and rough the verb are two
-     entries and always were. The first comes back in the form; the rest come
-     back beside it, for the page to put on the rail. */
-  var entries = [], dropped = 0;
+  /* Cambridge stacks one entry body per part of speech — rough is an
+     adjective, a verb, a noun and an adverb, eighteen senses between them —
+     and the word is still one word. They come back as one entry: the parts of
+     speech listed the way the sheet lists them, "adj, v, n, adv", and every
+     sense under it in the order the page gives them. */
+  var all = [], posList = [], seenPos = {};
   for (var b = 0; b < blocks.length; b++) {
     if (viSenses) pairVi(blocks[b].senses, viSenses);
-    dropped += Math.max(0, blocks[b].senses.length - MAX_SENSES);
-    entries.push(entryFrom(blocks[b], term));
+    var short = shortPos(blocks[b].pos);
+    if (short && !seenPos[short]) { seenPos[short] = 1; posList.push(short); }
+    all = all.concat(blocks[b].senses);
   }
-  var entry = entries[0];
+  var dropped = Math.max(0, all.length - MAX_SENSES);
+  all = all.slice(0, MAX_SENSES);
 
-  /* Every sense of every part of speech, so that one model request covers the
-     word rather than one per entry. */
-  var all = [];
-  for (var e2 = 0; e2 < entries.length; e2++) {
-    for (var s2 = 0; s2 < entries[e2].senses.length; s2++) {
-      all.push(entries[e2].senses[s2]);
-    }
-  }
+  var entry = entryFrom(blocks[0], term);
+  entry.pos = posList.join(', ');
+  entry.senses = all;
 
   if (!wantEg) {
     for (var x = 0; x < all.length; x++) all[x].eg = [];
@@ -1177,7 +1175,7 @@ function draftEntry(term, opts) {
     // No Vietnamese asked for: nothing to gloss, nothing to translate, and no
     // model called about it either.
     for (var y = 0; y < all.length; y++) all[y].vi = '';
-    return { ok: true, entry: entry, more: entries.slice(1), source: source,
+    return { ok: true, entry: entry, source: source,
              by: '', glossed: 0, translated: 0, warning: '', dropped: dropped };
   }
 
@@ -1221,9 +1219,15 @@ function draftEntry(term, opts) {
     } catch (err2) { /* a sense with no Vietnamese is better than no draft */ }
   }
 
-  return { ok: true, entry: entry, more: entries.slice(1), source: source,
+  return { ok: true, entry: entry, source: source,
            by: writer, glossed: glossed, translated: machine,
            warning: warning, dropped: dropped };
+}
+
+/** Cambridge writes "adjective"; the sheet writes "adj". */
+function shortPos(pos) {
+  var p = String(pos || '').toLowerCase();
+  return POS_SHORT[p] || (p === 'phrasal verb' || p === 'idiom' ? '' : pos);
 }
 
 /** One parsed block as the sheet would hold it. */
@@ -1234,7 +1238,7 @@ function entryFrom(block, term) {
     .trim() || txt(term);
   var entry = {
     type: 'word', word: word, verb: '', particle: '',
-    pos: POS_SHORT[pos] || (pos === 'phrasal verb' || pos === 'idiom' ? '' : block.pos),
+    pos: shortPos(block.pos),
     ipa: block.ipa, note: '', senses: block.senses.slice(0, MAX_SENSES)
   };
   if (pos === 'phrasal verb') {

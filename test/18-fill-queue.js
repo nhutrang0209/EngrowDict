@@ -283,44 +283,32 @@ function ask(g, word) {
      dlg(g).open === false && doc.getElementById('card-rail').hidden,
      rail(g).join(' | '));
 
-  /* --- a word that is four words ------------------------------------------- */
-  /* Cambridge keeps an entry per part of speech and so does the sheet, so the
-     others come back beside the first and go on the rail as cards. */
+  /* --- a word that is four parts of speech --------------------------------- */
+  /* Cambridge stacks an entry body per part of speech and they are still one
+     word: they come back as one entry, in one form. */
   press(g, 'add-word');
   type(g, '#form-dlg [name=word]', 'rough');
   press(g, 'form-fill');
   await wait(30);
-  net.answer('rough', Object.assign(draftOf('rough', 'not smooth but uneven'), {
-    entry: { type: 'word', word: 'rough', verb: '', particle: '', pos: 'adj',
-             ipa: '/rʌf/', note: '',
-             senses: [{ def: 'not smooth but uneven', eg: [], vi: 'gồ ghề' }] },
-    more: [
-      { type: 'word', word: 'rough', verb: '', particle: '', pos: 'n', ipa: '/rʌf/',
-        note: '', senses: [{ def: 'the rough ground beside a golf course', eg: [], vi: 'vùng cỏ rậm' }] },
-      { type: 'word', word: 'rough', verb: '', particle: '', pos: 'v', ipa: '/rʌf/',
-        note: '', senses: [{ def: 'to make something uneven', eg: [], vi: 'làm xù' }] },
-    ],
-  }));
+  net.answer('rough', {
+    ok: true, source: 'Cambridge', glossed: 3, by: 'Gemini', translated: 0, warning: '',
+    entry: { type: 'word', word: 'rough', verb: '', particle: '', pos: 'adj, v, n, adv',
+             ipa: '/rʌf/', note: '', senses: [
+               { def: 'not even or smooth', eg: [], vi: 'gồ ghề' },
+               { def: 'to live temporarily in uncomfortable conditions', eg: [], vi: 'sống tạm bợ' },
+               { def: 'a first quick drawing of something', eg: [], vi: 'bản phác' },
+             ] },
+  });
   await wait(60);
-  ok('the part of speech in the form is the first Cambridge lists',
-     val(g, '#form-dlg [name=pos]') === 'adj' &&
-     val(g, '#sense-list [name=def]') === 'not smooth but uneven',
+  ok('every part of speech lands in the one form, listed in the one field',
+     val(g, '#form-dlg [name=pos]') === 'adj, v, n, adv',
      val(g, '#form-dlg [name=pos]'));
-  ok('  and the others are cards of their own, named by their part of speech',
-     rail(g).join(' | ') === 'rough · n:draft | rough · v:draft',
-     rail(g).join(' | '));
-  ok('  the line under the form says where they went',
-     /noun and verb as well/.test(doc.getElementById('form-msg').textContent),
-     doc.getElementById('form-msg').textContent);
-
-  click(g.window, [...doc.querySelectorAll('#card-list .card-open')]
-    .find(b => /rough · v/.test(b.querySelector('.card-word').textContent)));
-  await wait(40);
-  ok('  and each opens filled in, ready to be saved as its own entry',
-     val(g, '#form-dlg [name=pos]') === 'v' &&
-     val(g, '#sense-list [name=def]') === 'to make something uneven' &&
-     val(g, '#sense-list [name=vi]') === 'làm xù',
-     val(g, '#form-dlg [name=pos]') + ' / ' + val(g, '#sense-list [name=def]'));
+  ok('  with the senses of all of them under it, in the order the page gives',
+     [...doc.querySelectorAll('#sense-list [name=def]')].map(x => x.value).join(' | ') ===
+       'not even or smooth | to live temporarily in uncomfortable conditions | a first quick drawing of something',
+     doc.querySelectorAll('#sense-list [name=def]').length + ' senses');
+  ok('  and nothing is put on the rail behind it',
+     doc.getElementById('card-rail').hidden, rail(g).join(' | '));
   press(g, 'form-hide');
   await wait(20);
   [...doc.querySelectorAll('#card-list .card-x')].forEach(x => click(g.window, x));
