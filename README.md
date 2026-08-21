@@ -163,7 +163,9 @@ Script. The rail says which is which: *looking up…*, *in line*, *ready*, *no
 luck*, *draft*.
 
 The form is shown without a backdrop for exactly that reason — the rail beside
-it and the Add word button above it have to stay live while it is open. **Hide**
+it and the Add word button above it have to stay live while it is open. It is
+dragged by its head like any other window, two taps on the head put it back in
+the middle, and where it was left is where the next card off the rail opens. **Hide**
 keeps the card, **Cancel** throws it away and calls off the lookup with it, and
 saving a word opens the next card that came back. The Vietnamese box is ticked
 to begin with, being the column the notebook is kept for; the examples box is

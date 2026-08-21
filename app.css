@@ -619,6 +619,11 @@ dialog::backdrop { background: rgba(8, 14, 11, .5); backdrop-filter: blur(2px); 
   transform: translate(-50%, -50%);
   width: min(660px, calc(100vw - 32px));
 }
+/* Its head is the handle: drag it where you want it, two taps to put it back
+   in the middle. */
+#form-head { cursor: move; user-select: none; }
+#form-head.dragging { cursor: grabbing; }
+#form-head h2, #form-head p { pointer-events: none; }
 
 /* Forms put aside, pinned down the right. Each keeps its fields and its
    lookup; pressing one brings it back. */

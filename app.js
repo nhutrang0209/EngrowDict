@@ -2020,6 +2020,7 @@
     paintCard(card);
     drawRail();
     var dlg = document.getElementById("form-dlg");
+    placeForm();
     if (!dlg.open) dlg.show();
     dlg.querySelector("[name=word]").focus();
   }
@@ -2120,6 +2121,73 @@
     });
   }
 
+  /* ---- the form as a window ----------------------------------------------
+
+     Dragged by its head, the way a window is, because a form that stays put
+     over the one paragraph you wanted to read is no better than a modal. Where
+     it is put is kept for the rest of the session: the next card off the rail
+     opens where you left the last one. Two taps on the head puts it back in
+     the middle. */
+  var formPos = null;
+
+  function placeForm() {
+    var dlg = document.getElementById("form-dlg");
+    if (!dlg) return;
+    if (!formPos) {
+      dlg.style.left = "";
+      dlg.style.top = "";
+      dlg.style.transform = "";
+      return;
+    }
+    dlg.style.left = formPos.left + "px";
+    dlg.style.top = formPos.top + "px";
+    dlg.style.transform = "none";
+  }
+
+  /* Enough of it stays on screen to be caught again by whichever edge it was
+     pushed towards. */
+  function clampForm(box) {
+    if (!formPos) return;
+    var w = (box && box.width) || 0;
+    formPos.left = Math.max(90 - w, Math.min(formPos.left, window.innerWidth - 90));
+    formPos.top = Math.max(0, Math.min(formPos.top, window.innerHeight - 40));
+  }
+
+  function onHeadItself(ev) {
+    return !(ev.target && ev.target.closest
+      && ev.target.closest("button, input, select, textarea, a"));
+  }
+
+  function dragForm(head) {
+    head.addEventListener("mousedown", function (ev) {
+      if (ev.button !== 0 || !onHeadItself(ev)) return;
+      var dlg = document.getElementById("form-dlg");
+      var box = dlg.getBoundingClientRect();
+      var dx = ev.clientX - box.left;
+      var dy = ev.clientY - box.top;
+      ev.preventDefault();
+      head.classList.add("dragging");
+      var move = function (on) {
+        formPos = { left: on.clientX - dx, top: on.clientY - dy };
+        clampForm(box);
+        placeForm();
+      };
+      var up = function () {
+        head.classList.remove("dragging");
+        document.removeEventListener("mousemove", move);
+        document.removeEventListener("mouseup", up);
+      };
+      document.addEventListener("mousemove", move);
+      document.addEventListener("mouseup", up);
+    });
+
+    head.addEventListener("dblclick", function (ev) {
+      if (!onHeadItself(ev)) return;
+      formPos = null;
+      placeForm();
+    });
+  }
+
   /* ---- moving a card on and off the screen -------------------------------- */
   /* What is in the boxes right now, so the card comes back as it was left. */
   function snapCurrent() {
@@ -2175,6 +2243,7 @@
     if (!card.shown) landIntoForm(card);
     drawRail();
     var dlg = document.getElementById("form-dlg");
+    placeForm();
     if (!dlg.open) dlg.show();
     dlg.querySelector("[name=word]").focus();
   }
@@ -2835,7 +2904,11 @@
 
     scrollBox.addEventListener("scroll", function () { paint(false); }, { passive: true });
     watchPlace(detail);
-    window.addEventListener("resize", function () { paint(true); });
+    window.addEventListener("resize", function () {
+      paint(true);
+      var dlg = document.getElementById("form-dlg");
+      if (formPos && dlg) { clampForm(dlg.getBoundingClientRect()); placeForm(); }
+    });
 
     qInput.addEventListener("input", function () { query = qInput.value; refresh(); });
     qInput.addEventListener("keydown", function (ev) {
@@ -2871,8 +2944,10 @@
     dlg.id = "form-dlg";
 
     var head = el("div", "dlg-head");
+    head.id = "form-head";
     head.appendChild(el("h2", null, "Add a word"));
     head.appendChild(el("p", null, "A word can carry several senses."));
+    dragForm(head);
     dlg.appendChild(head);
 
     var body = el("div", "dlg-body");

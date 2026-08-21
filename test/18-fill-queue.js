@@ -193,6 +193,34 @@ function ask(g, word) {
   ok('  and the rail is empty behind it',
      doc.getElementById('card-rail').hidden, rail(g).join(' | '));
 
+  /* --- dragged about like a window ---------------------------------------- */
+  const head = doc.getElementById('form-head');
+  const grab = (x, y, kind) => head.dispatchEvent(
+    new w.MouseEvent(kind, { clientX: x, clientY: y, button: 0, bubbles: true, cancelable: true }));
+  const slide = (x, y, kind) => doc.dispatchEvent(
+    new w.MouseEvent(kind, { clientX: x, clientY: y, button: 0, bubbles: true }));
+
+  grab(300, 60, 'mousedown');
+  slide(420, 120, 'mousemove');
+  slide(420, 120, 'mouseup');
+  ok('the form is dragged by its head, the way a window is',
+     dlg(g).style.left === '120px' && dlg(g).style.top === '60px' &&
+     dlg(g).style.transform === 'none',
+     dlg(g).style.left + ',' + dlg(g).style.top);
+
+  press(g, 'form-hide');
+  await wait(20);
+  click(w, doc.querySelector('#card-list .card-open'));
+  await wait(40);
+  ok('  and comes back off the rail where it was left, not in the middle again',
+     dlg(g).style.left === '120px' && dlg(g).style.top === '60px',
+     dlg(g).style.left + ',' + dlg(g).style.top);
+
+  head.dispatchEvent(new w.MouseEvent('dblclick', { bubbles: true, cancelable: true }));
+  ok('  two taps on the head put it back in the middle',
+     dlg(g).style.left === '' && dlg(g).style.transform === '',
+     JSON.stringify(dlg(g).style.left + ',' + dlg(g).style.transform));
+
   /* --- Cancel is not Hide -------------------------------------------------- */
   const cancel = [...doc.querySelectorAll('#form-dlg .dlg-foot .btn')]
     .find(b => b.textContent === 'Cancel');
