@@ -152,6 +152,18 @@ and the part of speech, the phonetics, the definitions, the examples and the
 Vietnamese come back filled in — then you read them over and press **Save word**
 yourself. Nothing is written until you do.
 
+**It does not hold the form.** A lookup takes as long as Cambridge and the
+model take, and there is no reason to watch it: the word joins a queue and the
+form is yours again straight away. The box beside the button takes the rest of
+the list — `susurrus, thole`, one per line or separated by commas — and they
+are looked up two at a time while the first is being read. What comes back
+waits: in the tray at the bottom corner when the form is shut, in a line under
+the word when it is open. Press a word there to open it filled in, press its ×
+to drop it, and saving one opens the next that is ready. A word that lands
+while its own form is still open goes straight into it, the way it always did.
+Nothing survives a reload — the queue is a few minutes of impatience, not
+state.
+
 Cambridge answers a plain server-side request with **403** (Cloudflare wants a
 browser — the entry pages and `robots.txt` alike), so the script reads the page
 through `r.jina.ai`, which renders it and returns Cambridge's own markup. Two

@@ -608,6 +608,48 @@ dialog::backdrop { background: rgba(8, 14, 11, .5); backdrop-filter: blur(2px); 
 }
 .fill-opts { display: flex; flex-direction: column; gap: 6px; }
 .fill-opts .checkrow { font-size: 12px; }
+.fill-left { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.fill-left input {
+  width: 100%; min-width: 0; padding: 6px 9px; font-size: 11.5px;
+  border: 1px solid var(--hair); border-radius: var(--r-s);
+  background: var(--paper); color: var(--ink);
+}
+
+/* Words waiting to be looked up: the same rows in the corner tray and inside
+   the form, since a modal covers everything behind it. */
+.fill-list { display: flex; flex-direction: column; gap: 4px; }
+.fill-list.in-form { margin-top: -4px; }
+.fill-row {
+  display: grid; grid-template-columns: 1fr auto auto; gap: 10px;
+  align-items: center; padding: 5px 8px; border-radius: var(--r-s);
+  background: var(--tint); border: 1px solid var(--hair);
+}
+.fill-open {
+  border: 0; background: none; padding: 0; text-align: left; min-width: 0;
+  font-family: var(--serif); font-size: 14px; color: var(--ink); cursor: pointer;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.fill-open:disabled { color: var(--faint); cursor: default; }
+.fill-open:not(:disabled):hover { color: var(--accent-hi); }
+.fill-state { font-family: var(--mono); font-size: 10px; color: var(--faint); }
+.fill-x {
+  border: 0; background: none; padding: 0 2px; cursor: pointer;
+  font-size: 15px; line-height: 1; color: var(--faint);
+}
+.fill-x:hover { color: var(--flag); }
+.fill-tray {
+  position: fixed; right: 16px; bottom: 16px; z-index: 40;
+  width: min(260px, calc(100vw - 32px));
+  padding: 10px; border-radius: var(--r-m);
+  background: var(--paper); border: 1px solid var(--rule);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .12);
+}
+.fill-tray[hidden] { display: none; }
+.fill-tray-head {
+  font-family: var(--mono); font-size: 10px; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--faint); padding: 0 2px 7px;
+}
+.fill-tray .fill-list { max-height: 40vh; overflow-y: auto; }
 .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .field > span { font-family: var(--mono); font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--faint); }
 .field input, .field select, .field textarea {

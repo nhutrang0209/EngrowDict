@@ -282,13 +282,14 @@
   /* Apps Script accepts a plain POST with no custom headers, so no preflight.
      The sheet link rides along: the script writes to the workbook named here,
      not to whichever one it happens to be attached to. */
-  function callSheet(payload) {
+  function callSheet(payload, signal) {
     payload.key = settings.key;
     payload.sheet = settings.sheetUrl;
     return fetch(settings.webApp, {
       method: "POST",
       body: JSON.stringify(payload),
-      redirect: "follow"
+      redirect: "follow",
+      signal: signal || undefined
     }).then(function (r) {
       return r.json();
     }).then(function (res) {
@@ -2024,6 +2025,7 @@
     list.appendChild(newSenseRow(1));
     renumberSenses();
     formMsg("", "");
+    drawQueue();
     dlg.showModal();
     dlg.querySelector("[name=word]").focus();
   }
@@ -2034,6 +2036,202 @@
     var msg = document.getElementById("form-msg");
     msg.className = "dlg-msg" + (tone ? " " + tone : "");
     msg.textContent = text;
+  }
+
+  /* ---- words waiting to be looked up -------------------------------------
+
+     A lookup takes as long as Cambridge and the model take, and there is no
+     reason to sit through it. Auto Fill puts the word in a queue and gives the
+     form back: type the next one, shut the form, read something else. What
+     comes back waits in the tray at the corner until it is opened, and a word
+     still going round can be dropped from there.
+
+     Two at a time. Each is its own request to the same Apps Script, which
+     answers them side by side; more than a couple only queues them at the far
+     end, where nothing can be cancelled. */
+  var fills = [];
+  var fillSeq = 0;
+  var FILLS_AT_ONCE = 2;
+
+  function fillById(id) {
+    for (var i = 0; i < fills.length; i++) if (fills[i].id === id) return fills[i];
+    return null;
+  }
+
+  function queueFill(word, want) {
+    var f = { id: "f" + (++fillSeq), word: word, want: want, state: "waiting",
+              entry: null, res: null, err: "", stop: null };
+    fills.push(f);
+    drawQueue();
+    pumpFills();
+    return f;
+  }
+
+  function pumpFills() {
+    var going = 0, i;
+    for (i = 0; i < fills.length; i++) if (fills[i].state === "filling") going++;
+    for (i = 0; i < fills.length && going < FILLS_AT_ONCE; i++) {
+      if (fills[i].state === "waiting") { startFill(fills[i]); going++; }
+    }
+  }
+
+  function startFill(f) {
+    f.state = "filling";
+    drawQueue();
+    /* Dropping a word that is already in the air only works where the browser
+       can abort a fetch; where it cannot, the answer is thrown away instead. */
+    if (typeof AbortController === "function") f.stop = new AbortController();
+    callSheet({ action: "draft", word: f.word, eg: f.want.eg, vi: f.want.vi },
+      f.stop && f.stop.signal).then(function (res) {
+      if (f.state === "dropped") return;
+      f.state = "ready";
+      f.res = res;
+      f.entry = res.entry;
+      landFill(f);
+    }, function (err) {
+      if (f.state === "dropped") return;
+      f.state = "failed";
+      f.err = err && err.message ? err.message : String(err);
+      landFill(f);
+    });
+  }
+
+  /* If the form is still open on that word, the draft goes straight into it,
+     which is what a lookup used to do and still should. Otherwise it waits. */
+  function landFill(f) {
+    var dlg = document.getElementById("form-dlg");
+    var open = dlg && dlg.open;
+    var here = open && dlg.querySelector("[name=word]").value.trim() === f.word;
+    if (here) openFill(f);
+    else if (f.state === "failed") toast(f.word + ": " + f.err);
+    drawQueue();
+    pumpFills();
+  }
+
+  /* What the tray says about a word, and what the form's line says when the
+     draft lands in it. */
+  function fillSays(f) {
+    if (f.state === "failed") return f.err;
+    var res = f.res || {};
+    var bits = [res.source === "Cambridge"
+      ? "Filled from Cambridge."
+      : "Cambridge had no entry — filled from " + (res.source || "the dictionary") + "."];
+    if (res.glossed) {
+      bits.push("The Vietnamese for " + plural(res.glossed, "sense", "senses")
+        + " was written by " + (res.by || "the model") + ".");
+    }
+    if (res.translated) {
+      bits.push(plural(res.translated, "sense", "senses")
+        + " came back machine-translated — look at those twice.");
+    }
+    if (res.warning) bits.push(res.warning);
+    bits.push("Then press Save word.");
+    return bits.join(" ");
+  }
+
+  /* The same list in two places: a tray at the corner for when the form is
+     shut, and a line inside the form for when it is open, because a modal
+     covers everything behind it. */
+  function drawQueue() {
+    var going = 0, i;
+    for (i = 0; i < fills.length; i++) if (fills[i].state !== "ready") going++;
+
+    var tray = document.getElementById("fill-tray");
+    if (tray) {
+      tray.hidden = !fills.length;
+      var head = document.getElementById("fill-tray-head");
+      if (head) {
+        head.textContent = going
+          ? plural(going, "word", "words") + " being looked up"
+          : plural(fills.length, "word", "words") + " ready";
+      }
+      queueRows(document.getElementById("fill-tray-list"));
+    }
+
+    var inForm = document.getElementById("form-queue");
+    if (inForm) {
+      inForm.hidden = !fills.length;
+      queueRows(inForm);
+    }
+  }
+
+  function queueRows(box) {
+    if (!box) return;
+    box.textContent = "";
+    fills.forEach(function (f) {
+      var row = el("div", "fill-row");
+      row.dataset.word = f.word;
+      var open = el("button", "fill-open", f.word);
+      open.type = "button";
+      open.disabled = f.state === "waiting" || f.state === "filling";
+      open.addEventListener("click", function () { openFill(f); });
+      row.appendChild(open);
+      row.appendChild(el("span", "fill-state",
+        f.state === "waiting" ? "waiting"
+          : f.state === "filling" ? "looking up…"
+          : f.state === "failed" ? "no luck" : "ready"));
+      var x = el("button", "fill-x", "×");
+      x.type = "button";
+      x.title = "Drop " + f.word;
+      x.setAttribute("aria-label", "Drop " + f.word);
+      x.addEventListener("click", function () { dropFill(f.id); });
+      row.appendChild(x);
+      box.appendChild(row);
+    });
+  }
+
+  function firstReadyFill() {
+    for (var i = 0; i < fills.length; i++) {
+      if (fills[i].state === "ready" || fills[i].state === "failed") return fills[i];
+    }
+    return null;
+  }
+
+  function openNextFill() {
+    var f = firstReadyFill();
+    if (f) openFill(f);
+  }
+
+  function buildTray() {
+    var tray = el("div", "fill-tray");
+    tray.id = "fill-tray";
+    tray.hidden = true;
+    var head = el("div", "fill-tray-head");
+    head.id = "fill-tray-head";
+    tray.appendChild(head);
+    var list = el("div", "fill-list");
+    list.id = "fill-tray-list";
+    tray.appendChild(list);
+    return tray;
+  }
+
+  function openFill(f) {
+    var dlg = document.getElementById("form-dlg");
+    var word = dlg.querySelector("[name=word]").value.trim();
+    if (!dlg.open || word !== f.word) openForm(f.word);
+    document.getElementById("fill-eg").checked = !!(f.want && f.want.eg);
+    document.getElementById("fill-vi").checked = !!(f.want && f.want.vi);
+    if (f.state === "failed") formMsg(f.err, "");
+    else {
+      applyDraft(f.entry, f.want);
+      formMsg(fillSays(f), "good");
+    }
+    dropFill(f.id, true);
+  }
+
+  /* Taken out of the queue: opened, or given up on. A word still in the air is
+     told to stop, and its answer, if one arrives anyway, is ignored. */
+  function dropFill(id, quietly) {
+    var f = fillById(id);
+    if (!f) return;
+    if (f.state === "filling" && f.stop) {
+      try { f.stop.abort(); } catch (err) { /* older browsers */ }
+    }
+    f.state = "dropped";
+    fills = fills.filter(function (x) { return x.id !== id; });
+    if (!quietly && f.word) toast("Dropped " + f.word);
+    drawQueue();
+    pumpFills();
   }
 
   /* Cambridge fills the form in and stops there: nothing is written until you
@@ -2050,33 +2248,18 @@
       eg: document.getElementById("fill-eg").checked,
       vi: document.getElementById("fill-vi").checked
     };
-    var btn = document.getElementById("form-fill");
-    var label = btn.textContent;
-    btn.disabled = true;
-    btn.textContent = "Looking up…";
-    formMsg("Looking " + word + " up in Cambridge…", "warn");
-    var ask = { action: "draft", word: word, eg: want.eg, vi: want.vi };
-    callSheet(ask).then(function (res) {
-      applyDraft(res.entry, want);
-      var bits = [res.source === "Cambridge"
-        ? "Filled from Cambridge."
-        : "Cambridge had no entry — filled from " + (res.source || "the dictionary") + "."];
-      if (res.glossed) {
-        bits.push("The Vietnamese for " + plural(res.glossed, "sense", "senses")
-          + " was written by " + (res.by || "the model") + ".");
-      }
-      if (res.translated) {
-        bits.push(plural(res.translated, "sense", "senses")
-          + " came back machine-translated — look at those twice.");
-      }
-      if (res.warning) bits.push(res.warning);
-      bits.push("Then press Save word.");
-      formMsg(bits.join(" "), "good");
-    }, function (err) {
-      formMsg((err && err.message) ? err.message : String(err), "");
-    }).then(function () {
-      btn.disabled = false;
-      btn.textContent = label;
+    /* The box under the word takes the rest of the list. They go into the
+       queue behind this one and are looked up while this one is read. */
+    var rest = document.getElementById("fill-next");
+    var more = rest && rest.value ? rest.value.split(/[\n,;]+/) : [];
+    if (rest) rest.value = "";
+
+    formMsg("Looking " + word + " up. The form is yours meanwhile — the answer "
+      + "waits in the corner.", "warn");
+    queueFill(word, want);
+    more.forEach(function (w) {
+      w = w.trim();
+      if (w) queueFill(w, want);
     });
   }
 
@@ -2165,6 +2348,9 @@
         btn.disabled = false;
         btn.textContent = "Save word";
         document.getElementById("form-dlg").close();
+        /* Straight on to the next word that came back while this one was being
+           read: the form reopens on it rather than on an empty page. */
+        setTimeout(openNextFill, 0);
         if (res.ok && res.reload) { toast("Saved “" + got.entry.word + "”"); return; }
         ADDED = next;
         rebuild();
@@ -2584,6 +2770,7 @@
     t.hidden = true;
     t.setAttribute("role", "status");
     app.appendChild(t);
+    app.appendChild(buildTray());
     app.appendChild(buildDialog());
     app.appendChild(buildSettings());
     refreshChrome();
@@ -2639,6 +2826,13 @@
     g.appendChild(field("Word", "word", "abate", false));
     g.appendChild(buildFillBox());
     body.appendChild(g);
+
+    /* What is still coming, under the word it will follow. A modal covers the
+       tray at the corner, so the same list is repeated here. */
+    var queue = el("div", "fill-list in-form");
+    queue.id = "form-queue";
+    queue.hidden = true;
+    body.appendChild(queue);
 
     var g1 = el("div", "grid-2");
     g1.appendChild(field("Part of speech", "pos", "v", false));
@@ -2708,11 +2902,21 @@
      draft is a definition and nothing else unless you ask for more. */
   function buildFillBox() {
     var box = el("div", "fill-box");
+    var left = el("div", "fill-left");
     var fill = el("button", "btn", "Auto Fill");
     fill.type = "button";
     fill.id = "form-fill";
     fill.addEventListener("click", fillFromCambridge);
-    box.appendChild(fill);
+    left.appendChild(fill);
+    /* The rest of the list, if there is one: one per line or separated by
+       commas. They join the queue behind the word in the form. */
+    var next = el("input", "mono");
+    next.id = "fill-next";
+    next.placeholder = "and then: susurrus, thole…";
+    next.autocomplete = "off";
+    next.spellcheck = false;
+    left.appendChild(next);
+    box.appendChild(left);
     var opts = el("div", "fill-opts");
     opts.appendChild(fillOpt("fill-eg", "Include examples"));
     opts.appendChild(fillOpt("fill-vi", "Include Vietnamese meaning"));
