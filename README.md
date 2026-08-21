@@ -153,11 +153,15 @@ Vietnamese come back filled in — then you read them over and press **Save word
 yourself. Nothing is written until you do.
 
 **It does not hold the form.** A lookup takes as long as Cambridge and the
-model take, and there is no reason to watch it happen. The form is a card:
-**Hide** puts it on the rail down the right-hand side with its lookup still
-going, **Add word** opens another over the top of it — the one it was opened
-over goes to the rail by itself — and pressing a card on the rail brings it
-back, fields, word and whatever arrived while it was away. Two lookups run at a
+model take, and writing a word into the sheet is somebody else's server: there
+is nothing to watch in either. Pressing **Auto Fill** or **Save word** puts the
+form on the rail down the right-hand side and gets on with it. The rail says
+what each card is doing — *looking up…*, *in line*, *writing to the sheet…* —
+and the line at the bottom of the screen says in green when something has
+finished. Pressing a card brings the form back, fields, word and whatever
+arrived while it was away. **Hide**, the ×, and Escape put a form down without
+sending it anywhere, and **Add word** opens another over the top of one, which
+goes to the rail by itself. Two lookups run at a
 time and the rest wait in line, since each is its own request to the same Apps
 Script. The rail says which is which: *looking up…*, *in line*, *ready*, *no
 luck*, *draft*.

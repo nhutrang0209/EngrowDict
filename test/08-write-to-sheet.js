@@ -846,14 +846,21 @@ function page(store, posts, reply) {
      f.doc.getElementById('fill-eg').checked === false &&
      f.doc.getElementById('fill-vi').checked === true);
   click(f.window, f.doc.getElementById('form-fill'));
-  ok('  while it is looking, the line turns amber',
-     /warn/.test(f.doc.getElementById('form-msg').className) &&
-     /Looking susurrus up/.test(f.doc.getElementById('form-msg').textContent),
-     f.doc.getElementById('form-msg').className + ' — '
-       + f.doc.getElementById('form-msg').textContent);
+  ok('  pressing it puts the form on the rail rather than holding it open',
+     fdlg.open === false &&
+     /susurrus/.test(f.doc.getElementById('card-list').textContent),
+     f.doc.getElementById('card-list').textContent);
   await wait(300);
-  ok('  and green once something came back',
-     /good/.test(f.doc.getElementById('form-msg').className),
+  ok('  and the word that came back says so in green',
+     f.doc.getElementById('toast').className === 'toast good' &&
+     /susurrus came back/.test(f.doc.getElementById('toast').textContent),
+     f.doc.getElementById('toast').textContent);
+
+  /* the draft itself is read by taking the card back off the rail */
+  click(f.window, f.doc.querySelector('#card-list .card-open'));
+  await wait(60);
+  ok('  which opens the form with the draft in it, and the line green',
+     fdlg.open && /good/.test(f.doc.getElementById('form-msg').className),
      f.doc.getElementById('form-msg').className);
 
   ok('Fill asks the sheet for a draft of the word typed in',
@@ -877,6 +884,8 @@ function page(store, posts, reply) {
   f.doc.getElementById('fill-eg').checked = true;
   click(f.window, f.doc.getElementById('form-fill'));
   await wait(300);
+  click(f.window, f.doc.querySelector('#card-list .card-open'));
+  await wait(60);
   ok('  ticking the examples box asks for those too',
      postsFill[1].body.eg === true && postsFill[1].body.vi === true,
      JSON.stringify(postsFill[1].body));
@@ -901,6 +910,8 @@ function page(store, posts, reply) {
   miss.doc.querySelector('#form-dlg [name=word]').value = 'qqq';
   click(miss.window, miss.doc.getElementById('form-fill'));
   await wait(300);
+  click(miss.window, miss.doc.querySelector('#card-list .card-open'));
+  await wait(60);
   const missMsg = miss.doc.getElementById('form-msg');
   ok('  a word neither dictionary has turns the line red',
      missMsg.className === 'dlg-msg' && /No entry for/.test(missMsg.textContent),

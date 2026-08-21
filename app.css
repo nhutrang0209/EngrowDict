@@ -872,6 +872,13 @@ a.btn[hidden] { display: none; }
   box-shadow: var(--lift-3); z-index: 70;
 }
 .toast[hidden] { display: none; }
+/* Green for a thing that finished: a word written into the sheet, a lookup
+   come back. The rest stay the colour of ink. */
+.toast.good { background: var(--accent); color: #f2fbf6; }
+:root[data-theme="dark"] .toast.good { color: #05130d; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .toast.good { color: #05130d; }
+}
 
 /* ---- narrow screens ----------------------------------------------------- */
 .back { display: none; }

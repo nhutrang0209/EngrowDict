@@ -1,13 +1,16 @@
 /* Adding several words at once, without waiting for any of them.
 
-   A lookup is Cambridge and a model and takes as long as they take. So the
-   form is a card: Hide puts it on the rail down the right-hand side with its
-   lookup still going, Add word opens another, and pressing a card on the rail
-   brings it back with whatever arrived while it was away. Two lookups at a
-   time; the rest wait in line.
+   A lookup is Cambridge and a model and takes as long as they take; writing a
+   word into the sheet is somebody else's server. Neither is worth watching, so
+   pressing Auto Fill or Save word puts the form on the rail down the
+   right-hand side and gets on with it. The rail says what each card is doing —
+   looking up, in line, writing to the sheet — and the line at the bottom of
+   the screen says, in green, when something has finished. Press a card to have
+   the form back with whatever arrived while it was away.
 
-   The stub below holds every draft request open until the test answers it,
-   which is the only way to watch a queue actually queue. */
+   Two lookups at a time. The stub below holds every draft request open until
+   the test answers it, which is the only way to watch a queue actually
+   queue. */
 const { read, boot, ok, done, wait, click, unlockedStore } = require('./helpers');
 
 const shell = read('docs/index.html');
@@ -63,6 +66,11 @@ const dlg = g => g.doc.getElementById('form-dlg');
 const val = (g, sel) => g.doc.querySelector(sel).value;
 const type = (g, sel, v) => { g.doc.querySelector(sel).value = v; };
 const press = (g, id) => click(g.window, g.doc.getElementById(id));
+const toastOf = g => g.doc.getElementById('toast');
+/* A card is labelled by its word and, once it has one, its part of speech:
+   "abaft · n". */
+const cardNamed = (g, name) => [...g.doc.querySelectorAll('#card-list .card-open')]
+  .find(b => b.querySelector('.card-word').textContent.split(' · ')[0] === name);
 
 /** Open a form, type a word, and press Auto Fill. */
 function ask(g, word) {
@@ -80,6 +88,7 @@ function ask(g, word) {
     dataFile: 'docs/data.json',
   });
   const realFetch = g.window.fetch;
+  const realStub = net.fetch;
   g.window.fetch = (url, opts) => net.fetch(url, opts) || realFetch(url, opts);
   await wait(900);
   const { doc, window: w } = g;
@@ -92,80 +101,48 @@ function ask(g, word) {
   ok('  and the form is shown without a backdrop, so the page stays live',
      dlg(g).open === true && doc.getElementById('card-rail').hidden);
 
-  /* --- one word going round, the form put aside --------------------------- */
+  /* --- Auto Fill sends the form to the rail with it ----------------------- */
   type(g, '#form-dlg [name=word]', 'abaft');
   type(g, '#form-dlg [name=note]', 'from the boat page');
   press(g, 'form-fill');
   await wait(30);
-  ok('Auto Fill sends the word off and leaves the form alone',
-     net.inFlight().join(',') === 'abaft' &&
-     doc.getElementById('form-fill').disabled === false &&
-     /Press Hide/.test(doc.getElementById('form-msg').textContent),
-     doc.getElementById('form-msg').textContent);
+  ok('Auto Fill sends the word off and the form with it',
+     dlg(g).open === false && rail(g).join(' | ') === 'abaft:looking up…',
+     rail(g).join(' | '));
   ok('  and it asks for the Vietnamese, since that box is ticked',
      net.asked()[0].vi === true && net.asked()[0].eg === false);
 
-  press(g, 'form-hide');
-  await wait(20);
-  ok('Hide puts the form on the rail, still being looked up',
-     dlg(g).open === false && rail(g).join(' | ') === 'abaft:looking up…',
-     rail(g).join(' | '));
-
-  /* Whatever else is true, Hide shuts what is on screen. */
-  click(w, doc.querySelector('#card-list .card-open'));
-  await wait(40);
-  press(g, 'form-x');
-  await wait(20);
-  ok('  the × in the corner does the same as Hide',
-     dlg(g).open === false && rail(g).join(' | ') === 'abaft:looking up…',
-     rail(g).join(' | '));
-  click(w, doc.querySelector('#card-list .card-open'));
-  await wait(40);
-  dlg(g).dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
-  await wait(20);
-  ok('  and so does Escape, which a form with no backdrop does not get for free',
-     dlg(g).open === false, rail(g).join(' | '));
-
-  /* --- a second and a third form, opened over the top of it --------------- */
+  /* --- and another, and another ------------------------------------------- */
   ask(g, 'susurrus');
   await wait(30);
-  ok('Add word opens another form while the first is still going',
-     dlg(g).open && net.inFlight().join(',') === 'abaft,susurrus' &&
-     rail(g).join(' | ') === 'abaft:looking up…',
-     net.inFlight().join(','));
-
   ask(g, 'thole');
   await wait(30);
-  ok('  and the one it was opened over goes to the rail by itself',
-     rail(g).join(' | ') === 'abaft:looking up… | susurrus:looking up…',
+  ok('each Add word starts a clean form, and each Auto Fill parks it',
+     dlg(g).open === false &&
+     rail(g).join(' | ') === 'abaft:looking up… | susurrus:looking up… | thole:in line',
      rail(g).join(' | '));
-  ok('  the third waits in line, because two go at a time',
-     net.inFlight().join(',') === 'abaft,susurrus' &&
-     doc.getElementById('form-msg').textContent.length > 0,
-     net.inFlight().join(','));
+  ok('  two go at a time and the third waits its turn',
+     net.inFlight().join(',') === 'abaft,susurrus', net.inFlight().join(','));
 
-  press(g, 'form-hide');
-  await wait(20);
-  ok('  all three sit on the rail together',
-     rail(g).join(' | ') ===
-       'abaft:looking up… | susurrus:looking up… | thole:in line',
-     rail(g).join(' | '));
-
-  /* --- what comes back waits in the card ---------------------------------- */
+  /* --- what comes back says so, and waits --------------------------------- */
   net.answer('abaft', draftOf('abaft', 'at the back of a ship or boat'));
   await wait(60);
-  ok('a word that lands while its form is on the rail says so there',
+  ok('a word that comes back is ready on the rail',
      rail(g)[0] === 'abaft:ready' && dlg(g).open === false, rail(g).join(' | '));
-  ok('  and the one in line starts as soon as a place is free',
+  ok('  and says so at the bottom of the screen, in green',
+     /abaft came back/.test(toastOf(g).textContent) &&
+     toastOf(g).className === 'toast good',
+     toastOf(g).textContent + ' / ' + toastOf(g).className);
+  ok('  the one waiting starts as soon as a place is free',
      net.inFlight().join(',') === 'susurrus,thole', net.inFlight().join(','));
 
-  click(w, doc.querySelector('#card-list .card-open'));
+  click(w, cardNamed(g, 'abaft'));
   await wait(40);
   ok('pressing a card brings the form back with the draft in it',
      dlg(g).open && val(g, '#form-dlg [name=word]') === 'abaft' &&
      val(g, '#sense-list [name=def]') === 'at the back of a ship or boat',
      val(g, '#sense-list [name=def]'));
-  ok('  and with what was typed into it before it was hidden',
+  ok('  and with what was typed into it before it was sent',
      val(g, '#form-dlg [name=note]') === 'from the boat page',
      val(g, '#form-dlg [name=note]'));
   ok('  the line underneath says where it came from',
@@ -178,37 +155,60 @@ function ask(g, word) {
      rail(g).map(r => r.split(':')[0]).join(',') === 'susurrus,thole',
      rail(g).join(' | '));
 
-  /* --- throwing one away -------------------------------------------------- */
-  click(w, doc.querySelectorAll('#card-list .card-x')[1]);
+  /* --- the three ways of putting a form down ------------------------------ */
+  press(g, 'form-hide');
   await wait(20);
-  ok('the × takes a card off the rail',
-     rail(g).map(r => r.split(':')[0]).join(',') === 'susurrus', rail(g).join(' | '));
+  ok('Hide puts it back on the rail with everything in it',
+     dlg(g).open === false && rail(g).some(r => r.startsWith('abaft')),
+     rail(g).join(' | '));
+  click(w, cardNamed(g, 'abaft'));
+  await wait(40);
+  press(g, 'form-x');
+  await wait(20);
+  ok('  the × in the corner does the same as Hide', dlg(g).open === false);
+  click(w, cardNamed(g, 'abaft'));
+  await wait(40);
+  dlg(g).dispatchEvent(new w.KeyboardEvent('keydown',
+    { key: 'Escape', bubbles: true, cancelable: true }));
+  await wait(20);
+  ok('  and so does Escape, which a form with no backdrop does not get for free',
+     dlg(g).open === false && rail(g).some(r => r.startsWith('abaft')),
+     rail(g).join(' | '));
+
+  /* --- throwing one away -------------------------------------------------- */
+  const before = net.inFlight().length;
+  click(w, [...doc.querySelectorAll('#card-list .card-row')]
+    .find(r => /thole/.test(r.textContent)).querySelector('.card-x'));
+  await wait(20);
+  ok('the × on the rail throws a card away',
+     !rail(g).some(r => r.startsWith('thole')), rail(g).join(' | '));
   net.answer('thole', draftOf('thole', 'a pin in the side of a boat'));
   await wait(40);
   ok('  and an answer that arrives for it afterwards is thrown away too',
-     rail(g).map(r => r.split(':')[0]).join(',') === 'susurrus' &&
-     val(g, '#form-dlg [name=word]') === 'abaft',
+     !rail(g).some(r => r.startsWith('thole')) && before === 2,
      rail(g).join(' | '));
 
   /* --- a word nothing has ------------------------------------------------- */
   net.refuse('susurrus', 'No entry for "susurrus" in Cambridge or Merriam-Webster.');
   await wait(60);
   ok('a word neither dictionary has says so on the rail rather than vanishing',
-     rail(g)[0] === 'susurrus:no luck', rail(g).join(' | '));
+     rail(g).some(r => r === 'susurrus:no luck'), rail(g).join(' | '));
+  ok('  and that is not said in green', toastOf(g).className === 'toast',
+     toastOf(g).className + ' — ' + toastOf(g).textContent);
 
-  /* --- saving one opens the next that came back --------------------------- */
-  press(g, 'form-save');
-  await wait(200);
-  ok('saving a word opens the next card that is ready',
-     dlg(g).open && val(g, '#form-dlg [name=word]') === 'susurrus',
-     val(g, '#form-dlg [name=word]') + ' / open ' + dlg(g).open);
-  ok('  which is the one nothing had, with the reason in its own line',
+  click(w, cardNamed(g, 'susurrus'));
+  await wait(40);
+  ok('  opening it gives the reason in the form',
      /No entry for/.test(doc.getElementById('form-msg').textContent),
      doc.getElementById('form-msg').textContent);
-  ok('  and the rail is empty behind it',
-     doc.getElementById('card-rail').hidden, rail(g).join(' | '));
+  press(g, 'form-hide');
+  await wait(20);
+  [...doc.querySelectorAll('#card-list .card-x')].forEach(x => click(w, x));
+  await wait(20);
+  ok('the rail empties as its cards are dealt with', doc.getElementById('card-rail').hidden);
 
   /* --- dragged about like a window ---------------------------------------- */
+  press(g, 'add-word');
   const head = doc.getElementById('form-head');
   const grab = (x, y, kind) => head.dispatchEvent(
     new w.MouseEvent(kind, { clientX: x, clientY: y, button: 0, bubbles: true, cancelable: true }));
@@ -274,21 +274,15 @@ function ask(g, word) {
      dlg(g).style.width === '' && !dlg(g).classList.contains('sized'),
      JSON.stringify(dlg(g).style.left + ',' + dlg(g).style.width));
 
-  /* --- Cancel is not Hide -------------------------------------------------- */
-  const cancel = [...doc.querySelectorAll('#form-dlg .dlg-foot .btn')]
-    .find(b => b.textContent === 'Cancel');
-  click(w, cancel);
+  press(g, 'form-x');
   await wait(20);
-  ok('Cancel throws the form away rather than putting it on the rail',
-     dlg(g).open === false && doc.getElementById('card-rail').hidden,
-     rail(g).join(' | '));
+  [...doc.querySelectorAll('#card-list .card-x')].forEach(x => click(w, x));
+  await wait(20);
 
   /* --- a word that is four parts of speech --------------------------------- */
   /* Cambridge stacks an entry body per part of speech and they are still one
      word: they come back as one entry, in one form. */
-  press(g, 'add-word');
-  type(g, '#form-dlg [name=word]', 'rough');
-  press(g, 'form-fill');
+  ask(g, 'rough');
   await wait(30);
   net.answer('rough', {
     ok: true, source: 'Cambridge', glossed: 3, by: 'Gemini', translated: 0, warning: '',
@@ -300,6 +294,8 @@ function ask(g, word) {
              ] },
   });
   await wait(60);
+  click(w, cardNamed(g, 'rough'));
+  await wait(40);
   ok('every part of speech lands in the one form, listed in the one field',
      val(g, '#form-dlg [name=pos]') === 'adj, v, n, adv',
      val(g, '#form-dlg [name=pos]'));
@@ -307,32 +303,17 @@ function ask(g, word) {
      [...doc.querySelectorAll('#sense-list [name=def]')].map(x => x.value).join(' | ') ===
        'not even or smooth | to live temporarily in uncomfortable conditions | a first quick drawing of something',
      doc.querySelectorAll('#sense-list [name=def]').length + ' senses');
-  ok('  and nothing is put on the rail behind it',
+  ok('  and nothing else is put on the rail behind it',
      doc.getElementById('card-rail').hidden, rail(g).join(' | '));
-  press(g, 'form-hide');
-  await wait(20);
-  [...doc.querySelectorAll('#card-list .card-x')].forEach(x => click(g.window, x));
-  await wait(20);
 
   /* --- senses put in the order they matter --------------------------------- */
-  press(g, 'add-word');
-  type(g, '#form-dlg [name=word]', 'rough');
-  press(g, 'form-fill');
-  await wait(30);
-  net.answer('rough', {
-    ok: true, source: 'Cambridge', glossed: 3, by: 'Gemini', translated: 0, warning: '',
-    entry: { type: 'word', word: 'rough', verb: '', particle: '', pos: 'adj',
-             ipa: '/rʌf/', note: '', senses: [
-               { def: 'one', eg: [], vi: 'một' },
-               { def: 'two', eg: [], vi: 'hai' },
-               { def: 'three', eg: [], vi: 'ba' },
-             ] },
-  });
-  await wait(60);
   const defs = () => [...doc.querySelectorAll('#sense-list [name=def]')].map(x => x.value).join(',');
   const labels = () => [...doc.querySelectorAll('#sense-list .lab')].map(x => x.textContent).join(',');
   const grips = () => [...doc.querySelectorAll('#sense-list .sense-grip')];
-
+  const senseDefs = [...doc.querySelectorAll('#sense-list [name=def]')];
+  senseDefs[0].value = 'one';
+  senseDefs[1].value = 'two';
+  senseDefs[2].value = 'three';
   ok('the senses arrive in the order the dictionary gives them',
      defs() === 'one,two,three', defs());
 
@@ -377,20 +358,18 @@ function ask(g, word) {
 
   press(g, 'form-hide');
   await wait(20);
-  click(w, doc.querySelector('#card-list .card-open'));
+  click(w, cardNamed(g, 'rough'));
   await wait(40);
   ok('the order survives the card being put on the rail and taken back',
      defs() === 'two,one,three', defs());
-  press(g, 'form-hide');
+  press(g, 'form-x');
   await wait(20);
-  [...doc.querySelectorAll('#card-list .card-x')].forEach(x => click(g.window, x));
+  [...doc.querySelectorAll('#card-list .card-x')].forEach(x => click(w, x));
   await wait(20);
 
-  /* --- hidden while it is being written to the sheet ----------------------- */
-  /* The sheet is somebody else's server and takes its own second or two. */
+  /* --- Save word puts the form down as well -------------------------------- */
   let letSheetFinish = null;
   const savedTo = [];
-  const realStub = net.fetch;
   net.fetch = (url, opts) => {
     const body = opts && opts.method === 'POST' && JSON.parse(opts.body);
     if (body && body.action === 'add') {
@@ -408,18 +387,13 @@ function ask(g, word) {
   type(g, '#sense-list [name=def]', 'the people and places of violent crime');
   press(g, 'form-save');
   await wait(30);
-  ok('a word on its way to the sheet can be hidden like any other',
-     savedTo.join(',') === 'gangland' && dlg(g).open === true &&
-     [...doc.querySelectorAll('#form-dlg .dlg-foot .btn')]
-       .some(b => b.textContent === 'Writing to the sheet…'),
-     savedTo.join(','));
-  press(g, 'form-hide');
-  await wait(20);
-  ok('  and the rail says that is what it is doing',
+  ok('Save word sends it off and puts the form down at once',
+     dlg(g).open === false && savedTo.join(',') === 'gangland',
+     'open ' + dlg(g).open + ', sent ' + savedTo.join(','));
+  ok('  the rail says what is happening to it',
      rail(g).some(r => r === 'gangland:writing to the sheet…'), rail(g).join(' | '));
 
-  click(w, [...doc.querySelectorAll('#card-list .card-open')]
-    .find(b => b.querySelector('.card-word').textContent === 'gangland'));
+  click(w, cardNamed(g, 'gangland'));
   await wait(40);
   ok('  brought back mid-write it still says so, and cannot be sent twice',
      doc.getElementById('form-save').disabled === true &&
@@ -430,12 +404,13 @@ function ask(g, word) {
 
   letSheetFinish();
   await wait(200);
-  ok('  when the sheet answers, the card leaves the rail and the toast says so',
-     !rail(g).some(r => r.startsWith('gangland')) &&
-     /Wrote “gangland” into the sheet/.test(doc.getElementById('toast').textContent),
-     doc.getElementById('toast').textContent + ' | ' + rail(g).join(' | '));
-  ok('  and the form it was written from is not dragged back open',
-     dlg(g).open === false);
+  ok('when the sheet answers, the card leaves the rail',
+     !rail(g).some(r => r.startsWith('gangland')), rail(g).join(' | '));
+  ok('  and the word said so in green',
+     /Wrote “gangland” into the sheet/.test(toastOf(g).textContent) &&
+     toastOf(g).className === 'toast good',
+     toastOf(g).textContent + ' / ' + toastOf(g).className);
+  ok('  with no form dragged open behind it', dlg(g).open === false);
   net.fetch = realStub;          // the sheet answers straight away again
 
   /* --- a word added while a passage is being read --------------------------
@@ -460,9 +435,9 @@ function ask(g, word) {
      paras() === reading && doc.body.dataset.view === 'detail',
      paras() + ' paragraphs, view ' + doc.body.dataset.view);
   ok('  and says so rather than saying something went wrong',
-     /parole officer/.test(doc.getElementById('toast').textContent) &&
-     !/went wrong/.test(doc.getElementById('toast').textContent),
-     doc.getElementById('toast').textContent);
+     /parole officer/.test(toastOf(g).textContent) &&
+     !/went wrong/.test(toastOf(g).textContent),
+     toastOf(g).textContent);
   ok('  with nothing thrown along the way', g.errs.length === 0, JSON.stringify(g.errs));
 
   done(g.errs);

@@ -2633,8 +2633,13 @@
   }
 
   function landFill(card) {
-    if (current === card) landIntoForm(card);
-    else if (card.fill.state === "failed") toast(cardName(card) + ": " + card.fill.err);
+    if (current === card) {
+      landIntoForm(card);
+    } else if (card.fill.state === "failed") {
+      toast(cardName(card) + ": " + card.fill.err);
+    } else {
+      toast(cardName(card) + " came back — it is on the rail", true);
+    }
     drawRail();
     pumpFills();
   }
@@ -2678,18 +2683,6 @@
     return bits.join(" ");
   }
 
-  function firstReadyCard() {
-    for (var i = 0; i < cards.length; i++) {
-      var st = cardState(cards[i]);
-      if (st === "ready" || st === "failed") return cards[i];
-    }
-    return null;
-  }
-
-  function openNextCard() {
-    var card = firstReadyCard();
-    if (card) showCard(card);
-  }
 
   /* Cambridge fills the form in and stops there: nothing is written until you
      read it over and press Save word yourself. */
@@ -2710,11 +2703,13 @@
     current.want = want;
     current.fill = { state: "waiting", res: null, err: "", stop: null };
     current.shown = true;
-    current.msg = "Looking " + word + " up. Press Hide and this form goes to the "
-      + "rail on the right, with the answer waiting in it.";
+    current.msg = "Looking " + word + " up…";
     current.msgTone = "warn";
     formMsg(current.msg, "warn");
-    drawRail();
+    /* Sent, and out of the way: the form is on the rail with the lookup still
+       going, and the word that comes back is there when it is wanted. Nothing
+       to watch, and nothing to shut by hand. */
+    hideCurrent();
     pumpFills();
   }
 
@@ -2808,12 +2803,14 @@
     if (card) {
       snapCurrent();
       card.saving = wantSheet ? "sheet" : "device";
-      card.msg = "";
-      card.msgTone = "";
+      card.msg = wantSheet ? "Writing to the sheet…" : "Saving…";
+      card.msgTone = "warn";
     }
     paintSaveButton(card);
-    formMsg("", "");
-    drawRail();
+    /* Out of the way at once: the sheet is somebody else's server and there is
+       nothing to do while it answers. The rail says what is happening and the
+       line at the bottom says when it is done. */
+    hideCurrent();
 
     var sheetErr = null;
     var toSheet = wantSheet
@@ -2832,18 +2829,15 @@
           card.saving = null;
           cards = cards.filter(function (c) { return c !== card; });
         }
-        var onScreen = current === card || !card;
-        if (onScreen) {
+        /* Reopened while it was being written, it closes now that it is not. */
+        if (current === card && card) {
           current = null;
           var dlg = document.getElementById("form-dlg");
           if (dlg.open) dlg.close();
         }
         paintSaveButton(null);
         drawRail();
-        /* Straight on to the next word that came back while this one was being
-           read — but only if it was this form that was on screen. */
-        if (onScreen) setTimeout(openNextCard, 0);
-        if (res.ok && res.reload) { toast("Saved “" + got.entry.word + "”"); return; }
+        if (res.ok && res.reload) { toast("Saved “" + got.entry.word + "”", true); return; }
         ADDED = next;
         rebuild();
         refresh();
@@ -2852,18 +2846,21 @@
            which is nothing at all: the passage went blank and the reader lost
            their place for the sake of showing them a word they had just
            typed out themselves. */
-        if (onScreen && view === "vocab") {
+        if (view === "vocab") {
           select(got.entry.id);
           showDetail();
         }
         if (!res.ok) { banner(res.msg, "Sync", syncPending); return; }
-        if (got.entry.inSheet) { toast("Wrote “" + got.entry.word + "” into the sheet"); return; }
+        if (got.entry.inSheet) {
+          toast("Wrote “" + got.entry.word + "” into the sheet", true);
+          return;
+        }
         if (sheetErr) {
           banner("Saved in this browser, but not written to the sheet: " + sheetErr,
             "Try again", pushToSheet);
           return;
         }
-        toast("Saved “" + got.entry.word + "” in this browser");
+        toast("Saved “" + got.entry.word + "” in this browser", true);
       });
     });
   }
@@ -3033,9 +3030,10 @@
     });
   }
 
-  function toast(text) {
+  function toast(text, good) {
     var t = document.getElementById("toast");
     t.textContent = text;
+    t.className = "toast" + (good ? " good" : "");
     t.hidden = false;
     clearTimeout(toastTimer);
     toastTimer = setTimeout(function () { t.hidden = true; }, 3200);
