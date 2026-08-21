@@ -705,13 +705,31 @@ function cFirst(re, html) {
  * another, and taking all three would fill the form with the same sense
  * written three ways.
  */
-function cParse(html, wantVi) {
-  // the page stacks three dictionaries: keep the Advanced Learner's, which is
-  // the one the sheet has always been written from, and its first entry only
+/* The page stacks three dictionaries — keep the Advanced Learner's, which is
+   the one the sheet has always been written from — and inside it one entry per
+   part of speech: rough is an adjective, a noun, a verb and an adverb, in four
+   blocks. Reading the first alone lost three quarters of the word. */
+function cParseAll(html, wantVi) {
   var dicts = String(html).split(/class="pr dictionary"/);
   var e = dicts.length > 1 ? dicts[1] : String(html);
   var parts = e.split(/class="[^"]*entry-body__el[^"]*"/);
-  if (parts.length > 1) e = parts[1];
+  var out = [], title = '', i;
+  for (i = 1; i < parts.length; i++) {
+    var block = cParse(parts[i], wantVi);
+    if (!block.senses.length) continue;
+    title = title || block.word;
+    if (!block.word) block.word = title;   // only the first block is titled
+    out.push(block);
+  }
+  if (!out.length) {
+    var whole = cParse(e, wantVi);
+    if (whole.senses.length) out.push(whole);
+  }
+  return out;
+}
+
+/** One entry-body: its headword, part of speech, phonetics and senses. */
+function cParse(e, wantVi) {
   var ipa = cFirst(/class="ipa dipa[^"]*"[^>]*>([\s\S]*?)<\/span>/, e);
   var out = {
     word: cFirst(/class="di-title"[^>]*>([\s\S]*?)<\/div>/, e)
@@ -1104,65 +1122,70 @@ function draftEntry(term, opts) {
     res = null;
   }
 
-  var en = null, source = 'Cambridge', viSenses = null, why = '';
+  var blocks = [], source = 'Cambridge', viSenses = null, why = '';
   if (res && res[0].getResponseCode() === 200) {
-    var parsed = cParse(res[0].getContentText(), false);
-    if (parsed.senses.length) {
-      en = parsed;
-      if (askCambridgeVi && res[1] && res[1].getResponseCode() === 200) {
-        viSenses = cParse(res[1].getContentText(), true).senses;
+    blocks = cParseAll(res[0].getContentText(), false);
+    if (blocks.length && askCambridgeVi && res[1] && res[1].getResponseCode() === 200) {
+      // the Vietnamese book is stacked the same way; its senses are matched on
+      // their English rather than on which block they came from
+      var viBlocks = cParseAll(res[1].getContentText(), true);
+      viSenses = [];
+      for (var v = 0; v < viBlocks.length; v++) {
+        viSenses = viSenses.concat(viBlocks[v].senses);
       }
     }
   } else if (res) {
     why = 'Cambridge answered ' + res[0].getResponseCode();
   }
 
+  var en = blocks[0] || null;
   if (!en) {
     en = readMerriam(slug);
     source = 'Merriam-Webster';
+    blocks = en ? [en] : [];
   }
   if (!en) {
     return { ok: false, error: 'No entry for "' + slug + '" in Cambridge'
       + (why ? ' (' + why + ')' : '') + ' or Merriam-Webster.' };
   }
 
-  if (viSenses) pairVi(en.senses, viSenses);
+  /* One entry per part of speech: the sheet keeps a part of speech on the
+     entry, not on the sense, so rough the adjective and rough the verb are two
+     entries and always were. The first comes back in the form; the rest come
+     back beside it, for the page to put on the rail. */
+  var entries = [], dropped = 0;
+  for (var b = 0; b < blocks.length; b++) {
+    if (viSenses) pairVi(blocks[b].senses, viSenses);
+    dropped += Math.max(0, blocks[b].senses.length - MAX_SENSES);
+    entries.push(entryFrom(blocks[b], term));
+  }
+  var entry = entries[0];
 
-  var pos = en.pos.toLowerCase();
-  var word = en.word.replace(/\s+(someone|something|sb|sth)(\/(someone|something|sb|sth))*$/i, '')
-    .trim() || txt(term);
-  var entry = {
-    type: 'word', word: word, verb: '', particle: '',
-    pos: POS_SHORT[pos] || (pos === 'phrasal verb' || pos === 'idiom' ? '' : en.pos),
-    ipa: en.ipa, note: '', senses: en.senses.slice(0, MAX_SENSES)
-  };
-  var dropped = Math.max(0, en.senses.length - MAX_SENSES);
-  if (pos === 'phrasal verb') {
-    var bits = word.split(/\s+/);
-    entry.type = 'phrasal';
-    entry.verb = bits.shift();
-    entry.particle = bits.join(' ');
-    entry.ipa = '';                       // the sheet keeps phonetics off these
-  } else if (pos === 'idiom') {
-    entry.type = 'idiom';
+  /* Every sense of every part of speech, so that one model request covers the
+     word rather than one per entry. */
+  var all = [];
+  for (var e2 = 0; e2 < entries.length; e2++) {
+    for (var s2 = 0; s2 < entries[e2].senses.length; s2++) {
+      all.push(entries[e2].senses[s2]);
+    }
   }
 
   if (!wantEg) {
-    for (var x = 0; x < entry.senses.length; x++) entry.senses[x].eg = [];
+    for (var x = 0; x < all.length; x++) all[x].eg = [];
   }
   if (!wantVi) {
     // No Vietnamese asked for: nothing to gloss, nothing to translate, and no
     // model called about it either.
-    for (var y = 0; y < entry.senses.length; y++) entry.senses[y].vi = '';
-    return { ok: true, entry: entry, source: source, by: '',
-             glossed: 0, translated: 0, warning: '', dropped: dropped };
+    for (var y = 0; y < all.length; y++) all[y].vi = '';
+    return { ok: true, entry: entry, more: entries.slice(1), source: source,
+             by: '', glossed: 0, translated: 0, warning: '', dropped: dropped };
   }
 
-  // The gloss: Claude where there is a key for it, Google Translate where
+  // The gloss: the model where there is a key for it, Google Translate where
   // there is not, and both only for the senses Cambridge left empty.
   var gaps = [];
-  for (var g = 0; g < entry.senses.length; g++) {
-    if (!entry.senses[g].vi) gaps.push(g);
+  for (var g = 0; g < all.length; g++) {
+    if (!all[g].vi) gaps.push(g);
   }
   var glossed = 0, machine = 0, warning = '', writer = '';
   var aikey = props.getProperty(PROP_AI);
@@ -1175,32 +1198,55 @@ function draftEntry(term, opts) {
   if (gaps.length && aikey) {
     try {
       var defs = [];
-      for (var d = 0; d < gaps.length; d++) defs.push(entry.senses[gaps[d]].def);
+      for (var d = 0; d < gaps.length; d++) defs.push(all[gaps[d]].def);
       var got = glossesFromAI(entry.word, entry.pos, defs, aikey,
         props.getProperty(PROP_AI_MODEL));
       for (var k = 0; k < gaps.length; k++) {
-        if (got[k]) { entry.senses[gaps[k]].vi = got[k]; glossed++; }
+        if (got[k]) { all[gaps[k]].vi = got[k]; glossed++; }
       }
       if (glossed) writer = aiName(aikey);
     } catch (err) {
       warning = String(err && err.message ? err.message : err);
     }
   }
-  for (var t = 0; t < entry.senses.length; t++) {
-    if (entry.senses[t].vi) continue;
+  for (var t = 0; t < all.length; t++) {
+    if (all[t].vi) continue;
     try {
       // The definition, and only the definition. Translating the headword on its
       // own is shorter but throws the sense away: abaft came back as "sau",
       // which is not what abaft means. A clause you can trim beats a word that
       // is wrong.
-      var mt = shortVi(LanguageApp.translate(entry.senses[t].def, 'en', 'vi'));
-      if (mt) { entry.senses[t].vi = mt; machine++; }
+      var mt = shortVi(LanguageApp.translate(all[t].def, 'en', 'vi'));
+      if (mt) { all[t].vi = mt; machine++; }
     } catch (err2) { /* a sense with no Vietnamese is better than no draft */ }
   }
 
-  return { ok: true, entry: entry, source: source, by: writer,
-           glossed: glossed, translated: machine, warning: warning,
-           dropped: dropped };
+  return { ok: true, entry: entry, more: entries.slice(1), source: source,
+           by: writer, glossed: glossed, translated: machine,
+           warning: warning, dropped: dropped };
+}
+
+/** One parsed block as the sheet would hold it. */
+function entryFrom(block, term) {
+  var pos = block.pos.toLowerCase();
+  var word = block.word
+    .replace(/\s+(someone|something|sb|sth)(\/(someone|something|sb|sth))*$/i, '')
+    .trim() || txt(term);
+  var entry = {
+    type: 'word', word: word, verb: '', particle: '',
+    pos: POS_SHORT[pos] || (pos === 'phrasal verb' || pos === 'idiom' ? '' : block.pos),
+    ipa: block.ipa, note: '', senses: block.senses.slice(0, MAX_SENSES)
+  };
+  if (pos === 'phrasal verb') {
+    var bits = word.split(/\s+/);
+    entry.type = 'phrasal';
+    entry.verb = bits.shift();
+    entry.particle = bits.join(' ');
+    entry.ipa = '';                       // the sheet keeps phonetics off these
+  } else if (pos === 'idiom') {
+    entry.type = 'idiom';
+  }
+  return entry;
 }
 
 /* ------------------------------- reading the sheet (mirrors parse_sheet.py) */

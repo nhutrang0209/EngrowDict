@@ -180,6 +180,15 @@ to begin with, being the column the notebook is kept for; the examples box is
 not. Nothing survives a reload: the rail is a few minutes of impatience, not
 state.
 
+**One entry per part of speech.** *rough* is an adjective, a noun, a verb and
+an adverb, and Cambridge stacks the four as separate entries on one page — the
+parser read the first and lost three quarters of the word. It reads all of them
+now. The sheet keeps a part of speech on the entry rather than on the sense, so
+they cannot be merged: the first comes back in the form and the others arrive
+beside it as cards on the rail, filled in and named *rough · n*, *rough · v*.
+Each is saved, or dropped, on its own. One model request covers the lot, so
+four entries cost what one did.
+
 Cambridge answers a plain server-side request with **403** (Cloudflare wants a
 browser — the entry pages and `robots.txt` alike), so the script reads the page
 through `r.jina.ai`, which renders it and returns Cambridge's own markup. Two

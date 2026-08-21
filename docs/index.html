@@ -3139,6 +3139,11 @@ a.btn[hidden] { display: none; }
     return card.word || "a new word";
   }
 
+  /* Four cards saying "rough" would be four of the same thing otherwise. */
+  function cardLabel(card) {
+    return cardName(card) + (card.pos ? " · " + card.pos : "");
+  }
+
   /* ---- the rail ---------------------------------------------------------- */
   function buildRail() {
     var rail = el("div", "card-rail");
@@ -3174,7 +3179,7 @@ a.btn[hidden] { display: none; }
       row.dataset.word = card.word;
       var open = el("button", "card-open");
       open.type = "button";
-      open.appendChild(el("span", "card-word", cardName(card)));
+      open.appendChild(el("span", "card-word", cardLabel(card)));
       open.appendChild(el("span", "card-state", stateWord(cardState(card))));
       open.addEventListener("click", function () { showCard(card); });
       row.appendChild(open);
@@ -3492,10 +3497,45 @@ a.btn[hidden] { display: none; }
       return;
     }
     applyDraft(card.fill.res.entry, card.want);
+    spawnMore(card);
     card.msg = fillSays(card.fill.res);
     card.msgTone = "good";
     formMsg(card.msg, "good");
     snapCurrent();
+  }
+
+  /* Cambridge keeps one entry per part of speech, and so does the sheet: rough
+     the adjective and rough the verb are two entries and always were. So the
+     others are not more senses of this card — they are cards of their own,
+     filled in and waiting on the rail. */
+  var POS_WORD = { n: "noun", v: "verb", adj: "adjective", adv: "adverb",
+                   prep: "preposition", conj: "conjunction", pron: "pronoun",
+                   det: "determiner", exclam: "exclamation" };
+
+  function posWord(pos) {
+    return POS_WORD[pos] || pos || "another part of speech";
+  }
+
+  function spawnMore(card) {
+    var res = card.fill && card.fill.res;
+    if (!res || card.spawned) return;
+    card.spawned = true;
+    (res.more || []).forEach(function (e) {
+      var one = newCard(e.word);
+      one.pos = e.pos || "";
+      one.ipa = e.ipa || "";
+      one.type = e.type || "word";
+      one.note = "";
+      one.want = card.want;
+      one.senses = (e.senses || []).map(function (sense) {
+        return { def: senseText(sense, card.want),
+                 vi: card.want.vi ? (sense.vi || "") : "", eg: [] };
+      });
+      one.msg = "Cambridge lists this one as " + posWord(e.pos)
+        + ". Read it over and press Save word, or drop it from the rail.";
+      one.msgTone = "good";
+    });
+    if (res.more && res.more.length) drawRail();
   }
 
   function fillSays(res) {
@@ -3510,6 +3550,11 @@ a.btn[hidden] { display: none; }
     if (res.translated) {
       bits.push(plural(res.translated, "sense", "senses")
         + " came back machine-translated — look at those twice.");
+    }
+    if (res.more && res.more.length) {
+      bits.push("Cambridge lists it as "
+        + res.more.map(function (e) { return posWord(e.pos); }).join(" and ")
+        + " as well — those are on the rail.");
     }
     if (res.dropped) {
       bits.push("Cambridge lists " + plural(res.dropped, "sense", "senses")
@@ -3578,14 +3623,21 @@ a.btn[hidden] { display: none; }
     list.textContent = "";
     (e.senses || []).forEach(function (s, i) {
       var box = newSenseRow(i + 1);
-      var def = s.def || "";
-      if (wantEg) (s.eg || []).forEach(function (x) { def += "\n- " + x; });
-      box.querySelector("[name=def]").value = def;
+      box.querySelector("[name=def]").value = senseText(s, { eg: wantEg });
       box.querySelector("[name=vi]").value = wantVi ? (s.vi || "") : "";
       list.appendChild(box);
     });
     if (!list.children.length) list.appendChild(newSenseRow(1));
     renumberSenses();
+  }
+
+  /* A definition with its examples under it, the way the sheet writes them. */
+  function senseText(s, want) {
+    var def = s.def || "";
+    if (want && want.eg) {
+      (s.eg || []).forEach(function (x) { def += "\n- " + x; });
+    }
+    return def;
   }
 
   function collectForm() {

@@ -283,6 +283,49 @@ function ask(g, word) {
      dlg(g).open === false && doc.getElementById('card-rail').hidden,
      rail(g).join(' | '));
 
+  /* --- a word that is four words ------------------------------------------- */
+  /* Cambridge keeps an entry per part of speech and so does the sheet, so the
+     others come back beside the first and go on the rail as cards. */
+  press(g, 'add-word');
+  type(g, '#form-dlg [name=word]', 'rough');
+  press(g, 'form-fill');
+  await wait(30);
+  net.answer('rough', Object.assign(draftOf('rough', 'not smooth but uneven'), {
+    entry: { type: 'word', word: 'rough', verb: '', particle: '', pos: 'adj',
+             ipa: '/rʌf/', note: '',
+             senses: [{ def: 'not smooth but uneven', eg: [], vi: 'gồ ghề' }] },
+    more: [
+      { type: 'word', word: 'rough', verb: '', particle: '', pos: 'n', ipa: '/rʌf/',
+        note: '', senses: [{ def: 'the rough ground beside a golf course', eg: [], vi: 'vùng cỏ rậm' }] },
+      { type: 'word', word: 'rough', verb: '', particle: '', pos: 'v', ipa: '/rʌf/',
+        note: '', senses: [{ def: 'to make something uneven', eg: [], vi: 'làm xù' }] },
+    ],
+  }));
+  await wait(60);
+  ok('the part of speech in the form is the first Cambridge lists',
+     val(g, '#form-dlg [name=pos]') === 'adj' &&
+     val(g, '#sense-list [name=def]') === 'not smooth but uneven',
+     val(g, '#form-dlg [name=pos]'));
+  ok('  and the others are cards of their own, named by their part of speech',
+     rail(g).join(' | ') === 'rough · n:draft | rough · v:draft',
+     rail(g).join(' | '));
+  ok('  the line under the form says where they went',
+     /noun and verb as well/.test(doc.getElementById('form-msg').textContent),
+     doc.getElementById('form-msg').textContent);
+
+  click(g.window, [...doc.querySelectorAll('#card-list .card-open')]
+    .find(b => /rough · v/.test(b.querySelector('.card-word').textContent)));
+  await wait(40);
+  ok('  and each opens filled in, ready to be saved as its own entry',
+     val(g, '#form-dlg [name=pos]') === 'v' &&
+     val(g, '#sense-list [name=def]') === 'to make something uneven' &&
+     val(g, '#sense-list [name=vi]') === 'làm xù',
+     val(g, '#form-dlg [name=pos]') + ' / ' + val(g, '#sense-list [name=def]'));
+  press(g, 'form-hide');
+  await wait(20);
+  [...doc.querySelectorAll('#card-list .card-x')].forEach(x => click(g.window, x));
+  await wait(20);
+
   /* --- hidden while it is being written to the sheet ----------------------- */
   /* The sheet is somebody else's server and takes its own second or two. */
   let letSheetFinish = null;
