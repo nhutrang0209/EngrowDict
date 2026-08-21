@@ -191,22 +191,27 @@ three ways. A word Cambridge has no entry for at all falls
 through to **Merriam-Webster**, which answers a plain request but prints its own
 respelling rather than IPA; the form says when that happened.
 
-**The Vietnamese column.** Cambridge's English–Vietnamese dictionary is much the
-smaller of the two and keeps its own order, so the two are matched on the
-English definition both of them print rather than laid side by side by
-position — half the words in common is the bar. That is a low bar for a match
-and a high one for a coincidence; below it the sense is left empty on purpose,
-because the model or Google Translate beats a gloss that belongs to another
-sense. Lined up by position, *rough* gave the definition about wine that tastes
-cheap the gloss for weather.
+**The Vietnamese column.** With a model key set, the English–Vietnamese
+dictionary is not opened at all: the English page is read and the model glosses
+every sense from the definition. That is one page instead of two — half the
+fetching — and one voice for the whole entry rather than a human gloss for four
+senses of *rough* and something else for the other thirteen. The
+English–Vietnamese book is the smaller one and keeps its own order, which is
+what made the alternative hard: laid side by side by position it gave the
+definition about wine that tastes cheap the gloss for weather.
 
-Most senses arrive with that column empty. What fills it:
+Without a key it is still the best Vietnamese available, so it is still read,
+and the two are matched on the English definition both of them print — half the
+words in common is the bar, a low one for a match and a high one for a
+coincidence. Below it the sense is left empty on purpose, for Google Translate
+rather than for a gloss belonging somewhere else.
 
-1. Cambridge's own Vietnamese, where the word is in that dictionary.
-2. Otherwise **a model**, asked for the gloss a learner would write down — one
+So, in order:
+
+1. **A model**, asked for the gloss a learner would write down — one
    to five words, not a translation of the wording — with the sheet's own
    entries shown to it as the house style. Turn it on with **EngrowDict → Key
-   for the Vietnamese column** in the sheet; without a key, step 3. Three kinds
+   for the Vietnamese column** in the sheet; without a key, step 2. Three kinds
    of key work: one beginning `sk-ant-` goes to Claude, one beginning `sk-` to
    OpenAI, and anything else is taken to be a Google key and goes to
    **Gemini** — Google has changed that shape once already, from `AIza…` to
@@ -217,6 +222,8 @@ Most senses arrive with that column empty. What fills it:
    a daily limit, which a notebook filled a word at a time is unlikely to
    reach. The key is kept in the script's own properties, so the public page
    never sees it.
+2. Otherwise Cambridge's own Vietnamese, where that dictionary carries the
+   sense, matched as described above.
 3. Otherwise `LanguageApp` (Google Translate), cut back to a gloss. Accurate, but
    it reads like a translation: *abaft* comes out "ở phía sau hoặc bên hông tàu
    hoặc thuyền" where Claude writes "ở phía đuôi tàu".

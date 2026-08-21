@@ -914,13 +914,18 @@ function glossRules() {
     + '- A short parenthetical is welcome where the gloss would otherwise be '
     + 'vague: phía sau (tàu / thuyền), lợn đất (thú ăn kiến).\n'
     + '- Keep any part of speech the English has: a verb glosses as a verb.\n'
+    + '- A definition beginning "used to describe" or "used to say" is talking '
+    + 'about the word, not naming a thing: gloss what the word means in that '
+    + 'use, with the thing it is said of in the parenthetical.\n'
     + '- No quotation marks, no "nghĩa là", no explanation.\n\n'
     + 'Examples:\n'
     + 'to become less strong -> yếu đi / giảm đi\n'
     + 'at the back of or behind a ship or boat -> ở phía đuôi tàu\n'
     + 'very careful and with great attention to every detail -> tỉ mỉ\n'
     + 'a soft murmuring or rustling sound -> tiếng xào xạc\n'
-    + 'to take care of or be in charge of someone or something -> trông nom\n\n'
+    + 'to take care of or be in charge of someone or something -> trông nom\n'
+    + 'used to describe an alcoholic drink, especially wine, that tastes cheap '
+    + 'and often strong -> (rượu) rẻ tiền, gắt\n\n'
     + 'Answer with a JSON array of strings, one per definition, in order. '
     + 'Nothing else.';
 }
@@ -1079,8 +1084,19 @@ function draftEntry(term, opts) {
              muteHttpExceptions: true, followRedirects: true };
   };
 
+  /* With a model to ask, the English-Vietnamese page is not fetched at all.
+     It is the smaller book, it keeps its own order — the reason the two had to
+     be matched on their English in the first place — and a model reading the
+     definition gives the same voice to every sense of a word rather than a
+     human gloss for four of them and something else for the other thirteen.
+     One page instead of two is also half the wait.
+
+     Without a key it is still the best Vietnamese there is, so it is still
+     read: Google Translate on a definition is the last resort, not the first. */
+  var haveModel = !!props.getProperty(PROP_AI);
+  var askCambridgeVi = wantVi && !haveModel;
   var asks = [one('english')];
-  if (wantVi) asks.push(one('english-vietnamese'));   // not asked for, not read
+  if (askCambridgeVi) asks.push(one('english-vietnamese'));
   var res = null;
   try {
     res = UrlFetchApp.fetchAll(asks);
@@ -1093,7 +1109,7 @@ function draftEntry(term, opts) {
     var parsed = cParse(res[0].getContentText(), false);
     if (parsed.senses.length) {
       en = parsed;
-      if (wantVi && res[1] && res[1].getResponseCode() === 200) {
+      if (askCambridgeVi && res[1] && res[1].getResponseCode() === 200) {
         viSenses = cParse(res[1].getContentText(), true).senses;
       }
     }

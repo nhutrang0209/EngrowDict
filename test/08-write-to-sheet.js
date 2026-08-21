@@ -440,6 +440,33 @@ function page(store, posts, reply) {
      new Set(rough.entry.senses.map(x => x.vi).filter(Boolean)).size === 3,
      rough.entry.senses.map(x => x.vi).join(' | '));
 
+  /* With a model to ask, the smaller book is not opened at all: the model
+     reads the English definitions and glosses every sense in one voice, and
+     one page instead of two is half the wait. */
+  const GLOSSES = ['gồ ghề / nhám', 'khái quát / sơ bộ', '(rượu) rẻ tiền, gắt',
+                   'thô bạo / thô lỗ', 'khó khăn / gian khổ', 'phác thảo / nháp',
+                   '(ngủ) ngoài trời'];
+  two.props.SOTRATU_AI_KEY = 'AQ.Ab8RN6NotARealKeyAtAllNotEven';
+  two.net.calls = [];
+  two.net.reply = url => /generativelanguage/.test(url)
+    ? { code: 200, body: JSON.stringify({ candidates: [{ content:
+        { parts: [{ text: JSON.stringify(GLOSSES) }] } }] }) }
+    : { code: 200, body: ROUGH_EN };
+  const modelled = call2({ key: CFG.key, action: 'draft', word: 'rough' });
+  ok('with a key set, only the English page is read — half the fetching',
+     two.net.calls.filter(u => /cambridge/.test(u)).length === 1 &&
+     !two.net.calls.some(u => /english-vietnamese/.test(u)),
+     two.net.calls.filter(u => /cambridge/.test(u)).join(' , '));
+  ok('  and every sense is glossed by the model, in one voice',
+     modelled.glossed === 7 && modelled.translated === 0 &&
+     modelled.by === 'Gemini' &&
+     modelled.entry.senses.map(x => x.vi).join(' | ') === GLOSSES.join(' | '),
+     modelled.by + ': ' + modelled.entry.senses.map(x => x.vi).join(' | '));
+  ok('  including the ones the smaller book never carried',
+     modelled.entry.senses[2].vi === '(rượu) rẻ tiền, gắt',
+     modelled.entry.senses[2].vi);
+  delete two.props.SOTRATU_AI_KEY;
+
   two.net.translation = t => '[vi] ' + t;
 
   two.net.calls = [];
