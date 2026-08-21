@@ -178,6 +178,15 @@ ok('the shell itself stays light', shell.length < 205000,
      doc.querySelector('.headword')?.textContent === 'zenith',
      doc.querySelector('.headword')?.textContent);
   ok('  and closes the card', card().hidden);
+  const back = doc.getElementById('back-to-reading');
+  ok('  leaving a way back to the passage it was opened from', !!back,
+     back && back.textContent);
+  click(w, back);
+  await wait(30);
+  ok('  which goes back to it',
+     doc.getElementById('tab-passages').getAttribute('aria-selected') === 'true' &&
+     !!doc.querySelector('.read .prose'),
+     doc.querySelector('.read h1') && doc.querySelector('.read h1').textContent);
 
   done(a.errs);
 })();

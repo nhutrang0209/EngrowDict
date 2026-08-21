@@ -1917,6 +1917,7 @@
       var open = el("button", "btn", "Open entry");
       open.type = "button";
       open.addEventListener("click", function () {
+        markPlace();            // the passage, and the line of it, to come back to
         hideLookup();
         view = "vocab";
         selectedId = found.id;
