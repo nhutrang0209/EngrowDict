@@ -894,6 +894,7 @@
     var box = el("div", "pd-entry");
     var h = el("div", "pd-head-word");
     h.appendChild(el("span", "pd-hw", e.word));
+    if (canSpeak()) h.appendChild(sayButton(e.word));
     if (e.pos) h.appendChild(el("span", "pd-pos", e.pos + "."));
     if (e.ipa) h.appendChild(el("span", "pd-ipa", e.ipa));
     box.appendChild(h);
@@ -1940,7 +1941,11 @@
     lookupCard.appendChild(close);
 
     var found = lookupText(text);
-    lookupCard.appendChild(el("div", "picked", found ? found.word : text));
+    var word = found ? found.word : text;
+    var picked = el("div", "picked", word);
+    /* The word is a word wherever it is read: the same speaker as the entry. */
+    if (canSpeak()) picked.appendChild(sayButton(word));
+    lookupCard.appendChild(picked);
 
     if (found) {
       var bits = [];

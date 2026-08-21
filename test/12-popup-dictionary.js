@@ -5,7 +5,7 @@ const shell = read('docs/index.html');
 const POP_KEY = 'engrowdict:pop:v1';
 
 const mk = store => boot({
-  html: shell, full: true, store: store || {},
+  html: shell, full: true, store: store || {}, speech: true,
   url: 'https://nhutrang0209.github.io/EngrowDict/',
   dataFile: 'docs/data.json',
 });
@@ -195,6 +195,15 @@ const mk = store => boot({
   ok('a later visit opens it where you left it',
      b.doc.getElementById('popdict').style.left === JSON.parse(store[POP_KEY]).left,
      b.doc.getElementById('popdict').style.left);
+
+  /* --- the word, said out loud ------------------------------------------ */
+  const said = doc.querySelector('#popdict .pd-head-word .say');
+  ok('the floating dictionary says the word too',
+     !!said && /^Say /.test(said.getAttribute('aria-label')),
+     said ? said.getAttribute('aria-label') : 'no button');
+  click(w, said);
+  ok('  in an English voice, like everywhere else',
+     w.spoken.some(x => / @en-GB\/GB$/.test(x)), w.spoken.join(' | '));
 
   done(a.errs.concat(b.errs));
 })();

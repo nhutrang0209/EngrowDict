@@ -333,7 +333,9 @@ thing — that is what the **Test connection** button is for.
 
 ### Saying the word
 
-Beside the headword is a speaker. It uses the browser's own voice —
+Beside the headword is a speaker — and beside the word on the card that opens
+over a selection in a passage, and in the floating dictionary, since a word is
+a word wherever it is being read. It uses the browser's own voice —
 `speechSynthesis`, an English one where the browser has one — so there is no
 audio to embed, no service to call and nothing to fail with no signal: the
 installed copy says words on the underground. A second press interrupts the

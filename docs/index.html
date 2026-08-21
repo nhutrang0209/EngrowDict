@@ -611,7 +611,13 @@ body.resizing { cursor: col-resize; user-select: none; }
   font-family: var(--serif); font-size: 19px; font-weight: 600;
   font-variation-settings: "opsz" 30; letter-spacing: -.01em;
   padding-right: 22px; word-break: break-word;
+  display: flex; align-items: center; gap: 8px;
 }
+/* The speaker is the same button in three places, at the size of the word it
+   sits beside. */
+.lookup .picked .say, .pd-head-word .say { width: 24px; height: 24px; }
+.lookup .picked .say svg, .pd-head-word .say svg { width: 13px; height: 13px; }
+.pd-head-word .say { align-self: center; }
 .lookup .sub { margin-top: 2px; font-family: var(--mono); font-size: 10.5px; color: var(--faint); }
 .lookup .sub .ipa-inline { color: var(--accent-hi); }
 .lookup .glosses { margin-top: 11px; display: flex; flex-direction: column; gap: 8px; }
@@ -1926,6 +1932,7 @@ a.btn[hidden] { display: none; }
     var box = el("div", "pd-entry");
     var h = el("div", "pd-head-word");
     h.appendChild(el("span", "pd-hw", e.word));
+    if (canSpeak()) h.appendChild(sayButton(e.word));
     if (e.pos) h.appendChild(el("span", "pd-pos", e.pos + "."));
     if (e.ipa) h.appendChild(el("span", "pd-ipa", e.ipa));
     box.appendChild(h);
@@ -2972,7 +2979,11 @@ a.btn[hidden] { display: none; }
     lookupCard.appendChild(close);
 
     var found = lookupText(text);
-    lookupCard.appendChild(el("div", "picked", found ? found.word : text));
+    var word = found ? found.word : text;
+    var picked = el("div", "picked", word);
+    /* The word is a word wherever it is read: the same speaker as the entry. */
+    if (canSpeak()) picked.appendChild(sayButton(word));
+    lookupCard.appendChild(picked);
 
     if (found) {
       var bits = [];

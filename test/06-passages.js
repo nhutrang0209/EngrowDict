@@ -24,7 +24,7 @@ ok('the shell itself stays light', shell.length < 215000,
   // one stub serves data.json and stands in for the translator
   let googleUp = true, memoryUp = true;
   const a = boot({
-    html: shell, full: true,
+    html: shell, full: true, speech: true,
     url: 'https://nhutrang0209.github.io/EngrowDict/',
     fetchStub: url => {
       if (String(url).includes('translate.googleapis.com')) {
@@ -117,6 +117,11 @@ ok('the shell itself stays light', shell.length < 215000,
      (card().querySelector('.g')?.textContent || '').includes('đỉnh'),
      card().querySelector('.g')?.textContent);
   ok('  offering a jump to the full entry', !!btn(doc, '#lookup .btn', 'Open entry'));
+  ok('  and a speaker, since a word is a word wherever it is read',
+     !!card().querySelector('.picked .say') &&
+     card().querySelector('.picked .say').getAttribute('aria-label') === 'Say zenith',
+     card().querySelector('.picked .say')
+       ? card().querySelector('.picked .say').getAttribute('aria-label') : 'no button');
 
   await selectText('Abated.');
   ok('a stray capital and full stop are ignored',
