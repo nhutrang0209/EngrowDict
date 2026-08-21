@@ -609,11 +609,15 @@ dialog::backdrop { background: rgba(8, 14, 11, .5); backdrop-filter: blur(2px); 
 .fill-opts { display: flex; flex-direction: column; gap: 6px; }
 .fill-opts .checkrow { font-size: 12px; }
 /* The word form is shown without a backdrop, so the rail beside it and the
-   Add word button above it stay live while a lookup is going round. */
+   Add word button above it stay live while a lookup is going round. A dialog
+   without a backdrop is not centred for you, and the browser's own rule sets
+   inset-inline-start, so left is spelled out here and right is turned off:
+   giving both with a width of its own would leave it pinned to the left. */
 #form-dlg[open] {
   position: fixed; margin: 0;
-  top: calc(var(--top-h) + 18px); right: 210px;
-  width: min(620px, calc(100vw - 250px));
+  top: 50%; left: 50%; right: auto;
+  transform: translate(-50%, -50%);
+  width: min(660px, calc(100vw - 32px));
 }
 
 /* Forms put aside, pinned down the right. Each keeps its fields and its
@@ -654,7 +658,11 @@ dialog::backdrop { background: rgba(8, 14, 11, .5); backdrop-filter: blur(2px); 
 .card-x:hover { color: var(--flag); }
 
 @media (max-width: 900px) {
-  #form-dlg[open] { right: 12px; left: 12px; width: auto; }
+  /* No room to sit beside the rail, so the rail goes to the bottom corner and
+     the form takes the width it needs. */
+  #form-dlg[open] {
+    left: 12px; right: 12px; width: auto; transform: translateY(-50%);
+  }
   .card-rail {
     top: auto; bottom: 12px; right: 12px; width: min(178px, calc(100vw - 24px));
     max-height: 40vh;
