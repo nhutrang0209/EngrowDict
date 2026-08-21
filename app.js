@@ -983,6 +983,51 @@
     return (at && room > 0) ? at * room : 0;
   }
 
+  /* ---- the top bar, out of the way while reading -------------------------
+
+     Wide enough and the tabs, the search and the buttons sit on one line and
+     cost nothing. On a phone they are three lines deep, over the column of
+     text that is the whole reason the page was opened — so reading down folds
+     them away and turning back brings them out, which is what every reading
+     app does and what the thumb expects.
+
+     A negative margin rather than a transform: the bar has to take its space
+     with it, or the passage would read through the gap where it used to be. */
+  var lastScroll = 0;
+  var topAway = false;
+  var NARROW = 760;
+
+  function narrowScreen() {
+    return window.innerWidth <= NARROW;
+  }
+
+  function hideTop() {
+    var top = document.querySelector(".top");
+    if (topAway || !top) return;
+    top.style.marginTop = "-" + top.offsetHeight + "px";
+    topAway = true;
+  }
+
+  function showTop() {
+    var top = document.querySelector(".top");
+    if (!topAway || !top) return;
+    top.style.marginTop = "";
+    topAway = false;
+  }
+
+  function watchTop(box) {
+    box.addEventListener("scroll", function () {
+      var y = box.scrollTop;
+      var moved = y - lastScroll;
+      lastScroll = y;
+      if (!narrowScreen()) { showTop(); return; }
+      // the first screenful keeps the bar: a nudge is not a decision
+      if (y < 80) { showTop(); return; }
+      if (moved > 6) hideTop();
+      else if (moved < -6) showTop();
+    }, { passive: true });
+  }
+
   function watchPlace(box) {
     box.addEventListener("scroll", function () {
       if (placeTimer) return;               // a scroll is hundreds of events
@@ -1163,6 +1208,7 @@
         selectedId = null;
         query = "";
         if (qInput) qInput.value = "";
+        showTop();
         syncViewButtons();
         refresh();
       });
@@ -2882,7 +2928,10 @@
 
     var back = el("button", "btn btn-quiet back", "← List");
     back.type = "button";
-    back.addEventListener("click", function () { document.body.dataset.view = "list"; });
+    back.addEventListener("click", function () {
+      document.body.dataset.view = "list";
+      showTop();
+    });
     top.appendChild(back);
 
     var searchBox = el("div", "search");
@@ -3015,8 +3064,10 @@
 
     scrollBox.addEventListener("scroll", function () { paint(false); }, { passive: true });
     watchPlace(detail);
+    watchTop(detail);
     window.addEventListener("resize", function () {
       paint(true);
+      if (!narrowScreen()) showTop();
       var dlg = document.getElementById("form-dlg");
       if (formPos && dlg) { clampForm(dlg.getBoundingClientRect()); placeForm(); }
     });

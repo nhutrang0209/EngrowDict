@@ -379,6 +379,17 @@ and the new book the next time it is opened. The tick is off every time: `docs/`
 is public, and putting a book there is a decision worth making on purpose rather
 than by leaving a box ticked.
 
+### The top bar while reading
+
+Under 760px the bar wraps to three lines — tabs, buttons, search — over the
+column of text the page was opened for. So reading down folds it away and
+turning back brings it out, the way a reading app does. It is a negative
+margin rather than a transform: the bar takes its space with it, or the
+passage would be read through the gap where it used to be. The first screenful
+keeps the bar whatever the thumb does, a few pixels of wobble decide nothing,
+and changing tab or stepping back to the list puts it back. Wide enough for one
+line, none of this happens.
+
 ## Installing it on a phone
 
 The static copy is a PWA: `docs/manifest.webmanifest`, `docs/sw.js` and three

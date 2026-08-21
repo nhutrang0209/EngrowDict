@@ -833,6 +833,10 @@ a.btn[hidden] { display: none; }
   body:not([data-view="detail"]) .detail { display: none; }
   .grid-word { grid-template-columns: 1fr; }
   .fill-box { justify-content: space-between; }
+  /* Three rows of bar over a column of prose: it folds away as the passage is
+     read down and comes back on the way up. The margin is set in the script,
+     which is the only place the height of a wrapped bar is known. */
+  .top { transition: margin-top .22s ease; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -72,6 +72,11 @@ function boot(opts) {
       // jsdom has no dynamic import, so the page's hook stands in for
       // bookify.js: hand back the book a picked file would have read as
       if (opts.bookify) w.bookifyStub = opts.bookify;
+      // jsdom's matchMedia answers no to everything, so the page reads the
+      // width itself and a test can say how wide the window is
+      if (opts.width) {
+        Object.defineProperty(w, 'innerWidth', { value: opts.width, configurable: true });
+      }
       if (!w.TextEncoder) w.TextEncoder = TextEncoder;
       if (!w.TextDecoder) w.TextDecoder = TextDecoder;
       w.URL.createObjectURL = () => 'blob:fake';
