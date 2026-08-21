@@ -331,6 +331,15 @@ Google is never touched while testing: `SpreadsheetApp` and `fetch` are both
 stand-ins. Deploying the Web App, and CORS, can only be confirmed on the real
 thing — that is what the **Test connection** button is for.
 
+### Saying the word
+
+Beside the headword is a speaker. It uses the browser's own voice —
+`speechSynthesis`, an English one where the browser has one — so there is no
+audio to embed, no service to call and nothing to fail with no signal: the
+installed copy says words on the underground. A second press interrupts the
+first rather than queueing behind it, and a browser that ships no voice at all
+is given no button rather than a dead one.
+
 ## Books
 
 A whole book is not a passage. It is too big to ship inside the page and too

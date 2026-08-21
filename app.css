@@ -382,6 +382,19 @@ body.resizing { cursor: col-resize; user-select: none; }
 .entry-nav .grow { flex: 1; }
 
 .entry-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 9px 13px; }
+/* The word said out loud, in the browser's own voice. Aligned to the baseline
+   of a 50px headword by hand: an icon has no baseline of its own. */
+.say {
+  align-self: center; flex: none; cursor: pointer;
+  width: 30px; height: 30px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--rule); border-radius: 999px;
+  background: var(--surface); color: var(--muted); box-shadow: var(--lift-1);
+  transition: color .12s ease, border-color .12s ease, background .12s ease;
+}
+.say svg { width: 15px; height: 15px; display: block; }
+.say:hover { color: var(--accent-hi); border-color: var(--accent); background: var(--accent-soft); }
+.say:active { transform: translateY(1px); }
 .headword {
   font-family: var(--serif); font-weight: 700;
   font-size: clamp(32px, 4.6vw, 50px); line-height: 1.04;

@@ -94,6 +94,50 @@
     }
     return n;
   }
+  /* ---- saying the word out loud -------------------------------------------
+
+     The browser has a voice of its own: no network, no key, nothing to embed,
+     and it works with the page installed and no signal. Where a browser ships
+     no voice at all — some Linux builds do not — the button is not drawn
+     rather than drawn dead. */
+  function canSpeak() {
+    return !!window.speechSynthesis
+      && typeof window.SpeechSynthesisUtterance === "function";
+  }
+
+  function speak(word) {
+    if (!canSpeak() || !word) return;
+    try {
+      window.speechSynthesis.cancel();       // a second press interrupts the first
+      var say = new window.SpeechSynthesisUtterance(word);
+      say.lang = "en-GB";
+      say.rate = 0.95;                       // a word on its own, not a sentence
+      var voices = window.speechSynthesis.getVoices
+        ? (window.speechSynthesis.getVoices() || []) : [];
+      var pick = null, i;
+      for (i = 0; i < voices.length; i++) {
+        if (!pick && /^en/i.test(voices[i].lang)) pick = voices[i];
+        if (/^en[-_]GB/i.test(voices[i].lang)) { pick = voices[i]; break; }
+      }
+      if (pick) say.voice = pick;
+      window.speechSynthesis.speak(say);
+    } catch (err) { /* a browser that will not speak is not worth a message */ }
+  }
+
+  function sayButton(word) {
+    var b = el("button", "say");
+    b.type = "button";
+    b.title = "Say " + word;
+    b.setAttribute("aria-label", "Say " + word);
+    b.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"'
+      + ' stroke-width="2" stroke-linecap="round" stroke-linejoin="round"'
+      + ' aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>'
+      + '<path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>'
+      + '<path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>';
+    b.addEventListener("click", function () { speak(word); });
+    return b;
+  }
+
   function kindOf(e) { return (KINDS[e.type] || KINDS.word).label; }
 
   function indexEntry(e) {
@@ -628,6 +672,7 @@
 
     var head = el("div", "entry-head");
     head.appendChild(el("h1", "headword", e.word));
+    if (canSpeak()) head.appendChild(sayButton(e.word));
     if (e.pos) head.appendChild(el("span", "pos-big", e.pos + "."));
     if (e.ipa) head.appendChild(el("span", "ipa", e.ipa));
     head.appendChild(el("span", "kind", kindOf(e)));

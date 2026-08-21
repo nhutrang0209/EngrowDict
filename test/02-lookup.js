@@ -129,5 +129,27 @@ const { read, boot, ok, done, wait, click, type, btn } = require('./helpers');
      doc.querySelector('.read h1')?.textContent + ' — ' +
      doc.querySelectorAll('.read .prose p').length + ' paragraphs');
 
-  done(a.errs);
+  /* --- the word said out loud --------------------------------------------- */
+  /* The browser's own voice: no network, no key, and nothing to embed. */
+  const s = boot({ html: read('engrowdict.html'), speech: true });
+  await wait(600);
+  type(s.window, s.doc.getElementById('q'), 'abate');
+  await wait(60);
+  click(s.window, s.doc.querySelector('.hit'));
+  await wait(40);
+  const say = s.doc.querySelector('.entry-head .say');
+  ok('the headword has a speaker beside it', !!say && !!say.querySelector('svg'),
+     say ? say.getAttribute('aria-label') : 'no button');
+  click(s.window, say);
+  ok('  pressing it says the word, in an English voice',
+     s.window.spoken.join(' | ') === '(cancel) | abate @en-GB/GB',
+     s.window.spoken.join(' | '));
+  ok('  and a second press interrupts the first rather than queueing behind it',
+     (click(s.window, say), s.window.spoken.filter(x => x === '(cancel)').length === 2),
+     s.window.spoken.join(' | '));
+
+  ok('a browser with no voice at all is given no button to press',
+     !a.doc.querySelector('.entry-head .say'));
+
+  done(a.errs.concat(s.errs));
 })();

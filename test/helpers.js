@@ -79,6 +79,16 @@ function boot(opts) {
       }
       if (!w.TextEncoder) w.TextEncoder = TextEncoder;
       if (!w.TextDecoder) w.TextDecoder = TextDecoder;
+      // jsdom has no speech synthesis, and the page draws no button without one
+      if (opts.speech) {
+        w.spoken = [];
+        w.SpeechSynthesisUtterance = function (text) { this.text = text; };
+        w.speechSynthesis = {
+          cancel: () => { w.spoken.push('(cancel)'); },
+          getVoices: () => [{ lang: 'en-US', name: 'US' }, { lang: 'en-GB', name: 'GB' }],
+          speak: u => { w.spoken.push(u.text + ' @' + u.lang + '/' + (u.voice || {}).name); },
+        };
+      }
       w.URL.createObjectURL = () => 'blob:fake';
       w.URL.revokeObjectURL = () => {};
       w.scrollTo = () => {};
