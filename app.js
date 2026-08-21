@@ -2057,7 +2057,17 @@
   function newSenseRow(n) {
     var box = el("div", "sense-edit");
     var row = el("div", "row");
-    row.appendChild(el("span", "lab", "Sense " + n));
+    /* The number is the handle: a word's senses come back in the dictionary's
+       order of importance, which is not the order they matter to the person
+       learning it. */
+    var grip = el("button", "sense-grip");
+    grip.type = "button";
+    grip.title = "Drag to reorder, or use the arrow keys";
+    grip.setAttribute("aria-label", "Move this sense");
+    grip.appendChild(el("span", "grip-dots", "⠿"));
+    grip.appendChild(el("span", "lab", "Sense " + n));
+    dragSense(box, grip);
+    row.appendChild(grip);
     var drop = el("button", "btn btn-quiet drop", "Remove");
     drop.type = "button";
     drop.addEventListener("click", function () { box.remove(); renumberSenses(); });
@@ -2081,6 +2091,55 @@
     box.appendChild(f2);
     return box;
   }
+  /* Reordering is moving the box in the list and renumbering: the form is read
+     off the DOM when it is saved and when it is put on the rail, so there is
+     nothing else to keep in step. */
+  function moveSense(box, by) {
+    var list = document.getElementById("sense-list");
+    var kids = [].slice.call(list.children);
+    var at = kids.indexOf(box);
+    var to = at + by;
+    if (at < 0 || to < 0 || to >= kids.length) return;
+    if (by > 0) list.insertBefore(box, kids[to].nextSibling);
+    else list.insertBefore(box, kids[to]);
+    renumberSenses();
+  }
+
+  function dragSense(box, grip) {
+    grip.addEventListener("keydown", function (ev) {
+      if (ev.key === "ArrowUp") { ev.preventDefault(); moveSense(box, -1); grip.focus(); }
+      else if (ev.key === "ArrowDown") { ev.preventDefault(); moveSense(box, 1); grip.focus(); }
+    });
+
+    grip.addEventListener("mousedown", function (ev) {
+      if (ev.button !== 0) return;
+      var list = document.getElementById("sense-list");
+      ev.preventDefault();
+      box.classList.add("lifting");
+      /* Where the pointer is against the middle of every other box: past the
+         middle of the one above and it goes above it, and the same downwards. */
+      var move = function (on) {
+        var kids = [].slice.call(list.children);
+        var me = kids.indexOf(box);
+        for (var i = 0; i < kids.length; i++) {
+          if (i === me) continue;
+          var r = kids[i].getBoundingClientRect();
+          var mid = r.top + r.height / 2;
+          if (i < me && on.clientY < mid) { list.insertBefore(box, kids[i]); break; }
+          if (i > me && on.clientY > mid) { list.insertBefore(box, kids[i].nextSibling); break; }
+        }
+        renumberSenses();
+      };
+      var up = function () {
+        box.classList.remove("lifting");
+        document.removeEventListener("mousemove", move);
+        document.removeEventListener("mouseup", up);
+      };
+      document.addEventListener("mousemove", move);
+      document.addEventListener("mouseup", up);
+    });
+  }
+
   function renumberSenses() {
     var boxes = document.querySelectorAll("#sense-list .sense-edit");
     for (var i = 0; i < boxes.length; i++) {

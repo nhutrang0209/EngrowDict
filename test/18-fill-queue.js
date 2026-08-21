@@ -314,6 +314,65 @@ function ask(g, word) {
   [...doc.querySelectorAll('#card-list .card-x')].forEach(x => click(g.window, x));
   await wait(20);
 
+  /* --- senses put in the order they matter --------------------------------- */
+  press(g, 'add-word');
+  type(g, '#form-dlg [name=word]', 'rough');
+  press(g, 'form-fill');
+  await wait(30);
+  net.answer('rough', {
+    ok: true, source: 'Cambridge', glossed: 3, by: 'Gemini', translated: 0, warning: '',
+    entry: { type: 'word', word: 'rough', verb: '', particle: '', pos: 'adj',
+             ipa: '/rʌf/', note: '', senses: [
+               { def: 'one', eg: [], vi: 'một' },
+               { def: 'two', eg: [], vi: 'hai' },
+               { def: 'three', eg: [], vi: 'ba' },
+             ] },
+  });
+  await wait(60);
+  const defs = () => [...doc.querySelectorAll('#sense-list [name=def]')].map(x => x.value).join(',');
+  const labels = () => [...doc.querySelectorAll('#sense-list .lab')].map(x => x.textContent).join(',');
+  const grips = () => [...doc.querySelectorAll('#sense-list .sense-grip')];
+
+  ok('the senses arrive in the order the dictionary gives them',
+     defs() === 'one,two,three', defs());
+
+  grips()[2].dispatchEvent(new w.KeyboardEvent('keydown',
+    { key: 'ArrowUp', bubbles: true, cancelable: true }));
+  ok('an arrow key on the handle moves a sense up the list',
+     defs() === 'one,three,two', defs());
+  ok('  and they are renumbered where they land',
+     labels() === 'Sense 1,Sense 2,Sense 3', labels());
+
+  /* dragging: jsdom does no layout, so each box is told where it is */
+  const boxes = [...doc.querySelectorAll('#sense-list .sense-edit')];
+  boxes.forEach((b, i) => {
+    Object.defineProperty(b, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => ({ top: 100 * i, height: 100, bottom: 100 * i + 100, left: 0, width: 400 }),
+    });
+  });
+  const lifted = boxes[2];
+  grips()[2].dispatchEvent(new w.MouseEvent('mousedown',
+    { clientY: 250, button: 0, bubbles: true, cancelable: true }));
+  ok('  a lifted sense says so while it is held', lifted.classList.contains('lifting'));
+  doc.dispatchEvent(new w.MouseEvent('mousemove', { clientY: 10, bubbles: true }));
+  doc.dispatchEvent(new w.MouseEvent('mouseup', { clientY: 10, bubbles: true }));
+  ok('dragging the handle past the box above puts it above',
+     defs() === 'two,one,three', defs());
+  ok('  and it is put down again when the mouse is',
+     !lifted.classList.contains('lifting'));
+
+  press(g, 'form-hide');
+  await wait(20);
+  click(w, doc.querySelector('#card-list .card-open'));
+  await wait(40);
+  ok('the order survives the card being put on the rail and taken back',
+     defs() === 'two,one,three', defs());
+  press(g, 'form-hide');
+  await wait(20);
+  [...doc.querySelectorAll('#card-list .card-x')].forEach(x => click(g.window, x));
+  await wait(20);
+
   /* --- hidden while it is being written to the sheet ----------------------- */
   /* The sheet is somebody else's server and takes its own second or two. */
   let letSheetFinish = null;

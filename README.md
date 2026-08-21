@@ -188,6 +188,11 @@ entry: the parts of speech listed the way the sheet lists them, `adj, v, n,
 adv`, and every sense under it in the page's own order. One model request
 covers the lot.
 
+That order is the dictionary's idea of importance, which is rarely the reader's:
+each sense is dragged by its number, or moved with the arrow keys while the
+number has focus. The form is read off the page when it is saved, so the order
+you leave is the order that goes into the sheet.
+
 Cambridge answers a plain server-side request with **403** (Cloudflare wants a
 browser — the entry pages and `robots.txt` alike), so the script reads the page
 through `r.jina.ai`, which renders it and returns Cambridge's own markup. Two

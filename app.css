@@ -742,6 +742,17 @@ dialog::backdrop { background: rgba(8, 14, 11, .5); backdrop-filter: blur(2px); 
 .sense-edit .row { display: flex; align-items: center; gap: 8px; }
 .sense-edit .row .lab { font-family: var(--mono); font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--accent-hi); }
 .sense-edit .row .drop { margin-left: auto; }
+/* The number doubles as the handle: senses come back in the dictionary's order
+   of importance, which is not the order they matter to the person learning. */
+.sense-grip {
+  display: inline-flex; align-items: center; gap: 7px;
+  border: 0; background: none; padding: 2px 4px; margin-left: -4px;
+  border-radius: var(--r-s); cursor: grab; color: var(--faint);
+}
+.sense-grip:hover { background: var(--accent-soft); }
+.sense-grip:active { cursor: grabbing; }
+.grip-dots { font-size: 13px; line-height: 1; }
+.sense-edit.lifting { opacity: .8; box-shadow: var(--lift-2); border-color: var(--accent); }
 
 .set-note { font-size: 12.5px; color: var(--muted); line-height: 1.6; padding: 13px 15px; border-radius: var(--r-m); background: var(--tint); border: 1px solid var(--hair); }
 .gate { border: 1px solid var(--rule); border-radius: var(--r-m); padding: 15px; background: var(--tint); display: flex; flex-direction: column; gap: 8px; }
