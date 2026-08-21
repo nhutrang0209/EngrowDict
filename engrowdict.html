@@ -3207,11 +3207,16 @@ a.btn[hidden] { display: none; }
     current.msg = document.getElementById("form-msg").textContent;
   }
 
+  /* Hide shuts the form, always. Whether there is a card behind it to keep is
+     a separate question from whether the thing on screen goes away: a form
+     that stays put when Hide is pressed is the one thing this must not do. */
   function hideCurrent() {
-    if (!current) return;
-    snapCurrent();
-    current = null;
-    document.getElementById("form-dlg").close();
+    if (current) {
+      snapCurrent();
+      current = null;
+    }
+    var dlg = document.getElementById("form-dlg");
+    if (dlg.open) dlg.close();
     drawRail();
   }
 
@@ -3940,8 +3945,20 @@ a.btn[hidden] { display: none; }
     head.id = "form-head";
     head.appendChild(el("h2", null, "Add a word"));
     head.appendChild(el("p", null, "A word can carry several senses."));
+    /* The × and Escape do what Hide does. A window shuts by its corner, and a
+       form shown without a backdrop is not shut by Escape on its own. */
+    var x = el("button", "dlg-x", "×");
+    x.type = "button";
+    x.id = "form-x";
+    x.title = "Hide this form";
+    x.setAttribute("aria-label", "Hide this form");
+    x.addEventListener("click", hideCurrent);
+    head.appendChild(x);
     dragForm(head);
     dlg.appendChild(head);
+    dlg.addEventListener("keydown", function (ev) {
+      if (ev.key === "Escape") { ev.preventDefault(); hideCurrent(); }
+    });
     buildGrips(dlg);
 
     var body = el("div", "dlg-body");

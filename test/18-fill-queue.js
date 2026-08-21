@@ -111,6 +111,21 @@ function ask(g, word) {
      dlg(g).open === false && rail(g).join(' | ') === 'abaft:looking up…',
      rail(g).join(' | '));
 
+  /* Whatever else is true, Hide shuts what is on screen. */
+  click(w, doc.querySelector('#card-list .card-open'));
+  await wait(40);
+  press(g, 'form-x');
+  await wait(20);
+  ok('  the × in the corner does the same as Hide',
+     dlg(g).open === false && rail(g).join(' | ') === 'abaft:looking up…',
+     rail(g).join(' | '));
+  click(w, doc.querySelector('#card-list .card-open'));
+  await wait(40);
+  dlg(g).dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+  await wait(20);
+  ok('  and so does Escape, which a form with no backdrop does not get for free',
+     dlg(g).open === false, rail(g).join(' | '));
+
   /* --- a second and a third form, opened over the top of it --------------- */
   ask(g, 'susurrus');
   await wait(30);
