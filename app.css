@@ -191,6 +191,13 @@ body {
 .btn[disabled] { opacity: .4; cursor: default; box-shadow: none; }
 .btn[hidden] { display: none; }
 
+/* A button that is a glyph and nothing else: square, and the icon sized here
+   rather than in the markup. It turns while the sheet is being read. */
+.btn-icon { padding: 8px; }
+.btn-icon svg { width: 16px; height: 16px; display: block; }
+.btn-icon.turning svg { animation: turning 1.1s linear infinite; }
+@keyframes turning { to { transform: rotate(360deg); } }
+
 .iconbtn {
   border: 1px solid var(--rule); background: var(--surface); cursor: pointer;
   width: 32px; height: 30px; border-radius: var(--r-s); color: var(--muted);

@@ -2694,6 +2694,7 @@
     if (!canWriteSheet()) { openSettings(true); return; }
     var b = document.getElementById("sync-sheet");
     b.disabled = true;
+    b.classList.add("turning");        // the arrows go round while it reads
     banner("Reading the sheet…", null, null);
     callSheet({ action: "sync" }).then(function (res) {
       if (res.published) {
@@ -2725,7 +2726,10 @@
     }, function (err) {
       banner("Could not reach the sheet: " + (err && err.message ? err.message : err),
         "Try again", syncFromSheet);
-    }).then(function () { b.disabled = false; });
+    }).then(function () {
+      b.disabled = false;
+      b.classList.remove("turning");
+    });
   }
 
   /* Words of mine that already reached the sheet now arrive as ordinary
@@ -2993,11 +2997,21 @@
     more.menu.appendChild(exp);
     acts.appendChild(more.wrap);
 
-    var sync = el("button", "btn", "Sync from sheet");
+    /* Two arrows round a circle: what the button does is a turn of the
+       handle, and on a phone the words for it took a third of the bar. The
+       name lives on in the tooltip and in what a screen reader says. */
+    var sync = el("button", "btn btn-icon");
     sync.type = "button";
     sync.id = "sync-sheet";
     sync.hidden = true;
-    sync.title = "Read the Google Sheet and refresh this page from it";
+    sync.title = "Sync from sheet — read the Google Sheet and refresh this page from it";
+    sync.setAttribute("aria-label", "Sync from sheet");
+    sync.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"'
+      + ' stroke-width="2" stroke-linecap="round" stroke-linejoin="round"'
+      + ' aria-hidden="true"><polyline points="23 4 23 10 17 10"/>'
+      + '<polyline points="1 20 1 14 7 14"/>'
+      + '<path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>'
+      + '</svg>';
     sync.addEventListener("click", syncFromSheet);
     acts.appendChild(sync);
 

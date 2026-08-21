@@ -65,6 +65,11 @@ function page(store, posts, reply, dataNow) {
     return acts.indexOf('sync-sheet') === acts.indexOf('settings-btn') - 1;
   })(), [...a.doc.querySelectorAll('.acts > *')].map(n => n.id || n.textContent.trim()).join(' | '));
   ok('it shows once the link is set', !a.doc.getElementById('sync-sheet').hidden);
+  ok('  and says what it is with two arrows rather than with three words',
+     !!a.doc.querySelector('#sync-sheet svg') &&
+     a.doc.getElementById('sync-sheet').textContent.trim() === '' &&
+     a.doc.getElementById('sync-sheet').getAttribute('aria-label') === 'Sync from sheet',
+     a.doc.getElementById('sync-sheet').getAttribute('aria-label'));
   ok('the site starts on the old data',
      a.doc.getElementById('count').textContent.includes(NOW),
      a.doc.getElementById('count').textContent);

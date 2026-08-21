@@ -195,6 +195,13 @@ body {
 .btn[disabled] { opacity: .4; cursor: default; box-shadow: none; }
 .btn[hidden] { display: none; }
 
+/* A button that is a glyph and nothing else: square, and the icon sized here
+   rather than in the markup. It turns while the sheet is being read. */
+.btn-icon { padding: 8px; }
+.btn-icon svg { width: 16px; height: 16px; display: block; }
+.btn-icon.turning svg { animation: turning 1.1s linear infinite; }
+@keyframes turning { to { transform: rotate(360deg); } }
+
 .iconbtn {
   border: 1px solid var(--rule); background: var(--surface); cursor: pointer;
   width: 32px; height: 30px; border-radius: var(--r-s); color: var(--muted);
@@ -3639,6 +3646,7 @@ a.btn[hidden] { display: none; }
     if (!canWriteSheet()) { openSettings(true); return; }
     var b = document.getElementById("sync-sheet");
     b.disabled = true;
+    b.classList.add("turning");        // the arrows go round while it reads
     banner("Reading the sheet…", null, null);
     callSheet({ action: "sync" }).then(function (res) {
       if (res.published) {
@@ -3670,7 +3678,10 @@ a.btn[hidden] { display: none; }
     }, function (err) {
       banner("Could not reach the sheet: " + (err && err.message ? err.message : err),
         "Try again", syncFromSheet);
-    }).then(function () { b.disabled = false; });
+    }).then(function () {
+      b.disabled = false;
+      b.classList.remove("turning");
+    });
   }
 
   /* Words of mine that already reached the sheet now arrive as ordinary
@@ -3938,11 +3949,21 @@ a.btn[hidden] { display: none; }
     more.menu.appendChild(exp);
     acts.appendChild(more.wrap);
 
-    var sync = el("button", "btn", "Sync from sheet");
+    /* Two arrows round a circle: what the button does is a turn of the
+       handle, and on a phone the words for it took a third of the bar. The
+       name lives on in the tooltip and in what a screen reader says. */
+    var sync = el("button", "btn btn-icon");
     sync.type = "button";
     sync.id = "sync-sheet";
     sync.hidden = true;
-    sync.title = "Read the Google Sheet and refresh this page from it";
+    sync.title = "Sync from sheet — read the Google Sheet and refresh this page from it";
+    sync.setAttribute("aria-label", "Sync from sheet");
+    sync.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"'
+      + ' stroke-width="2" stroke-linecap="round" stroke-linejoin="round"'
+      + ' aria-hidden="true"><polyline points="23 4 23 10 17 10"/>'
+      + '<polyline points="1 20 1 14 7 14"/>'
+      + '<path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>'
+      + '</svg>';
     sync.addEventListener("click", syncFromSheet);
     acts.appendChild(sync);
 
