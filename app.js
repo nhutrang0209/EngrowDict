@@ -658,24 +658,21 @@
   function entryView(e) {
     var art = el("article", "entry");
 
-    var at = cursorIndex();
-    var nav = el("div", "entry-nav");
-    var prev = el("button", "iconbtn", "←");
-    prev.type = "button";
-    prev.title = "Previous entry (← key)";
-    prev.disabled = at <= 0;
-    prev.addEventListener("click", function () { step(-1); });
-    var next = el("button", "iconbtn", "→");
-    next.type = "button";
-    next.title = "Next entry (→ key)";
-    next.disabled = at < 0 || at >= hits.length - 1;
-    next.addEventListener("click", function () { step(1); });
-    nav.appendChild(prev);
-    nav.appendChild(next);
-    if (at > -1) nav.appendChild(el("span", "pos-in-list", fmt(at + 1) + " of " + fmt(hits.length)));
-    nav.appendChild(el("span", "grow"));
-    if (e.mine && mayAdd()) nav.appendChild(entryMenu(e));
-    art.appendChild(nav);
+    /* The arrows and the count that stood here said what the ← and → keys
+       already do, on every entry, forever. What belongs on an entry is what
+       can be done to that entry: put it right. */
+    if (mayAdd()) {
+      var nav = el("div", "entry-nav");
+      var edit = el("button", "btn", "Edit word");
+      edit.type = "button";
+      edit.id = "entry-edit";
+      edit.title = "Correct this entry";
+      edit.addEventListener("click", function () { openEdit(e); });
+      nav.appendChild(edit);
+      nav.appendChild(el("span", "grow"));
+      if (e.mine) nav.appendChild(entryMenu(e));
+      art.appendChild(nav);
+    }
 
     var head = el("div", "entry-head");
     head.appendChild(el("h1", "headword", e.word));
@@ -2387,6 +2384,35 @@
     dlg.querySelector("[name=word]").focus();
   }
 
+  /* Correcting a word that is already in the notebook. The same form, the same
+     rail: an edit is a card like any other, only one that knows what it came
+     from — so Save puts the word back where it was instead of adding a second
+     copy of it beside it. */
+  function openEdit(entry) {
+    if (!mayAdd()) { openSettings(true); return; }
+    if (current) hideCurrent();
+    var card = newCard(entry.word);
+    card.editing = {
+      id: entry.id, type: entry.type, word: entry.word,
+      verb: entry.verb || "", particle: entry.particle || "",
+      mine: !!entry.mine, inSheet: !!entry.inSheet
+    };
+    card.type = entry.type || "word";
+    card.pos = entry.pos || "";
+    card.ipa = entry.ipa || "";
+    card.note = entry.note || "";
+    card.senses = (entry.senses || []).map(function (sn) {
+      return { def: sn.def || "", eg: (sn.eg || []).slice(), vi: sn.vi || "" };
+    });
+    current = card;
+    paintCard(card);
+    drawRail();
+    var dlg = document.getElementById("form-dlg");
+    placeForm();
+    if (!dlg.open) dlg.show();
+    dlg.querySelector("[name=word]").focus();
+  }
+
   /* The form's one line of feedback: amber while it is working, green when
      something came back, red when nothing did. */
   function formMsg(text, tone) {
@@ -2415,6 +2441,7 @@
     var card = {
       id: "c" + (++cardSeq),
       saving: null,          // "sheet" or "device" while Save word is running
+      editing: null,         // the entry being corrected, when it is not a new one
       word: word || "",
       pos: "", ipa: "", type: "word", note: "",
       senses: [],
@@ -2931,9 +2958,12 @@
     var btn = document.getElementById("form-save");
     if (!btn) return;
     var doing = card && card.saving;
+    var fixing = !!(card && card.editing);
     btn.disabled = !!doing;
     btn.textContent = doing === "sheet" ? "Writing to the sheet…"
-      : doing ? "Saving…" : "Save word";
+      : doing ? "Saving…" : fixing ? "Save changes" : "Save word";
+    var head = document.querySelector("#form-dlg .dlg-head h2");
+    if (head) head.textContent = fixing ? "Edit a word" : "Add a word";
   }
 
   /* Writing a word to the sheet is a second or two of somebody else's server,
@@ -2944,6 +2974,7 @@
     var got = collectForm();
     if (got.err) { formMsg(got.err, ""); return; }
     var card = current;
+    if (card && card.editing) { saveEdit(card, got.entry); return; }
     var box = document.getElementById("to-sheet");
     var wantSheet = canWriteSheet() && box && box.checked;
     if (card) {
@@ -3013,6 +3044,78 @@
     });
   }
 
+  /* Saving a correction rather than a new word. The entry keeps the identity
+     it had, and the sheet is told which one to rewrite instead of being handed
+     another copy to put beside it.
+
+     A word that came from the sheet is only ever corrected in the sheet: the
+     site is rebuilt out of it, so anything mended here alone would be undone
+     by the next publish. What the page shows changes at once all the same —
+     waiting for a publish to see your own correction is no way to work. */
+  function saveEdit(card, made) {
+    var was = card.editing;
+    var had = byId[was.id];
+    var next = {
+      id: was.id, type: made.type, word: made.word,
+      verb: made.verb, particle: made.particle,
+      pos: made.pos, ipa: made.ipa, note: made.note, senses: made.senses,
+      mine: was.mine, at: (had && had.at) || made.at, inSheet: was.inSheet
+    };
+    var inSheet = was.mine ? was.inSheet : true;
+    if (inSheet && !canWriteSheet()) {
+      formMsg("This word lives in the sheet, and correcting it there needs the "
+        + "sheet's Web App link — set it in Settings first.", "");
+      return;
+    }
+
+    snapCurrent();
+    card.saving = inSheet ? "sheet" : "device";
+    card.msg = inSheet ? "Correcting it in the sheet…" : "Saving…";
+    card.msgTone = "warn";
+    paintSaveButton(card);
+    drawRail();
+    hideCurrent();
+
+    var job = inSheet
+      ? callSheet({ action: "edit", was: was, entry: next })
+      : Promise.resolve({ ok: true });
+
+    job.then(function () {
+      if (!was.mine) return { ok: true };
+      return persist(ADDED.map(function (x) { return x.id === was.id ? next : x; }));
+    }).then(function (res) {
+      card.saving = null;
+      cards = cards.filter(function (c) { return c !== card; });
+      paintSaveButton(null);
+      drawRail();
+      if (res && res.ok && res.reload) { toast("Saved “" + next.word + "”", true); return; }
+      if (was.mine) {
+        ADDED = ADDED.map(function (x) { return x.id === was.id ? next : x; });
+      } else {
+        BASE.entries = BASE.entries.map(function (x) { return x.id === was.id ? next : x; });
+      }
+      rebuild();
+      if (view === "vocab") {
+        refresh();
+        select(next.id);
+        showDetail();
+      } else {
+        refreshChrome();
+      }
+      if (res && !res.ok) { banner(res.msg, "Sync", syncPending); return; }
+      toast(inSheet ? "Corrected “" + next.word + "” in the sheet"
+        : "Corrected “" + next.word + "” in this browser", true);
+    }, function (err) {
+      // the card comes back with what was typed in it, and why it did not save
+      card.saving = null;
+      card.msg = "Could not save the correction: "
+        + (err && err.message ? err.message : String(err));
+      card.msgTone = "";
+      showCard(card);
+      drawRail();
+    });
+  }
+
   /* Push words that have been added but not written into the sheet yet. */
   function unsynced() {
     return ADDED.filter(function (e) { return !e.inSheet; });
@@ -3051,6 +3154,39 @@
   /* Pull the sheet in. The script republishes data.json and the page reloads
      it; if the repo is not set up, the entries come back inline instead and
      only last for this visit. */
+  /* GitHub Pages takes thirty to sixty seconds to serve a commit, and the
+     fetch straight after a sync is very often the copy that was already there.
+     It answers 200, so nothing looked wrong — the dictionary simply did not
+     change, and pressing Sync a second time a minute later "fixed" it.
+
+     So the new copy is waited for by name: the sheet says how many entries it
+     wrote, and data.json is asked for until it has that many. */
+  /* Pages is sometimes ten seconds and sometimes a minute, so the first look
+     back is quick and the rest settle down. */
+  var SYNC_WAITS = [1500, 3000, 4000];
+  var SYNC_TRIES = 16;                 // a little over a minute in all
+
+  function sleep(ms) {
+    return new Promise(function (done) { setTimeout(done, ms); });
+  }
+
+  function freshData(want, tries) {
+    return fetch("data.json?ts=" + Date.now(), { cache: "reload" })
+      .then(function (r) {
+        if (!r.ok) throw new Error("data.json " + r.status);
+        return r.json();
+      })
+      .then(function (fresh) {
+        var n = fresh && fresh.entries ? fresh.entries.length : 0;
+        if (!want || n === want) return fresh;
+        if (tries >= SYNC_TRIES) throw new Error("still the old copy");
+        banner("Sheet read, " + plural(want, "entry", "entries")
+          + " published. Waiting for GitHub to serve the new copy…", null, null);
+        return sleep(SYNC_WAITS[Math.min(tries, SYNC_WAITS.length - 1)])
+          .then(function () { return freshData(want, tries + 1); });
+      });
+  }
+
   function syncFromSheet() {
     if (!canWriteSheet()) { openSettings(true); return; }
     var b = document.getElementById("sync-sheet");
@@ -3061,18 +3197,15 @@
       if (res.published) {
         banner("Sheet read, " + plural(res.entries, "entry", "entries")
           + " published. Loading the new copy…", null, null);
-        return fetch("data.json?ts=" + Date.now(), { cache: "reload" })
-          .then(function (r) {
-            if (!r.ok) throw new Error("data.json " + r.status);
-            return r.json();
-          })
+        return freshData(res.entries, 0)
           .then(function (fresh) {
             applySync(fresh, res.entries);
             document.getElementById("banner").hidden = true;
             toast("Synced " + plural(res.entries, "entry", "entries") + " from the sheet");
           }, function () {
-            banner("The sheet was published, but the site is still serving the old copy — "
-              + "GitHub takes up to a minute. Reload the page shortly.", null, null);
+            banner("The sheet was published, but the site is still serving the old "
+              + "copy after a minute of asking. Press Sync again in a moment.",
+              "Sync", syncFromSheet);
           });
       }
       if (res.data && res.data.entries) {

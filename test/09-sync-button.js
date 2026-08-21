@@ -93,6 +93,32 @@ function page(store, posts, reply, dataNow) {
      a.doc.querySelector('.hit .hw')?.textContent + ' — ' + a.doc.querySelector('.hit .gloss')?.textContent);
   ok('the banner is cleared afterwards', a.doc.getElementById('banner').hidden);
 
+  /* --- the copy GitHub is still catching up with ----------------------- */
+  /* Pages serves a commit thirty to sixty seconds after it lands, so the fetch
+     straight after a sync is very often the file that was already there. It
+     answers 200 and nothing looks wrong — the dictionary simply does not
+     change, which is why syncing twice used to be the way to sync. */
+  let slow = REAL;
+  const postsSlow = [];
+  const late = page(unlockedStore(CFG), postsSlow,
+    () => ({ ok: true, published: true, entries: grown.entries.length, error: null, data: null }),
+    () => slow);
+  await wait(900);
+  click(late.window, late.doc.getElementById('sync-sheet'));
+  await wait(400);
+  ok('a site still serving the old copy is not taken for the new one',
+     late.doc.getElementById('count').textContent.includes(NOW) &&
+     /Waiting for GitHub/.test(late.doc.getElementById('banner').textContent),
+     late.doc.getElementById('banner').textContent);
+
+  slow = grown;                                    // Pages catches up
+  await wait(1800);
+  ok('  and when it catches up the dictionary follows, on the one press',
+     late.doc.getElementById('count').textContent.includes(PLUS1) &&
+     postsSlow.length === 1,
+     late.doc.getElementById('count').textContent + ' after ' + postsSlow.length + ' sync');
+  ok('  the banner clears itself', late.doc.getElementById('banner').hidden);
+
   /* --- no duplicate once my word comes back from the sheet ------------- */
   let served2 = REAL;
   const posts2 = [];

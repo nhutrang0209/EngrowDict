@@ -4080,6 +4080,39 @@ a.btn[hidden] { display: none; }
   /* Pull the sheet in. The script republishes data.json and the page reloads
      it; if the repo is not set up, the entries come back inline instead and
      only last for this visit. */
+  /* GitHub Pages takes thirty to sixty seconds to serve a commit, and the
+     fetch straight after a sync is very often the copy that was already there.
+     It answers 200, so nothing looked wrong — the dictionary simply did not
+     change, and pressing Sync a second time a minute later "fixed" it.
+
+     So the new copy is waited for by name: the sheet says how many entries it
+     wrote, and data.json is asked for until it has that many. */
+  /* Pages is sometimes ten seconds and sometimes a minute, so the first look
+     back is quick and the rest settle down. */
+  var SYNC_WAITS = [1500, 3000, 4000];
+  var SYNC_TRIES = 16;                 // a little over a minute in all
+
+  function sleep(ms) {
+    return new Promise(function (done) { setTimeout(done, ms); });
+  }
+
+  function freshData(want, tries) {
+    return fetch("data.json?ts=" + Date.now(), { cache: "reload" })
+      .then(function (r) {
+        if (!r.ok) throw new Error("data.json " + r.status);
+        return r.json();
+      })
+      .then(function (fresh) {
+        var n = fresh && fresh.entries ? fresh.entries.length : 0;
+        if (!want || n === want) return fresh;
+        if (tries >= SYNC_TRIES) throw new Error("still the old copy");
+        banner("Sheet read, " + plural(want, "entry", "entries")
+          + " published. Waiting for GitHub to serve the new copy…", null, null);
+        return sleep(SYNC_WAITS[Math.min(tries, SYNC_WAITS.length - 1)])
+          .then(function () { return freshData(want, tries + 1); });
+      });
+  }
+
   function syncFromSheet() {
     if (!canWriteSheet()) { openSettings(true); return; }
     var b = document.getElementById("sync-sheet");
@@ -4090,18 +4123,15 @@ a.btn[hidden] { display: none; }
       if (res.published) {
         banner("Sheet read, " + plural(res.entries, "entry", "entries")
           + " published. Loading the new copy…", null, null);
-        return fetch("data.json?ts=" + Date.now(), { cache: "reload" })
-          .then(function (r) {
-            if (!r.ok) throw new Error("data.json " + r.status);
-            return r.json();
-          })
+        return freshData(res.entries, 0)
           .then(function (fresh) {
             applySync(fresh, res.entries);
             document.getElementById("banner").hidden = true;
             toast("Synced " + plural(res.entries, "entry", "entries") + " from the sheet");
           }, function () {
-            banner("The sheet was published, but the site is still serving the old copy — "
-              + "GitHub takes up to a minute. Reload the page shortly.", null, null);
+            banner("The sheet was published, but the site is still serving the old "
+              + "copy after a minute of asking. Press Sync again in a moment.",
+              "Sync", syncFromSheet);
           });
       }
       if (res.data && res.data.entries) {

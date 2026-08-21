@@ -346,6 +346,19 @@ installed copy says words on the underground. A second press interrupts the
 first rather than queueing behind it, and a browser that ships no voice at all
 is given no button rather than a dead one.
 
+### Sync waits for GitHub
+
+The Sync button asks the script to read the sheet and commit `docs/data.json`,
+then fetches it back. GitHub Pages serves a commit thirty to sixty seconds
+after it lands, so that fetch was very often the copy that was already there —
+answering 200, looking fine, changing nothing. Syncing twice was how it
+appeared to work.
+
+The sheet says how many entries it wrote, so the page asks for `data.json`
+until it has that many: quickly at first, then every four seconds, for a little
+over a minute, with the banner saying what it is waiting for. If it never
+arrives the banner says so and offers the button again.
+
 ### The links, on every device
 
 The sheet link, the Web App link and the sync key live in one browser and
