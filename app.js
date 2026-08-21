@@ -986,33 +986,61 @@
   /* ---- the top bar, out of the way while reading -------------------------
 
      Wide enough and the tabs, the search and the buttons sit on one line and
-     cost nothing. On a phone they are three lines deep, over the column of
-     text that is the whole reason the page was opened — so reading down folds
-     them away and turning back brings them out, which is what every reading
-     app does and what the thumb expects.
+     cost nothing. On a phone they are three lines deep over the column of text
+     the page was opened for, so it gets out of the way while the text is read.
 
-     A negative margin rather than a transform: the bar has to take its space
-     with it, or the passage would read through the gap where it used to be. */
+     How it gets out of the way matters more than that it does. Folding it out
+     of the layout moved the passage as well, which is two things moving at
+     once for one gesture — so on a narrow screen the bar is lifted out of the
+     flow altogether and the passage scrolls under it, the way a phone browser
+     does with its own toolbar. The bar then follows the scroll one pixel for
+     one pixel, and when the scrolling stops it settles the short way, either
+     fully there or fully gone. Nothing else moves at any point. */
   var lastScroll = 0;
-  var topAway = false;
+  var barOff = 0;
+  var barSettle = 0;
   var NARROW = 760;
 
   function narrowScreen() {
     return window.innerWidth <= NARROW;
   }
 
-  function hideTop() {
-    var top = document.querySelector(".top");
-    if (topAway || !top) return;
-    top.style.marginTop = "-" + top.offsetHeight + "px";
-    topAway = true;
+  function topBar() {
+    return document.querySelector(".top");
+  }
+
+  /* The bar's own height, given to the stylesheet: the passage is padded by it
+     so that the first line starts below the bar and the rest reads under it. */
+  function measureBar() {
+    var bar = topBar();
+    var app = document.getElementById("app");
+    if (!bar || !app) return 0;
+    var h = bar.offsetHeight;
+    if (h) app.style.setProperty("--bar-h", h + "px");
+    return h;
+  }
+
+  function setBarOff(px, settling) {
+    var bar = topBar();
+    if (!bar) return;
+    barOff = px;
+    bar.classList.toggle("settling", !!settling);
+    bar.style.transform = px ? "translateY(-" + px + "px)" : "";
   }
 
   function showTop() {
-    var top = document.querySelector(".top");
-    if (!topAway || !top) return;
-    top.style.marginTop = "";
-    topAway = false;
+    if (barSettle) { clearTimeout(barSettle); barSettle = 0; }
+    if (barOff) setBarOff(0, true);
+  }
+
+  /* Left half shown, it goes back; more than half gone, it goes. */
+  function settleBar(h) {
+    if (barSettle) clearTimeout(barSettle);
+    barSettle = setTimeout(function () {
+      barSettle = 0;
+      if (barOff <= 0 || barOff >= h) return;
+      setBarOff(barOff > h / 2 ? h : 0, true);
+    }, 140);
   }
 
   function watchTop(box) {
@@ -1021,10 +1049,13 @@
       var moved = y - lastScroll;
       lastScroll = y;
       if (!narrowScreen()) { showTop(); return; }
-      // the first screenful keeps the bar: a nudge is not a decision
-      if (y < 80) { showTop(); return; }
-      if (moved > 6) hideTop();
-      else if (moved < -6) showTop();
+      var h = measureBar();
+      if (!h) return;
+      // the first screenful is the bar's own: nothing to gain by hiding it there
+      if (y <= h) { setBarOff(0, false); return; }
+      var next = Math.max(0, Math.min(h, barOff + moved));
+      if (next !== barOff) setBarOff(next, false);
+      settleBar(h);
     }, { passive: true });
   }
 
@@ -3127,8 +3158,10 @@
     scrollBox.addEventListener("scroll", function () { paint(false); }, { passive: true });
     watchPlace(detail);
     watchTop(detail);
+    measureBar();
     window.addEventListener("resize", function () {
       paint(true);
+      measureBar();
       if (!narrowScreen()) showTop();
       var dlg = document.getElementById("form-dlg");
       if (formPos && dlg) { clampForm(dlg.getBoundingClientRect()); placeForm(); }

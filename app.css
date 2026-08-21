@@ -845,10 +845,22 @@ a.btn[hidden] { display: none; }
   body:not([data-view="detail"]) .detail { display: none; }
   .grid-word { grid-template-columns: 1fr; }
   .fill-box { justify-content: space-between; }
-  /* Three rows of bar over a column of prose: it folds away as the passage is
-     read down and comes back on the way up. The margin is set in the script,
-     which is the only place the height of a wrapped bar is known. */
-  .top { transition: margin-top .22s ease; }
+  /* Three rows of bar over a column of prose. While a passage is open the bar
+     is lifted out of the flow and the passage reads under it, so sliding it
+     away moves nothing but itself — the script slides it by the same number of
+     pixels the thumb moved, and only the settling at the end is animated.
+
+     --bar-h is measured by the script: the height of a wrapped bar is not
+     something a stylesheet can know. */
+  .top {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 45;
+    will-change: transform;
+  }
+  .top.settling { transition: transform .18s ease-out; }
+  .work { padding-top: var(--bar-h, 132px); }
+  /* Reading: the passage starts below the bar and carries on underneath it. */
+  body[data-view="detail"] .work { padding-top: 0; }
+  body[data-view="detail"] .detail-inner { padding-top: calc(26px + var(--bar-h, 132px)); }
 }
 
 @media (prefers-reduced-motion: reduce) {

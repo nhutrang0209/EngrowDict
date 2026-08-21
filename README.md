@@ -382,13 +382,20 @@ than by leaving a box ticked.
 ### The top bar while reading
 
 Under 760px the bar wraps to three lines — tabs, buttons, search — over the
-column of text the page was opened for. So reading down folds it away and
-turning back brings it out, the way a reading app does. It is a negative
-margin rather than a transform: the bar takes its space with it, or the
-passage would be read through the gap where it used to be. The first screenful
-keeps the bar whatever the thumb does, a few pixels of wobble decide nothing,
-and changing tab or stepping back to the list puts it back. Wide enough for one
-line, none of this happens.
+column of text the page was opened for. So it gets out of the way while the
+text is read, and *how* matters more than *that*: with a passage open the bar
+is lifted out of the flow and the passage reads underneath it, so sliding it
+moves nothing but itself. It follows the scroll one pixel for one pixel with no
+animation at all, and only when the scrolling stops does it settle the short
+way — fully there or fully gone. Folding it out of the layout instead, which is
+what this did first, moved the passage as well: two things moving for one
+gesture, and unpleasant to read against.
+
+The first screenful is the bar's own height, where hiding it would gain
+nothing. Changing tab or stepping back to the list brings it down. `--bar-h` is
+measured by the script and handed to the stylesheet, since the height of a
+wrapped bar is not something CSS can know. Wide enough for one line, none of
+this happens.
 
 ## Installing it on a phone
 
