@@ -41,6 +41,7 @@ function boot(opts) {
           { value: opts.ua, configurable: true });
       }
       w.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
+      w.HTMLDialogElement.prototype.show = function () { this.open = true; };
       w.HTMLDialogElement.prototype.close = function () { this.open = false; };
       Object.defineProperty(w, 'localStorage', {
         configurable: true,

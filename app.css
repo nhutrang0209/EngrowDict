@@ -608,48 +608,58 @@ dialog::backdrop { background: rgba(8, 14, 11, .5); backdrop-filter: blur(2px); 
 }
 .fill-opts { display: flex; flex-direction: column; gap: 6px; }
 .fill-opts .checkrow { font-size: 12px; }
-.fill-left { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
-.fill-left input {
-  width: 100%; min-width: 0; padding: 6px 9px; font-size: 11.5px;
-  border: 1px solid var(--hair); border-radius: var(--r-s);
-  background: var(--paper); color: var(--ink);
+/* The word form is shown without a backdrop, so the rail beside it and the
+   Add word button above it stay live while a lookup is going round. */
+#form-dlg[open] {
+  position: fixed; margin: 0;
+  top: calc(var(--top-h) + 18px); right: 210px;
+  width: min(620px, calc(100vw - 250px));
 }
 
-/* Words waiting to be looked up: the same rows in the corner tray and inside
-   the form, since a modal covers everything behind it. */
-.fill-list { display: flex; flex-direction: column; gap: 4px; }
-.fill-list.in-form { margin-top: -4px; }
-.fill-row {
-  display: grid; grid-template-columns: 1fr auto auto; gap: 10px;
-  align-items: center; padding: 5px 8px; border-radius: var(--r-s);
+/* Forms put aside, pinned down the right. Each keeps its fields and its
+   lookup; pressing one brings it back. */
+.card-rail {
+  position: fixed; z-index: 40;
+  top: calc(var(--top-h) + 18px); right: 16px; width: 178px;
+  max-height: calc(100vh - var(--top-h) - 40px); overflow-y: auto;
+  padding: 10px; border-radius: var(--r-m);
+  background: var(--surface); border: 1px solid var(--rule);
+  box-shadow: var(--lift-2);
+}
+.card-rail[hidden] { display: none; }
+.card-rail-head {
+  font-family: var(--mono); font-size: 10px; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--faint); padding: 0 2px 8px;
+}
+.card-list { display: flex; flex-direction: column; gap: 5px; }
+.card-row {
+  display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 6px;
+  padding: 6px 8px; border-radius: var(--r-s);
   background: var(--tint); border: 1px solid var(--hair);
 }
-.fill-open {
-  border: 0; background: none; padding: 0; text-align: left; min-width: 0;
-  font-family: var(--serif); font-size: 14px; color: var(--ink); cursor: pointer;
+.card-open {
+  display: flex; flex-direction: column; gap: 1px; min-width: 0;
+  border: 0; background: none; padding: 0; text-align: left; cursor: pointer;
+}
+.card-word {
+  font-family: var(--serif); font-size: 14px; color: var(--ink);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.fill-open:disabled { color: var(--faint); cursor: default; }
-.fill-open:not(:disabled):hover { color: var(--accent-hi); }
-.fill-state { font-family: var(--mono); font-size: 10px; color: var(--faint); }
-.fill-x {
+.card-state { font-family: var(--mono); font-size: 9.5px; color: var(--faint); }
+.card-open:hover .card-word { color: var(--accent-hi); }
+.card-x {
   border: 0; background: none; padding: 0 2px; cursor: pointer;
   font-size: 15px; line-height: 1; color: var(--faint);
 }
-.fill-x:hover { color: var(--flag); }
-.fill-tray {
-  position: fixed; right: 16px; bottom: 16px; z-index: 40;
-  width: min(260px, calc(100vw - 32px));
-  padding: 10px; border-radius: var(--r-m);
-  background: var(--paper); border: 1px solid var(--rule);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, .12);
+.card-x:hover { color: var(--flag); }
+
+@media (max-width: 900px) {
+  #form-dlg[open] { right: 12px; left: 12px; width: auto; }
+  .card-rail {
+    top: auto; bottom: 12px; right: 12px; width: min(178px, calc(100vw - 24px));
+    max-height: 40vh;
+  }
 }
-.fill-tray[hidden] { display: none; }
-.fill-tray-head {
-  font-family: var(--mono); font-size: 10px; letter-spacing: .08em;
-  text-transform: uppercase; color: var(--faint); padding: 0 2px 7px;
-}
-.fill-tray .fill-list { max-height: 40vh; overflow-y: auto; }
 .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .field > span { font-family: var(--mono); font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--faint); }
 .field input, .field select, .field textarea {

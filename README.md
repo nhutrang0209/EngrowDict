@@ -153,15 +153,21 @@ Vietnamese come back filled in — then you read them over and press **Save word
 yourself. Nothing is written until you do.
 
 **It does not hold the form.** A lookup takes as long as Cambridge and the
-model take, and there is no reason to watch it: the word joins a queue and the
-form is yours again straight away. The box beside the button takes the rest of
-the list — `susurrus, thole`, one per line or separated by commas — and they
-are looked up two at a time while the first is being read. What comes back
-waits: in the tray at the bottom corner when the form is shut, in a line under
-the word when it is open. Press a word there to open it filled in, press its ×
-to drop it, and saving one opens the next that is ready. A word that lands
-while its own form is still open goes straight into it, the way it always did.
-Nothing survives a reload — the queue is a few minutes of impatience, not
+model take, and there is no reason to watch it happen. The form is a card:
+**Hide** puts it on the rail down the right-hand side with its lookup still
+going, **Add word** opens another over the top of it — the one it was opened
+over goes to the rail by itself — and pressing a card on the rail brings it
+back, fields, word and whatever arrived while it was away. Two lookups run at a
+time and the rest wait in line, since each is its own request to the same Apps
+Script. The rail says which is which: *looking up…*, *in line*, *ready*, *no
+luck*, *draft*.
+
+The form is shown without a backdrop for exactly that reason — the rail beside
+it and the Add word button above it have to stay live while it is open. **Hide**
+keeps the card, **Cancel** throws it away and calls off the lookup with it, and
+saving a word opens the next card that came back. The Vietnamese box is ticked
+to begin with, being the column the notebook is kept for; the examples box is
+not. Nothing survives a reload: the rail is a few minutes of impatience, not
 state.
 
 Cambridge answers a plain server-side request with **403** (Cloudflare wants a

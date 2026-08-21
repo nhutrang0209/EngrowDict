@@ -749,9 +749,9 @@ function page(store, posts, reply) {
      f.doc.getElementById('form-fill').textContent === 'Auto Fill' &&
      f.doc.querySelector('.grid-word .fill-box #form-fill') !== null,
      f.doc.getElementById('form-fill').textContent);
-  ok('  its two boxes start unticked',
+  ok('  the Vietnamese box starts ticked and the examples box does not',
      f.doc.getElementById('fill-eg').checked === false &&
-     f.doc.getElementById('fill-vi').checked === false);
+     f.doc.getElementById('fill-vi').checked === true);
   click(f.window, f.doc.getElementById('form-fill'));
   ok('  while it is looking, the line turns amber',
      /warn/.test(f.doc.getElementById('form-msg').className) &&
@@ -766,8 +766,8 @@ function page(store, posts, reply) {
   ok('Fill asks the sheet for a draft of the word typed in',
      postsFill.length === 1 && postsFill[0].body.action === 'draft' &&
      postsFill[0].body.word === 'susurrus', JSON.stringify(postsFill[0] && postsFill[0].body));
-  ok('  and says it wants neither examples nor Vietnamese',
-     postsFill[0].body.eg === false && postsFill[0].body.vi === false,
+  ok('  and says it wants the Vietnamese but not the examples',
+     postsFill[0].body.eg === false && postsFill[0].body.vi === true,
      JSON.stringify(postsFill[0].body));
   ok('  the head fields come back filled in',
      fdlg.querySelector('[name=pos]').value === 'n' &&
@@ -776,16 +776,15 @@ function page(store, posts, reply) {
   ok('  unticked, the definition arrives on its own, with no example under it',
      f.doc.querySelector('#sense-list [name=def]').value === 'a soft murmuring sound',
      JSON.stringify(f.doc.querySelector('#sense-list [name=def]').value));
-  ok('  and the Vietnamese box is left empty',
-     f.doc.querySelector('#sense-list [name=vi]').value === '',
+  ok('  and the Vietnamese comes with it, being what the notebook is for',
+     f.doc.querySelector('#sense-list [name=vi]').value === 'tiếng xào xạc',
      JSON.stringify(f.doc.querySelector('#sense-list [name=vi]').value));
 
-  // ticked, the same draft brings the rest of itself along
+  // ticked, the same draft brings the examples along as well
   f.doc.getElementById('fill-eg').checked = true;
-  f.doc.getElementById('fill-vi').checked = true;
   click(f.window, f.doc.getElementById('form-fill'));
   await wait(300);
-  ok('  ticking both asks for both',
+  ok('  ticking the examples box asks for those too',
      postsFill[1].body.eg === true && postsFill[1].body.vi === true,
      JSON.stringify(postsFill[1].body));
   ok('  the example then sits under its definition, the way the sheet writes it',

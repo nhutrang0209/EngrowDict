@@ -2010,23 +2010,17 @@
     }
   }
 
+  /* Add word with one already open puts that one on the rail rather than
+     throwing it away — the whole point of the rail. */
   function openForm(prefill) {
     if (!mayAdd()) { openSettings(true); return; }
+    if (current) hideCurrent();
+    var card = newCard(prefill || "");
+    current = card;
+    paintCard(card);
+    drawRail();
     var dlg = document.getElementById("form-dlg");
-    dlg.querySelector("[name=word]").value = prefill || "";
-    dlg.querySelector("[name=pos]").value = "";
-    dlg.querySelector("[name=ipa]").value = "";
-    dlg.querySelector("[name=type]").value = "word";
-    dlg.querySelector("[name=note]").value = "";
-    document.getElementById("fill-eg").checked = false;
-    document.getElementById("fill-vi").checked = false;
-    var list = document.getElementById("sense-list");
-    list.textContent = "";
-    list.appendChild(newSenseRow(1));
-    renumberSenses();
-    formMsg("", "");
-    drawQueue();
-    dlg.showModal();
+    if (!dlg.open) dlg.show();
     dlg.querySelector("[name=word]").focus();
   }
 
@@ -2038,81 +2032,233 @@
     msg.textContent = text;
   }
 
-  /* ---- words waiting to be looked up -------------------------------------
+  /* ---- forms that are still being filled in ------------------------------
 
-     A lookup takes as long as Cambridge and the model take, and there is no
-     reason to sit through it. Auto Fill puts the word in a queue and gives the
-     form back: type the next one, shut the form, read something else. What
-     comes back waits in the tray at the corner until it is opened, and a word
-     still going round can be dropped from there.
+     A lookup takes as long as Cambridge and the model take, and a form that
+     will not answer until then is a form you cannot use. So a form is a card:
+     Hide puts it on the rail down the right-hand side, still being looked up,
+     and Add word opens another beside it. Press a card on the rail to have it
+     back, with whatever came for it while it was away.
 
-     Two at a time. Each is its own request to the same Apps Script, which
-     answers them side by side; more than a couple only queues them at the far
-     end, where nothing can be cancelled. */
-  var fills = [];
-  var fillSeq = 0;
+     The form itself is one dialog, shown without a backdrop so that the rail
+     and the Add word button stay live behind it. One card is on screen at a
+     time; the rest keep their fields, their word and their lookup in here. */
+  var cards = [];
+  var current = null;
+  var cardSeq = 0;
   var FILLS_AT_ONCE = 2;
 
-  function fillById(id) {
-    for (var i = 0; i < fills.length; i++) if (fills[i].id === id) return fills[i];
-    return null;
+  function newCard(word) {
+    var card = {
+      id: "c" + (++cardSeq),
+      word: word || "",
+      pos: "", ipa: "", type: "word", note: "",
+      senses: [],
+      /* The Vietnamese is the column the notebook is kept for, so it is asked
+         for by default; the examples are not. */
+      want: { eg: false, vi: true },
+      fill: null,            // {state, res, err, stop} once Auto Fill is pressed
+      shown: true,           // whether what came back is already in the boxes
+      msg: "", msgTone: ""
+    };
+    cards.push(card);
+    return card;
   }
 
-  function queueFill(word, want) {
-    var f = { id: "f" + (++fillSeq), word: word, want: want, state: "waiting",
-              entry: null, res: null, err: "", stop: null };
-    fills.push(f);
-    drawQueue();
+  function cardState(card) {
+    return card.fill ? card.fill.state : "draft";
+  }
+
+  function cardName(card) {
+    return card.word || "a new word";
+  }
+
+  /* ---- the rail ---------------------------------------------------------- */
+  function buildRail() {
+    var rail = el("div", "card-rail");
+    rail.id = "card-rail";
+    rail.hidden = true;
+    var head = el("div", "card-rail-head", "Waiting");
+    head.id = "card-rail-head";
+    rail.appendChild(head);
+    var list = el("div", "card-list");
+    list.id = "card-list";
+    rail.appendChild(list);
+    return rail;
+  }
+
+  function stateWord(state) {
+    return state === "filling" ? "looking up…"
+      : state === "waiting" ? "in line"
+      : state === "failed" ? "no luck"
+      : state === "ready" ? "ready" : "draft";
+  }
+
+  function drawRail() {
+    var rail = document.getElementById("card-rail");
+    if (!rail) return;
+    var parked = cards.filter(function (c) { return c !== current; });
+    rail.hidden = !parked.length;
+    var list = document.getElementById("card-list");
+    list.textContent = "";
+    parked.forEach(function (card) {
+      var row = el("div", "card-row");
+      row.dataset.word = card.word;
+      var open = el("button", "card-open");
+      open.type = "button";
+      open.appendChild(el("span", "card-word", cardName(card)));
+      open.appendChild(el("span", "card-state", stateWord(cardState(card))));
+      open.addEventListener("click", function () { showCard(card); });
+      row.appendChild(open);
+      var x = el("button", "card-x", "×");
+      x.type = "button";
+      x.title = "Throw " + cardName(card) + " away";
+      x.setAttribute("aria-label", "Throw " + cardName(card) + " away");
+      x.addEventListener("click", function () { dropCard(card); });
+      row.appendChild(x);
+      list.appendChild(row);
+    });
+  }
+
+  /* ---- moving a card on and off the screen -------------------------------- */
+  /* What is in the boxes right now, so the card comes back as it was left. */
+  function snapCurrent() {
+    if (!current) return;
+    var dlg = document.getElementById("form-dlg");
+    current.word = dlg.querySelector("[name=word]").value.trim();
+    current.pos = dlg.querySelector("[name=pos]").value;
+    current.ipa = dlg.querySelector("[name=ipa]").value;
+    current.type = dlg.querySelector("[name=type]").value;
+    current.note = dlg.querySelector("[name=note]").value;
+    current.want = {
+      eg: document.getElementById("fill-eg").checked,
+      vi: document.getElementById("fill-vi").checked
+    };
+    current.senses = [];
+    var boxes = document.querySelectorAll("#sense-list .sense-edit");
+    for (var i = 0; i < boxes.length; i++) {
+      current.senses.push({
+        def: boxes[i].querySelector("[name=def]").value,
+        vi: boxes[i].querySelector("[name=vi]").value,
+        eg: []
+      });
+    }
+    current.msg = document.getElementById("form-msg").textContent;
+  }
+
+  function hideCurrent() {
+    if (!current) return;
+    snapCurrent();
+    current = null;
+    document.getElementById("form-dlg").close();
+    drawRail();
+  }
+
+  function paintCard(card) {
+    var dlg = document.getElementById("form-dlg");
+    document.getElementById("fill-eg").checked = !!card.want.eg;
+    document.getElementById("fill-vi").checked = !!card.want.vi;
+    applyDraft({ type: card.type, word: card.word, verb: "", particle: "",
+                 pos: card.pos, ipa: card.ipa, senses: card.senses },
+               { eg: true, vi: true });
+    dlg.querySelector("[name=word]").value = card.word || "";
+    dlg.querySelector("[name=note]").value = card.note || "";
+    formMsg(card.msg || "", card.msgTone || "");
+  }
+
+  function showCard(card) {
+    if (current === card) return;
+    if (current) hideCurrent();
+    current = card;
+    paintCard(card);
+    /* Whatever came back while it was on the rail goes into the boxes now. */
+    if (!card.shown) landIntoForm(card);
+    drawRail();
+    var dlg = document.getElementById("form-dlg");
+    if (!dlg.open) dlg.show();
+    dlg.querySelector("[name=word]").focus();
+  }
+
+  function dropCard(card) {
+    if (card.fill && card.fill.state === "filling" && card.fill.stop) {
+      try { card.fill.stop.abort(); } catch (err) { /* older browsers */ }
+    }
+    if (card.fill) card.fill.state = "dropped";
+    cards = cards.filter(function (c) { return c !== card; });
+    if (current === card) {
+      current = null;
+      document.getElementById("form-dlg").close();
+    }
+    drawRail();
     pumpFills();
-    return f;
   }
 
+  /* ---- the lookups themselves --------------------------------------------- */
+  /* Two at a time. Each is its own request to the same Apps Script, which
+     answers them side by side; more than a couple only queues them at the far
+     end, where nothing can be called off. */
   function pumpFills() {
     var going = 0, i;
-    for (i = 0; i < fills.length; i++) if (fills[i].state === "filling") going++;
-    for (i = 0; i < fills.length && going < FILLS_AT_ONCE; i++) {
-      if (fills[i].state === "waiting") { startFill(fills[i]); going++; }
+    for (i = 0; i < cards.length; i++) {
+      if (cards[i].fill && cards[i].fill.state === "filling") going++;
+    }
+    for (i = 0; i < cards.length && going < FILLS_AT_ONCE; i++) {
+      if (cards[i].fill && cards[i].fill.state === "waiting") {
+        startFill(cards[i]);
+        going++;
+      }
     }
   }
 
-  function startFill(f) {
+  function startFill(card) {
+    var f = card.fill;
     f.state = "filling";
-    drawQueue();
-    /* Dropping a word that is already in the air only works where the browser
-       can abort a fetch; where it cannot, the answer is thrown away instead. */
+    drawRail();
+    /* A card thrown away while its lookup is in the air tells the browser to
+       stop; where it cannot, the answer is ignored when it arrives. */
     if (typeof AbortController === "function") f.stop = new AbortController();
-    callSheet({ action: "draft", word: f.word, eg: f.want.eg, vi: f.want.vi },
+    callSheet({ action: "draft", word: card.word, eg: card.want.eg, vi: card.want.vi },
       f.stop && f.stop.signal).then(function (res) {
       if (f.state === "dropped") return;
       f.state = "ready";
       f.res = res;
-      f.entry = res.entry;
-      landFill(f);
+      card.shown = false;
+      landFill(card);
     }, function (err) {
       if (f.state === "dropped") return;
       f.state = "failed";
       f.err = err && err.message ? err.message : String(err);
-      landFill(f);
+      card.shown = false;
+      landFill(card);
     });
   }
 
-  /* If the form is still open on that word, the draft goes straight into it,
-     which is what a lookup used to do and still should. Otherwise it waits. */
-  function landFill(f) {
-    var dlg = document.getElementById("form-dlg");
-    var open = dlg && dlg.open;
-    var here = open && dlg.querySelector("[name=word]").value.trim() === f.word;
-    if (here) openFill(f);
-    else if (f.state === "failed") toast(f.word + ": " + f.err);
-    drawQueue();
+  function landFill(card) {
+    if (current === card) landIntoForm(card);
+    else if (card.fill.state === "failed") toast(cardName(card) + ": " + card.fill.err);
+    drawRail();
     pumpFills();
   }
 
-  /* What the tray says about a word, and what the form's line says when the
-     draft lands in it. */
-  function fillSays(f) {
-    if (f.state === "failed") return f.err;
-    var res = f.res || {};
+  /* The draft into the boxes, and the line under them saying where it came
+     from. Done when the card is on screen, and left waiting when it is not. */
+  function landIntoForm(card) {
+    card.shown = true;
+    if (card.fill.state === "failed") {
+      card.msg = card.fill.err;
+      card.msgTone = "";
+      formMsg(card.msg, "");
+      return;
+    }
+    applyDraft(card.fill.res.entry, card.want);
+    card.msg = fillSays(card.fill.res);
+    card.msgTone = "good";
+    formMsg(card.msg, "good");
+    snapCurrent();
+  }
+
+  function fillSays(res) {
+    res = res || {};
     var bits = [res.source === "Cambridge"
       ? "Filled from Cambridge."
       : "Cambridge had no entry — filled from " + (res.source || "the dictionary") + "."];
@@ -2129,109 +2275,17 @@
     return bits.join(" ");
   }
 
-  /* The same list in two places: a tray at the corner for when the form is
-     shut, and a line inside the form for when it is open, because a modal
-     covers everything behind it. */
-  function drawQueue() {
-    var going = 0, i;
-    for (i = 0; i < fills.length; i++) if (fills[i].state !== "ready") going++;
-
-    var tray = document.getElementById("fill-tray");
-    if (tray) {
-      tray.hidden = !fills.length;
-      var head = document.getElementById("fill-tray-head");
-      if (head) {
-        head.textContent = going
-          ? plural(going, "word", "words") + " being looked up"
-          : plural(fills.length, "word", "words") + " ready";
-      }
-      queueRows(document.getElementById("fill-tray-list"));
-    }
-
-    var inForm = document.getElementById("form-queue");
-    if (inForm) {
-      inForm.hidden = !fills.length;
-      queueRows(inForm);
-    }
-  }
-
-  function queueRows(box) {
-    if (!box) return;
-    box.textContent = "";
-    fills.forEach(function (f) {
-      var row = el("div", "fill-row");
-      row.dataset.word = f.word;
-      var open = el("button", "fill-open", f.word);
-      open.type = "button";
-      open.disabled = f.state === "waiting" || f.state === "filling";
-      open.addEventListener("click", function () { openFill(f); });
-      row.appendChild(open);
-      row.appendChild(el("span", "fill-state",
-        f.state === "waiting" ? "waiting"
-          : f.state === "filling" ? "looking up…"
-          : f.state === "failed" ? "no luck" : "ready"));
-      var x = el("button", "fill-x", "×");
-      x.type = "button";
-      x.title = "Drop " + f.word;
-      x.setAttribute("aria-label", "Drop " + f.word);
-      x.addEventListener("click", function () { dropFill(f.id); });
-      row.appendChild(x);
-      box.appendChild(row);
-    });
-  }
-
-  function firstReadyFill() {
-    for (var i = 0; i < fills.length; i++) {
-      if (fills[i].state === "ready" || fills[i].state === "failed") return fills[i];
+  function firstReadyCard() {
+    for (var i = 0; i < cards.length; i++) {
+      var st = cardState(cards[i]);
+      if (st === "ready" || st === "failed") return cards[i];
     }
     return null;
   }
 
-  function openNextFill() {
-    var f = firstReadyFill();
-    if (f) openFill(f);
-  }
-
-  function buildTray() {
-    var tray = el("div", "fill-tray");
-    tray.id = "fill-tray";
-    tray.hidden = true;
-    var head = el("div", "fill-tray-head");
-    head.id = "fill-tray-head";
-    tray.appendChild(head);
-    var list = el("div", "fill-list");
-    list.id = "fill-tray-list";
-    tray.appendChild(list);
-    return tray;
-  }
-
-  function openFill(f) {
-    var dlg = document.getElementById("form-dlg");
-    var word = dlg.querySelector("[name=word]").value.trim();
-    if (!dlg.open || word !== f.word) openForm(f.word);
-    document.getElementById("fill-eg").checked = !!(f.want && f.want.eg);
-    document.getElementById("fill-vi").checked = !!(f.want && f.want.vi);
-    if (f.state === "failed") formMsg(f.err, "");
-    else {
-      applyDraft(f.entry, f.want);
-      formMsg(fillSays(f), "good");
-    }
-    dropFill(f.id, true);
-  }
-
-  /* Taken out of the queue: opened, or given up on. A word still in the air is
-     told to stop, and its answer, if one arrives anyway, is ignored. */
-  function dropFill(id, quietly) {
-    var f = fillById(id);
-    if (!f) return;
-    if (f.state === "filling" && f.stop) {
-      try { f.stop.abort(); } catch (err) { /* older browsers */ }
-    }
-    f.state = "dropped";
-    fills = fills.filter(function (x) { return x.id !== id; });
-    if (!quietly && f.word) toast("Dropped " + f.word);
-    drawQueue();
-    pumpFills();
+  function openNextCard() {
+    var card = firstReadyCard();
+    if (card) showCard(card);
   }
 
   /* Cambridge fills the form in and stops there: nothing is written until you
@@ -2248,19 +2302,17 @@
       eg: document.getElementById("fill-eg").checked,
       vi: document.getElementById("fill-vi").checked
     };
-    /* The box under the word takes the rest of the list. They go into the
-       queue behind this one and are looked up while this one is read. */
-    var rest = document.getElementById("fill-next");
-    var more = rest && rest.value ? rest.value.split(/[\n,;]+/) : [];
-    if (rest) rest.value = "";
-
-    formMsg("Looking " + word + " up. The form is yours meanwhile — the answer "
-      + "waits in the corner.", "warn");
-    queueFill(word, want);
-    more.forEach(function (w) {
-      w = w.trim();
-      if (w) queueFill(w, want);
-    });
+    if (!current) return;                       // no card, nothing to fill in
+    current.word = word;
+    current.want = want;
+    current.fill = { state: "waiting", res: null, err: "", stop: null };
+    current.shown = true;
+    current.msg = "Looking " + word + " up. Press Hide and this form goes to the "
+      + "rail on the right, with the answer waiting in it.";
+    current.msgTone = "warn";
+    formMsg(current.msg, "warn");
+    drawRail();
+    pumpFills();
   }
 
   /* One sense per box, the examples under their own definition the way the
@@ -2350,7 +2402,12 @@
         document.getElementById("form-dlg").close();
         /* Straight on to the next word that came back while this one was being
            read: the form reopens on it rather than on an empty page. */
-        setTimeout(openNextFill, 0);
+        if (current) {
+          cards = cards.filter(function (c) { return c !== current; });
+          current = null;
+          drawRail();
+        }
+        setTimeout(openNextCard, 0);
         if (res.ok && res.reload) { toast("Saved “" + got.entry.word + "”"); return; }
         ADDED = next;
         rebuild();
@@ -2770,7 +2827,7 @@
     t.hidden = true;
     t.setAttribute("role", "status");
     app.appendChild(t);
-    app.appendChild(buildTray());
+    app.appendChild(buildRail());
     app.appendChild(buildDialog());
     app.appendChild(buildSettings());
     refreshChrome();
@@ -2827,13 +2884,6 @@
     g.appendChild(buildFillBox());
     body.appendChild(g);
 
-    /* What is still coming, under the word it will follow. A modal covers the
-       tray at the corner, so the same list is repeated here. */
-    var queue = el("div", "fill-list in-form");
-    queue.id = "form-queue";
-    queue.hidden = true;
-    body.appendChild(queue);
-
     var g1 = el("div", "grid-2");
     g1.appendChild(field("Part of speech", "pos", "v", false));
     g1.appendChild(field("Phonetics", "ipa", "/əˈbeɪt/", true));
@@ -2885,9 +2935,20 @@
     msg.id = "form-msg";
     foot.appendChild(msg);
     foot.appendChild(el("span", "spacer2"));
+    /* Hide keeps the form and its lookup, on the rail; Cancel throws both
+       away. Two different things, so two buttons. */
+    var hide = el("button", "btn", "Hide");
+    hide.type = "button";
+    hide.id = "form-hide";
+    hide.title = "Put this form on the rail and carry on";
+    hide.addEventListener("click", hideCurrent);
+    foot.appendChild(hide);
     var cancel = el("button", "btn", "Cancel");
     cancel.type = "button";
-    cancel.addEventListener("click", function () { dlg.close(); });
+    cancel.addEventListener("click", function () {
+      if (current) dropCard(current);
+      else dlg.close();
+    });
     foot.appendChild(cancel);
     var save = el("button", "btn btn-primary", "Save word");
     save.type = "button";
@@ -2902,21 +2963,11 @@
      draft is a definition and nothing else unless you ask for more. */
   function buildFillBox() {
     var box = el("div", "fill-box");
-    var left = el("div", "fill-left");
     var fill = el("button", "btn", "Auto Fill");
     fill.type = "button";
     fill.id = "form-fill";
     fill.addEventListener("click", fillFromCambridge);
-    left.appendChild(fill);
-    /* The rest of the list, if there is one: one per line or separated by
-       commas. They join the queue behind the word in the form. */
-    var next = el("input", "mono");
-    next.id = "fill-next";
-    next.placeholder = "and then: susurrus, thole…";
-    next.autocomplete = "off";
-    next.spellcheck = false;
-    left.appendChild(next);
-    box.appendChild(left);
+    box.appendChild(fill);
     var opts = el("div", "fill-opts");
     opts.appendChild(fillOpt("fill-eg", "Include examples"));
     opts.appendChild(fillOpt("fill-vi", "Include Vietnamese meaning"));
