@@ -362,6 +362,19 @@ function ask(g, word) {
   ok('  and it is put down again when the mouse is',
      !lifted.classList.contains('lifting'));
 
+  /* a sense wanted between two others goes between them */
+  const adds = () => [...doc.querySelectorAll('#sense-list .sense-add')];
+  ok('every sense but the last carries a + in the gap under it',
+     adds().length === 3 && adds().filter(b => !b.hidden).length === 2,
+     adds().map(b => b.hidden).join(','));
+  click(w, adds()[0]);
+  ok('pressing it puts an empty sense there, not at the end',
+     defs() === 'two,,one,three', JSON.stringify(defs()));
+  ok('  and everything below is renumbered',
+     labels() === 'Sense 1,Sense 2,Sense 3,Sense 4', labels());
+  click(w, doc.querySelectorAll('#sense-list .drop')[1]);
+  ok('  Remove takes it back out again', defs() === 'two,one,three', defs());
+
   press(g, 'form-hide');
   await wait(20);
   click(w, doc.querySelector('#card-list .card-open'));

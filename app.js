@@ -2089,7 +2089,26 @@
     inp.placeholder = "yếu đi / giảm đi";
     f2.appendChild(inp);
     box.appendChild(f2);
+
+    /* A sense belongs where it belongs: this puts one in the gap under this
+       box rather than at the end of eighteen of them. It sits in the gap
+       itself, so the list is still nothing but senses. */
+    var add = el("button", "sense-add", "+");
+    add.type = "button";
+    add.title = "Add a sense here";
+    add.setAttribute("aria-label", "Add a sense after this one");
+    add.addEventListener("click", function () { addSenseAfter(box); });
+    box.appendChild(add);
     return box;
+  }
+
+  function addSenseAfter(box) {
+    var list = document.getElementById("sense-list");
+    var fresh = newSenseRow(0);
+    list.insertBefore(fresh, box.nextSibling);
+    renumberSenses();
+    fresh.querySelector("[name=def]").focus();
+    return fresh;
   }
   /* Reordering is moving the box in the list and renumbering: the form is read
      off the DOM when it is saved and when it is put on the rail, so there is
@@ -2145,6 +2164,8 @@
     for (var i = 0; i < boxes.length; i++) {
       boxes[i].querySelector(".lab").textContent = "Sense " + (i + 1);
       boxes[i].querySelector(".drop").hidden = boxes.length === 1;
+      var add = boxes[i].querySelector(".sense-add");
+      if (add) add.hidden = i === boxes.length - 1;   // the wide button is there
     }
   }
 

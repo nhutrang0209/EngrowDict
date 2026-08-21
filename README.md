@@ -190,8 +190,10 @@ covers the lot.
 
 That order is the dictionary's idea of importance, which is rarely the reader's:
 each sense is dragged by its number, or moved with the arrow keys while the
-number has focus. The form is read off the page when it is saved, so the order
-you leave is the order that goes into the sheet.
+number has focus, and the small **+** in the gap under a sense puts a new one
+*there* rather than at the end of eighteen others. The form is read off the
+page when it is saved, so the order you leave is the order that goes into the
+sheet.
 
 Cambridge answers a plain server-side request with **403** (Cloudflare wants a
 browser — the entry pages and `robots.txt` alike), so the script reads the page
