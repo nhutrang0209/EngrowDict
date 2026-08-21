@@ -346,6 +346,25 @@ installed copy says words on the underground. A second press interrupts the
 first rather than queueing behind it, and a browser that ships no voice at all
 is given no button rather than a dead one.
 
+### The links, on every device
+
+The sheet link, the Web App link and the sync key live in one browser and
+nowhere else. That is what stops a stranger with the address from writing into
+the sheet — and what made every new device a trip through Settings with three
+fields copied off another screen.
+
+**Publish, locked with the passcode** in Settings writes `docs/link.json`: a
+salt, a nonce and a block of AES-GCM holding the three fields, with the key
+stretched from the passcode by 210,000 rounds of PBKDF2. On any other device
+the passcode does two things at once — it unlocks the page, and it opens that
+file — so a new browser types the passcode and has the sync button. Anyone
+without it has a file of noise.
+
+Which puts the whole weight on the passcode, so make it a long one: the file is
+public and can be attacked offline for as long as somebody likes. Publishing
+needs the GitHub token, since the file is a commit like any other; reading it
+back needs nothing but the passcode.
+
 ## Books
 
 A whole book is not a passage. It is too big to ship inside the page and too

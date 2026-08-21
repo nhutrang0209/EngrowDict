@@ -1595,6 +1595,134 @@
     return MODE === "static" && !!window.indexedDB;
   }
 
+  /* ---- the links, carried from device to device --------------------------
+
+     The Google Sheet link, the Web App link and the sync key live in this
+     browser and nowhere else, which is what stops a stranger with the address
+     from writing into the sheet — and what makes every new device a trip
+     through Settings with three fields copied off another screen.
+
+     So they can be published, encrypted with the passcode: docs/link.json is
+     a salt, a nonce and a block of AES-GCM, and the passcode is the only way
+     back out of it. A device that has the passcode types it once and has the
+     links; anyone else has a file of noise. The passcode is never published,
+     never stored beside the file, and never leaves the browser it is typed in.
+
+     Which makes the passcode the whole of the security: pick a long one. */
+  var LINK_FILE = "docs/link.json";
+  var LINK_ROUNDS = 210000;
+
+  function canCrypto() {
+    return !!(window.crypto && window.crypto.subtle && window.TextEncoder);
+  }
+
+  function bytesToB64(bytes) {
+    var out = "", i;
+    for (i = 0; i < bytes.length; i += 0x8000) {
+      out += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    }
+    return btoa(out);
+  }
+
+  function b64ToBytes(text) {
+    var raw = atob(String(text).replace(/\s/g, ""));
+    var bytes = new Uint8Array(raw.length), i;
+    for (i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+    return bytes;
+  }
+
+  /* A passcode is a short human thing, so it is stretched before it is a key:
+     210,000 rounds is a fraction of a second here and a long afternoon for
+     anyone working through a dictionary of them. */
+  function keyFromPass(pass, salt) {
+    var enc = new TextEncoder();
+    return window.crypto.subtle.importKey("raw", enc.encode(pass), "PBKDF2",
+      false, ["deriveKey"]).then(function (base) {
+      return window.crypto.subtle.deriveKey(
+        { name: "PBKDF2", salt: salt, iterations: LINK_ROUNDS, hash: "SHA-256" },
+        base, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+    });
+  }
+
+  function sealLinks(pass, payload) {
+    var salt = window.crypto.getRandomValues(new Uint8Array(16));
+    var iv = window.crypto.getRandomValues(new Uint8Array(12));
+    return keyFromPass(pass, salt).then(function (key) {
+      return window.crypto.subtle.encrypt({ name: "AES-GCM", iv: iv }, key,
+        new TextEncoder().encode(JSON.stringify(payload)));
+    }).then(function (sealed) {
+      return JSON.stringify({
+        v: 1, rounds: LINK_ROUNDS,
+        salt: bytesToB64(salt), iv: bytesToB64(iv),
+        data: bytesToB64(new Uint8Array(sealed))
+      });
+    });
+  }
+
+  function openLinks(pass, text) {
+    var file = JSON.parse(text);
+    var salt = b64ToBytes(file.salt);
+    var iv = b64ToBytes(file.iv);
+    return keyFromPass(pass, salt).then(function (key) {
+      return window.crypto.subtle.decrypt({ name: "AES-GCM", iv: iv }, key,
+        b64ToBytes(file.data));
+    }).then(function (plain) {
+      return JSON.parse(new TextDecoder().decode(plain));
+    });
+  }
+
+  function canShareLinks() {
+    return MODE === "static" && unlocked() && canCrypto()
+      && !!settings.ghToken && !!ghRepo()
+      && !!settings.webApp && !!settings.key;
+  }
+
+  function shareLinks() {
+    if (!canShareLinks()) {
+      setMsg("The links, the token and the passcode all have to be in place first.", false);
+      return;
+    }
+    var btn = document.getElementById("share-links");
+    btn.disabled = true;
+    setMsg("Locking the links with the passcode…", true);
+    sealLinks(settings.code, {
+      sheetUrl: settings.sheetUrl, webApp: settings.webApp, key: settings.key
+    }).then(function (text) {
+      return ghRead(LINK_FILE).then(function (got) {
+        return ghWrite(LINK_FILE, text, got && got.sha,
+          "Publish the links, locked with the passcode");
+      });
+    }).then(function () {
+      setMsg("Published. Another device asks for the passcode and gets these "
+        + "links — nothing else can read them.", true);
+    }, function (err) {
+      setMsg("Not published: " + (err && err.message ? err.message : err), false);
+    }).then(function () { btn.disabled = false; });
+  }
+
+  /* Typed on a device that has none: the passcode is tried against the file
+     and, where it fits, the links are in place before the dialog is redrawn.
+     Where there is no file, or it does not fit, nothing is said — the passcode
+     was for unlocking, and it did that. */
+  function pickUpLinks(pass) {
+    if (MODE !== "static" || !canCrypto() || typeof fetch !== "function") {
+      return Promise.resolve(false);
+    }
+    return fetch("link.json", { cache: "no-store" }).then(function (r) {
+      if (!r.ok) throw new Error("no link.json");
+      return r.text();
+    }).then(function (text) {
+      return openLinks(pass, text);
+    }).then(function (got) {
+      if (!got || !got.webApp || !got.key) return false;
+      settings.sheetUrl = got.sheetUrl || settings.sheetUrl;
+      settings.webApp = got.webApp;
+      settings.key = got.key;
+      writeSettings();
+      return true;
+    }, function () { return false; });
+  }
+
   /* ---- putting a book on the site ----------------------------------------
 
      A book added on a device is on that device. Ticking Put it on the site
@@ -3698,6 +3826,25 @@
       "Shown with that link.", true));
     inner.appendChild(links);
 
+    /* Three fields copied off another screen is what a new device used to
+       cost. Locked with the passcode and published, they are one passcode
+       away instead. */
+    var shareRow = el("div", "setrow");
+    shareRow.id = "row-share";
+    shareRow.appendChild(el("span", "setlabel", "These links, on every device"));
+    var shareLine = el("div", "setline");
+    var shareBtn = el("button", "btn", "Publish, locked with the passcode");
+    shareBtn.type = "button";
+    shareBtn.id = "share-links";
+    shareBtn.addEventListener("click", shareLinks);
+    shareLine.appendChild(shareBtn);
+    shareRow.appendChild(shareLine);
+    shareRow.appendChild(el("span", "hint",
+      "Writes docs/link.json — a salt, a nonce and a block of AES-GCM. Another "
+      + "device types the passcode and has these three fields; anyone else has "
+      + "noise. Needs the GitHub token below, and a passcode worth the name."));
+    links.appendChild(shareRow);
+
     /* The key for the Vietnamese column belongs to the script, not to this
        browser, so it is typed here and sent straight on — this page is the one
        place that already knows which script it is talking to, and a sheet may
@@ -3880,12 +4027,23 @@
       go.type = "button";
       go.id = "pass-go";
       go.addEventListener("click", function () {
-        if (inp.value.trim() === settings.code) {
+        var typed = inp.value.trim();
+        if (typed === settings.code) {
           settings.unlocked = true;
           writeSettings();
           drawSettings();
           refresh();
           toast("Unlocked");
+          /* A device with no links of its own asks the site for them: the
+             passcode just typed is the only thing that can open the file. */
+          if (!settings.webApp || !settings.key) {
+            pickUpLinks(typed).then(function (got) {
+              if (!got) return;
+              drawSettings();
+              refreshChrome();
+              toast("The links came with the passcode — this device can sync", true);
+            });
+          }
         } else {
           setMsg("Wrong passcode.", false);
           inp.select();
@@ -3951,6 +4109,12 @@
     var btns = document.querySelectorAll("#setgroup .edit-btn, #setgroup-books .edit-btn");
     for (var i = 0; i < btns.length; i++) btns[i].disabled = !on;
     document.getElementById("ai-send").disabled = !on;
+    var share = document.getElementById("share-links");
+    if (share) {
+      share.disabled = !canShareLinks();
+      share.title = canShareLinks() ? "Publish these three fields, locked with the passcode"
+        : "Needs the links, the GitHub token, and the page served from its own repo";
+    }
     document.getElementById("set-test").disabled = !on;
     document.getElementById("set-save").disabled = !on;
 

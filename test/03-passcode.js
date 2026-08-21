@@ -134,9 +134,11 @@ const mk = store => boot({
   ok('the three links live in one collapsible section',
      !!fold && a.doc.querySelectorAll('#setgroup .edit-btn').length === 3);
   ok('  with the key for the Vietnamese column under them, and no Edit on it',
-     fold.querySelectorAll('.setrow').length === 4 &&
+     fold.querySelectorAll('.setrow').length === 5 &&
      !!a.doc.getElementById('ai-send') && !a.doc.querySelector('#row-ai .edit-btn'),
      fold.querySelectorAll('.setrow').length + ' rows');
+  ok('    and a row for publishing the three of them to every device',
+     !!a.doc.getElementById('share-links') && !a.doc.querySelector('#row-share .edit-btn'));
   ok('  it opens itself while anything is still missing', fold.open,
      'webApp is not set here');
   const steps = [...a.doc.querySelectorAll('#sheet-fold > .setfold-body > .steps > li')]

@@ -77,6 +77,12 @@ function boot(opts) {
       if (opts.width) {
         Object.defineProperty(w, 'innerWidth', { value: opts.width, configurable: true });
       }
+      // jsdom brings no WebCrypto, and the shared links are AES-GCM
+      if (!w.crypto || !w.crypto.subtle) {
+        Object.defineProperty(w, 'crypto', {
+          configurable: true, value: require('node:crypto').webcrypto,
+        });
+      }
       if (!w.TextEncoder) w.TextEncoder = TextEncoder;
       if (!w.TextDecoder) w.TextDecoder = TextDecoder;
       // jsdom has no speech synthesis, and the page draws no button without one
