@@ -46,6 +46,14 @@ const openWord = async (g, word) => {
 
 const viOf = g => (g.doc.querySelector('.entry .vi') || {}).textContent;
 
+/* The one button on an entry opens a menu; Edit word is what is in it. */
+const openMenu = g => {
+  const wrap = g.doc.querySelector('.entry-nav .menu-wrap');
+  if (wrap) click(g.window, wrap.querySelector('.iconbtn'));
+  return wrap;
+};
+const editItem = g => g.doc.getElementById('entry-edit');
+
 (async () => {
   /* --- what the entry carries now ---------------------------------------- */
   const posts = [];
@@ -54,21 +62,30 @@ const viOf = g => (g.doc.querySelector('.entry .vi') || {}).textContent;
   await openWord(a, 'zenith');
 
   ok('the entry opens', a.doc.querySelector('.headword').textContent === 'zenith');
-  ok('  the ← → buttons are gone', !a.doc.querySelector('.entry-nav .iconbtn'),
+  ok('  the ← → buttons are gone, and the running count with them',
+     !a.doc.querySelector('.pos-in-list') &&
+     a.doc.querySelectorAll('.entry-nav .iconbtn').length === 1,
      a.doc.querySelector('.entry-nav') && a.doc.querySelector('.entry-nav').textContent);
-  ok('  and the running count with them', !a.doc.querySelector('.pos-in-list'));
-  ok('  an unlocked notebook offers Edit word',
-     !!a.doc.getElementById('entry-edit'),
-     a.doc.getElementById('entry-edit') && a.doc.getElementById('entry-edit').textContent);
+  ok('  what is left is the one menu button',
+     (a.doc.querySelector('.entry-nav .iconbtn') || {}).textContent === '☰');
+  ok('  and the menu behind it is shut until it is pressed',
+     a.doc.querySelector('.entry-nav .menu').hidden);
+
+  openMenu(a);
+  ok('  and offers Edit word to an unlocked notebook', !!editItem(a),
+     editItem(a) && editItem(a).textContent);
+  ok('    with nothing to delete: a word out of the sheet is not mine to remove',
+     !a.doc.querySelector('.entry-nav .menu-item.danger'));
 
   /* --- locked: nothing to press ------------------------------------------ */
   const locked = page({}, [], () => ({ ok: true }));
   await wait(900);
   await openWord(locked, 'zenith');
-  ok('a locked notebook offers no Edit word', !locked.doc.getElementById('entry-edit'));
+  ok('a locked notebook offers no menu at all',
+     !locked.doc.querySelector('.entry-nav .menu-wrap'));
 
   /* --- correcting a word that came from the sheet ------------------------- */
-  click(a.window, a.doc.getElementById('entry-edit'));
+  click(a.window, editItem(a));
   await wait(40);
   const dlg = a.doc.getElementById('form-dlg');
   ok('Edit word opens the form on that word', dlg.open &&
@@ -117,7 +134,11 @@ const viOf = g => (g.doc.querySelector('.entry .vi') || {}).textContent;
      mine.doc.querySelector('.headword').textContent);
   const firstId = JSON.parse(mine.store[BACKUP_KEY])[0].id;
 
-  click(mine.window, mine.doc.getElementById('entry-edit'));
+  openMenu(mine);
+  ok('  a word of my own offers both Edit and Delete',
+     !!editItem(mine) && !!mine.doc.querySelector('.entry-nav .menu-item.danger'),
+     [...mine.doc.querySelectorAll('.entry-nav .menu-item')].map(b => b.textContent).join(', '));
+  click(mine.window, editItem(mine));
   await wait(40);
   mine.doc.querySelector('#sense-list [name=vi]').value = 'chuột túi cụt đuôi';
   click(mine.window, mine.doc.getElementById('form-save'));

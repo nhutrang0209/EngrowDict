@@ -660,17 +660,12 @@
 
     /* The arrows and the count that stood here said what the ← and → keys
        already do, on every entry, forever. What belongs on an entry is what
-       can be done to that entry: put it right. */
+       can be done to that entry, and it lives behind the one button so that
+       the next thing that can be done to it has somewhere to go. */
     if (mayAdd()) {
       var nav = el("div", "entry-nav");
-      var edit = el("button", "btn", "Edit word");
-      edit.type = "button";
-      edit.id = "entry-edit";
-      edit.title = "Correct this entry";
-      edit.addEventListener("click", function () { openEdit(e); });
-      nav.appendChild(edit);
       nav.appendChild(el("span", "grow"));
-      if (e.mine) nav.appendChild(entryMenu(e));
+      nav.appendChild(entryMenu(e));
       art.appendChild(nav);
     }
 
@@ -770,13 +765,24 @@
      where they are one stray click away. */
   function entryMenu(e) {
     var m = makeMenu("☰", "Options for this entry");
-    var del = el("button", "menu-item danger", "Delete this word");
-    del.type = "button";
-    del.addEventListener("click", function () {
+    var edit = el("button", "menu-item", "Edit word");
+    edit.type = "button";
+    edit.id = "entry-edit";
+    edit.addEventListener("click", function () {
       m.close();
-      removeEntry(e);
+      openEdit(e);
     });
-    m.menu.appendChild(del);
+    m.menu.appendChild(edit);
+    // only a word of my own is mine to delete; the sheet's are the sheet's
+    if (e.mine) {
+      var del = el("button", "menu-item danger", "Delete this word");
+      del.type = "button";
+      del.addEventListener("click", function () {
+        m.close();
+        removeEntry(e);
+      });
+      m.menu.appendChild(del);
+    }
     return m.wrap;
   }
 
