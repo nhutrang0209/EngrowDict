@@ -2722,11 +2722,30 @@ a.btn[hidden] { display: none; }
       && !!settings.webApp && !!settings.key;
   }
 
-  function shareLinks() {
-    if (!canShareLinks()) {
-      setMsg("The links, the token and the passcode all have to be in place first.", false);
-      return;
+  /* What is missing, by name. A button that does nothing when it is pressed
+     is the same bug twice over: it was disabled, and being disabled it could
+     not say why. */
+  function whyNotShare() {
+    if (MODE !== "static") return "The claude.ai copy cannot write to the repo.";
+    if (!canCrypto()) return "This browser has no WebCrypto, so nothing can be locked.";
+    if (!unlocked()) return "Unlock with the passcode first.";
+    if (!settings.webApp || !settings.key) {
+      return "Fill in the Web App link and the Sync key above first.";
     }
+    if (!ghRepo()) {
+      return "This page is not served from a GitHub repo, so there is nowhere to "
+        + "put the file. Name the repo under Books for every device.";
+    }
+    if (!settings.ghToken) {
+      return "No GitHub token yet — put one in under Books for every device, "
+        + "below. It is the same token that puts a book on the site.";
+    }
+    return "";
+  }
+
+  function shareLinks() {
+    var why = whyNotShare();
+    if (why) { setMsg(why, false); return; }
     var btn = document.getElementById("share-links");
     btn.disabled = true;
     setMsg("Locking the links with the passcode…", true);
@@ -5156,9 +5175,8 @@ a.btn[hidden] { display: none; }
     document.getElementById("ai-send").disabled = !on;
     var share = document.getElementById("share-links");
     if (share) {
-      share.disabled = !canShareLinks();
-      share.title = canShareLinks() ? "Publish these three fields, locked with the passcode"
-        : "Needs the links, the GitHub token, and the page served from its own repo";
+      share.disabled = !on;               // locked is the only reason to bar it
+      share.title = whyNotShare() || "Publish these three fields, locked with the passcode";
     }
     document.getElementById("set-test").disabled = !on;
     document.getElementById("set-save").disabled = !on;

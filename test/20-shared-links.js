@@ -156,9 +156,24 @@ const unlock = (g, pass) => {
   const noToken = page(site(), unlockedStore(CFG));
   await wait(900);
   click(noToken.window, noToken.doc.getElementById('settings-btn'));
-  ok('publishing needs the GitHub token, and says so rather than failing',
-     noToken.doc.getElementById('share-links').disabled === true,
-     noToken.doc.getElementById('share-links').title);
+  ok('publishing needs the GitHub token, and the button still presses',
+     noToken.doc.getElementById('share-links').disabled === false,
+     'disabled: ' + noToken.doc.getElementById('share-links').disabled);
+  click(noToken.window, noToken.doc.getElementById('share-links'));
+  await wait(60);
+  ok('  pressed without one, it says which one is missing and where it goes',
+     /No GitHub token yet/.test(noToken.doc.getElementById('set-msg').textContent) &&
+     /Books for every device/.test(noToken.doc.getElementById('set-msg').textContent),
+     noToken.doc.getElementById('set-msg').textContent);
+
+  const noLinks = page(site(), unlockedStore({ ghToken: 'github_pat_test' }));
+  await wait(900);
+  click(noLinks.window, noLinks.doc.getElementById('settings-btn'));
+  click(noLinks.window, noLinks.doc.getElementById('share-links'));
+  await wait(60);
+  ok('  and with no links to publish it says that instead',
+     /Web App link and the Sync key/.test(noLinks.doc.getElementById('set-msg').textContent),
+     noLinks.doc.getElementById('set-msg').textContent);
 
   done(first.errs.concat(fresh.errs, nosy.errs, alone.errs));
 })();
