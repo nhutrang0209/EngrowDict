@@ -362,8 +362,9 @@ without it has a file of noise.
 
 Which puts the whole weight on the passcode, so make it a long one: the file is
 public and can be attacked offline for as long as somebody likes. Publishing
-needs the GitHub token, since the file is a commit like any other; reading it
-back needs nothing but the passcode.
+needs the GitHub token — the file is a commit like any other — which lives
+under *This page's own repo* in Settings and is the same token that puts a book
+on the shelf. Reading the file back needs nothing but the passcode.
 
 ## Books
 

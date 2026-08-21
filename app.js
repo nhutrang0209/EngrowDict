@@ -1688,12 +1688,12 @@
       return "Fill in the Web App link and the Sync key above first.";
     }
     if (!ghRepo()) {
-      return "This page is not served from a GitHub repo, so there is nowhere to "
-        + "put the file. Name the repo under Books for every device.";
+      return "This page is not served from a GitHub repo, so there is nowhere "
+        + "to put the file. Name the repo under This page's own repo, below.";
     }
     if (!settings.ghToken) {
-      return "No GitHub token yet — put one in under Books for every device, "
-        + "below. It is the same token that puts a book on the site.";
+      return "No GitHub token yet — open This page's own repo, just below, and "
+        + "put one in. That is the whole of the setting up.";
     }
     return "";
   }
@@ -3861,7 +3861,8 @@
     shareRow.appendChild(el("span", "hint",
       "Writes docs/link.json — a salt, a nonce and a block of AES-GCM. Another "
       + "device types the passcode and has these three fields; anyone else has "
-      + "noise. Needs the GitHub token below, and a passcode worth the name."));
+      + "noise. Needs the token under This page's own repo, below, and a "
+      + "passcode worth the name."));
     links.appendChild(shareRow);
 
     /* The key for the Vietnamese column belongs to the script, not to this
@@ -3894,13 +3895,15 @@
     fold.appendChild(inner);
     body.appendChild(fold);
 
-    /* --- the shelf on the site ------------------------------------------ */
-    /* Only wanted by whoever publishes books rather than keeping them on one
-       device, so it is folded away like the sheet is. */
+    /* --- the repo the page is served from -------------------------------- */
+    /* One token, two uses: publishing the links so another device needs only
+       the passcode, and putting a book on the shelf for every device. It was
+       filed under books, which is why somebody wanting the first had to go
+       looking under the second. */
     var gfold = el("details", "setfold");
     gfold.id = "books-fold";
     var gsum = el("summary", "setfold-head");
-    gsum.appendChild(el("span", "setfold-title", "Books for every device"));
+    gsum.appendChild(el("span", "setfold-title", "This page's own repo"));
     var gstate = el("span", "setfold-state");
     gstate.id = "books-fold-state";
     gsum.appendChild(gstate);
@@ -3908,8 +3911,9 @@
 
     var ginner = el("div", "setfold-body");
     ginner.appendChild(el("p", "setfold-lede",
-      "With a token here, Add a book offers to put the book on the site as "
-      + "well as on this device, and every device then reads it off the shelf."));
+      "A token here lets this page commit to the repo it is served from: the "
+      + "links above, locked with the passcode, and a book on the shelf for "
+      + "every device."));
 
     var gsteps = el("ol", "steps");
     [
@@ -3920,9 +3924,10 @@
     ginner.appendChild(gsteps);
 
     ginner.appendChild(el("p", "setfold-note",
-      "The book is committed to docs/books/, which is served to anyone who has "
-      + "the address, so put out-of-copyright books there and keep the rest on "
-      + "the device. GitHub Pages takes a minute to publish a commit."));
+      "The token stays in this browser and is never published. What it writes "
+      + "is: docs/link.json, which is encrypted, and docs/books/, which is not "
+      + "— so put out-of-copyright books there and keep the rest on the device. "
+      + "GitHub Pages takes a minute to publish a commit."));
 
     var glinks = el("div", "setgroup");
     glinks.id = "setgroup-books";
@@ -4114,7 +4119,8 @@
     showRowValue("ghtoken", "ghToken");
 
     document.getElementById("books-fold-state").textContent =
-      canPublishBooks() ? "publishing" : ghRepo() ? "device only" : "not on GitHub Pages";
+      !ghRepo() ? "not on GitHub Pages"
+        : settings.ghToken ? "token set" : "no token yet";
 
     var ready = !!settings.sheetUrl && !!settings.webApp && !!settings.key;
     var fold = document.getElementById("sheet-fold");

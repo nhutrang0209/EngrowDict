@@ -163,7 +163,7 @@ const unlock = (g, pass) => {
   await wait(60);
   ok('  pressed without one, it says which one is missing and where it goes',
      /No GitHub token yet/.test(noToken.doc.getElementById('set-msg').textContent) &&
-     /Books for every device/.test(noToken.doc.getElementById('set-msg').textContent),
+     /This page's own repo/.test(noToken.doc.getElementById('set-msg').textContent),
      noToken.doc.getElementById('set-msg').textContent);
 
   const noLinks = page(site(), unlockedStore({ ghToken: 'github_pat_test' }));
