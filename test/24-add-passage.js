@@ -100,6 +100,79 @@ const fill = (g, title, body) => {
      JSON.parse(store[MINE])[0].title === 'The Hemp Revival',
      store[MINE] && store[MINE].slice(0, 60));
 
+  /* --- the tick, the same one the word form has --------------------------- */
+  click(w, add());
+  ok('the form offers to write it straight into the sheet',
+     !doc.getElementById('pass-to-sheet-row').hidden &&
+     doc.getElementById('pass-to-sheet').checked === true);
+  doc.getElementById('pass-to-sheet').checked = false;
+  fill(a, 'Kept Here Only', 'A paragraph of it.');
+  posts.length = 0;
+  click(w, doc.getElementById('pass-save'));
+  await wait(300);
+  ok('  unticked, nothing is sent to the sheet', posts.length === 0,
+     posts.map(p => p.body.action).join(', '));
+  ok('  and it is still saved on the device, marked as not in the sheet',
+     JSON.parse(store[MINE]).some(r => r.title === 'Kept Here Only' && r.inSheet === false),
+     store[MINE].slice(0, 120));
+
+  /* --- putting a passage right -------------------------------------------- */
+  const menu = () => doc.querySelector('.read .entry-nav .menu-wrap');
+  ok('a passage carries the same one button an entry does', !!menu(),
+     menu() && menu().textContent);
+  click(w, menu().querySelector('.iconbtn'));
+  ok('  which offers Edit and Delete',
+     !!doc.getElementById('passage-edit') && !!doc.getElementById('passage-delete'));
+  click(w, doc.getElementById('passage-edit'));
+  await wait(40);
+  ok('Edit opens the form on that passage',
+     dlg.open && dlg.querySelector('[name=ptitle]').value === 'Kept Here Only' &&
+     dlg.querySelector('[name=pbody]').value === 'A paragraph of it.',
+     dlg.querySelector('[name=ptitle]').value);
+  ok('  and says it is an edit', doc.getElementById('pass-save').textContent === 'Save changes',
+     doc.getElementById('pass-head').textContent);
+
+  fill(a, 'Kept Here Only', 'A paragraph of it.\nAnd another.');
+  doc.getElementById('pass-to-sheet').checked = true;
+  posts.length = 0;
+  click(w, doc.getElementById('pass-save'));
+  await wait(300);
+  const fixed = posts.find(p => p.body.action === 'editpassage');
+  ok('saving a correction tells the sheet which passage it was',
+     !!fixed && fixed.body.was.title === 'Kept Here Only' &&
+     fixed.body.entry.paras.length === 2,
+     fixed && JSON.stringify(fixed.body));
+  ok('  the page shows it at once',
+     doc.querySelectorAll('.read .prose p').length === 2,
+     doc.querySelectorAll('.read .prose p').length + ' paragraphs');
+  // the list paints a window of rows, so it is searched rather than counted
+  const search = title => {
+    const q = doc.getElementById('q');
+    q.value = title;
+    q.dispatchEvent(new w.Event('input'));
+    return [...doc.querySelectorAll('.hit .hw')].filter(n => n.textContent === title).length;
+  };
+  ok('  and it is not shown twice in the list', search('Kept Here Only') === 1,
+     search('Kept Here Only') + ' in the list');
+  // searching redrew the list; the passage itself is still the one on the page
+  const q0 = doc.getElementById('q');
+  q0.value = '';
+  q0.dispatchEvent(new w.Event('input'));
+  await wait(40);
+
+  /* --- and taking one out ------------------------------------------------- */
+  w.confirm = () => true;
+  click(w, menu().querySelector('.iconbtn'));
+  posts.length = 0;
+  click(w, doc.getElementById('passage-delete'));
+  await wait(300);
+  ok('Delete tells the sheet to take it out',
+     (posts.find(p => p.body.action === 'delpassage') || {}).body !== undefined,
+     posts.map(p => p.body.action).join(', '));
+  ok('  and it is gone from the list', search('Kept Here Only') === 0);
+  ok('  and from the device', !JSON.parse(store[MINE]).some(r => r.title === 'Kept Here Only'),
+     store[MINE]);
+
   /* --- and it is there on the next visit ---------------------------------- */
   const b = page(store, [], () => ({ ok: true }));
   await wait(900);
@@ -198,13 +271,45 @@ const fill = (g, title, body) => {
       last.paras.length === 2 && last.paras[1].text === 'Second para.';
   })(), JSON.stringify(sandbox.__buildData().readings.slice(-1)));
 
+  /* --- the script side: putting one right, and taking one out ------------ */
+  const fixed2 = JSON.parse(sandbox.__doPost({
+    postData: { contents: JSON.stringify({
+      key: CFG.key, action: 'editpassage',
+      was: { title: 'A New Passage' },
+      entry: { title: 'A Renamed Passage', paras: ['Only one para now.'] },
+    }) },
+  }));
+  ok('doPost handles the editpassage action', fixed2.ok === true, JSON.stringify(fixed2));
+  ok('  the rows it stood on are the rows it still stands on',
+     tab.grid.length === before + 2 &&
+     tab.grid[before][1] === 'A Renamed Passage' &&
+     tab.grid[before + 1][1] === 'Only one para now.',
+     JSON.stringify(tab.grid.slice(before)));
+  ok('  and its number is left alone', String(tab.grid[before][0]) === String(nextNo),
+     String(tab.grid[before][0]));
+
+  const gone = JSON.parse(sandbox.__doPost({
+    postData: { contents: JSON.stringify({
+      key: CFG.key, action: 'delpassage', was: { title: 'A Renamed Passage' },
+    }) },
+  }));
+  ok('doPost handles the delpassage action, both rows of it',
+     gone.ok === true && tab.grid.length === before,
+     JSON.stringify(gone) + ' — ' + tab.grid.length + ' rows');
+  ok('  and a passage that is not there is said so',
+     JSON.parse(sandbox.__doPost({
+       postData: { contents: JSON.stringify({
+         key: CFG.key, action: 'delpassage', was: { title: 'Never Existed' },
+       }) },
+     })).ok === false);
+
   const empty = JSON.parse(sandbox.__doPost({
     postData: { contents: JSON.stringify({
       key: CFG.key, action: 'passage', entry: { title: 'No Body', paras: [] },
     }) },
   }));
   ok('a passage with no text is refused, and nothing is written',
-     empty.ok === false && tab.grid.length === before + 2, empty.error);
+     empty.ok === false && tab.grid.length === before, empty.error);
 
   done(a.errs.concat(b.errs, c.errs, d.errs, locked.errs));
 })();

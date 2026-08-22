@@ -176,6 +176,9 @@ function fakeSheet(rows) {
       for (let i = 0; i < n; i++) g.splice(at - 1, 0, ['', '', '', '']);
     },
     deleteRows: (at, n) => { g.splice(at - 1, n); },
+    insertRowsAfter: (at, n) => {
+      for (let i = 0; i < n; i++) g.splice(at, 0, ['', '', '', '']);
+    },
     getRange: (row, col, nRows, nCols) => {
       nRows = nRows === undefined ? 1 : nRows;
       nCols = nCols === undefined ? 1 : nCols;
@@ -183,6 +186,10 @@ function fakeSheet(rows) {
       return {
         getDisplayValues: () => g.slice(row - 1, row - 1 + nRows)
           .map(r => r.slice(col - 1, col - 1 + nCols)),
+        setValue: v => {
+          while (g.length < row) g.push(['', '', '', '']);
+          g[row - 1][col - 1] = v;
+        },
         setValues: vals => {
           for (let i = 0; i < vals.length; i++) {
             while (g.length < row - 1 + i + 1) g.push(['', '', '', '']);

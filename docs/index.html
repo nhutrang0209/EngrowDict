@@ -2658,6 +2658,13 @@ a.btn[hidden] { display: none; }
 
   function readingView(r, lead) {
     var w = el("div", "read");
+    // a chapter of a book is read the same way but is not the sheet's to edit
+    if (view === "read" && mayAdd()) {
+      var nav = el("div", "entry-nav");
+      nav.appendChild(el("span", "grow"));
+      nav.appendChild(passageMenu(r));
+      w.appendChild(nav);
+    }
     w.appendChild(el("h1", null, r.title));
     var words = r._text.split(/\s+/).length;
     w.appendChild(el("p", "meta",
@@ -3047,7 +3054,9 @@ a.btn[hidden] { display: none; }
     dlg.id = "pass-dlg";
 
     var head = el("div", "dlg-head");
-    head.appendChild(el("h2", null, "Add a passage"));
+    var h = el("h2", null, "Add a passage");
+    h.id = "pass-head";
+    head.appendChild(h);
     head.appendChild(el("p", null, "The title, then the passage itself."));
     dlg.appendChild(head);
 
@@ -3068,6 +3077,16 @@ a.btn[hidden] { display: none; }
     dlg.appendChild(body);
 
     var foot = el("div", "dlg-foot");
+    var toSheetRow = el("label", "checkrow");
+    toSheetRow.id = "pass-to-sheet-row";
+    toSheetRow.hidden = true;
+    var cb = el("input");
+    cb.type = "checkbox";
+    cb.id = "pass-to-sheet";
+    cb.checked = true;
+    toSheetRow.appendChild(cb);
+    toSheetRow.appendChild(el("span", null, "Write straight into the sheet"));
+    foot.appendChild(toSheetRow);
     var msg = el("span", "dlg-msg");
     msg.id = "pass-msg";
     foot.appendChild(msg);
@@ -3085,11 +3104,25 @@ a.btn[hidden] { display: none; }
     return dlg;
   }
 
-  function openPassageForm() {
+  /* Add and Edit are the same form; what it was opened on is what tells Save
+     whether to write another passage or put one right. */
+  var editingPassage = null;
+
+  function openPassageForm(existing) {
     if (!mayAdd()) { openSettings(true); return; }
+    editingPassage = existing || null;
     var dlg = document.getElementById("pass-dlg");
-    dlg.querySelector("[name=ptitle]").value = "";
-    dlg.querySelector("[name=pbody]").value = "";
+    dlg.querySelector("[name=ptitle]").value = existing ? existing.title : "";
+    dlg.querySelector("[name=pbody]").value = existing
+      ? existing.paras.map(function (p) {
+        return (p.mark ? p.mark + " " : "") + p.text;
+      }).join("\n") : "";
+    document.getElementById("pass-head").textContent = existing
+      ? "Edit a passage" : "Add a passage";
+    document.getElementById("pass-save").textContent = existing
+      ? "Save changes" : "Save passage";
+    var tick = document.getElementById("pass-to-sheet");
+    if (tick) tick.checked = existing ? !!existing.inSheet || !existing.mine : true;
     passMsg("", "");
     dlg.showModal();
     dlg.querySelector("[name=ptitle]").focus();
@@ -3102,41 +3135,60 @@ a.btn[hidden] { display: none; }
     msg.textContent = text;
   }
 
-  function savePassage() {
+  function readPassageForm() {
     var dlg = document.getElementById("pass-dlg");
     var title = dlg.querySelector("[name=ptitle]").value.trim();
     var body = dlg.querySelector("[name=pbody]").value;
-    if (!title) { passMsg("Give it a title first.", ""); return; }
+    if (!title) return { err: "Give it a title first." };
     var paras = [];
     body.split(/\n+/).forEach(function (line) {
       var one = line.replace(/[ \t]+/g, " ").trim();
       if (one) paras.push(one);
     });
-    if (!paras.length) { passMsg("Paste the passage itself.", ""); return; }
+    if (!paras.length) return { err: "Paste the passage itself." };
+    return { title: title, paras: paras };
+  }
 
+  function savePassage() {
+    var got = readPassageForm();
+    if (got.err) { passMsg(got.err, ""); return; }
+    var dlg = document.getElementById("pass-dlg");
     var btn = document.getElementById("pass-save");
+    var tick = document.getElementById("pass-to-sheet");
+    var toSheet = canWriteSheet() && (!tick || tick.checked);
+    var was = editingPassage;
     btn.disabled = true;
-    var toSheet = canWriteSheet();
     passMsg(toSheet ? "Writing it into the sheet…" : "Saving…", "warn");
 
-    var job = toSheet
-      ? callSheet({ action: "passage", entry: { title: title, paras: paras } })
-      : Promise.resolve({ ok: true });
+    var job;
+    if (was) {
+      job = toSheet
+        ? callSheet({ action: "editpassage", was: { title: was.title },
+                      entry: { title: got.title, paras: got.paras } })
+        : Promise.resolve({ ok: true });
+    } else {
+      job = toSheet
+        ? callSheet({ action: "passage", entry: { title: got.title, paras: got.paras } })
+        : Promise.resolve({ ok: true });
+    }
 
     job.then(function (res) {
-      var kept = myPassages();
-      var one = {
-        title: title,
-        index: (res && res.index) ? String(res.index) : "",
-        paras: paras.map(function (t) { return { text: t }; }),
-        mine: true,
-        inSheet: !!toSheet
-      };
-      kept.push(one);
-      keepPassages(kept);
-      READINGS.push(indexPassage(one, "m" + (READINGS.length + kept.length)));
+      var one = was || { index: "", mine: true };
+      one.title = got.title;
+      one.paras = got.paras.map(function (t) { return { text: t }; });
+      if (res && res.index) one.index = String(res.index);
+      if (toSheet) one.inSheet = true;
+      if (was) {
+        indexPassage(one, one.id);
+      } else {
+        one.mine = true;
+        one.inSheet = !!toSheet;
+        READINGS.push(indexPassage(one, "m" + (READINGS.length + 1)));
+      }
+      if (one.mine) keepMine(one, was);
       rebuild();
       dlg.close();
+      editingPassage = null;
       if (view !== "read") {
         view = "read";
         selectedRead = null;
@@ -3147,13 +3199,65 @@ a.btn[hidden] { display: none; }
       refresh();
       select(one.id);
       showDetail();
-      toast(toSheet ? "Wrote “" + title + "” into the sheet"
-        : "Saved “" + title + "” on this device", true);
+      toast((was ? "Corrected “" : "Saved “") + one.title
+        + (toSheet ? "” in the sheet" : "” on this device"), true);
     }, function (err) {
       passMsg("Could not write it into the sheet: "
         + (err && err.message ? err.message : String(err)), "");
     }).then(function () {
       btn.disabled = false;
+    });
+  }
+
+  /* The device's own copy of a passage: added here, or edited here before a
+     publish has brought the sheet's version back down. */
+  function keepMine(one, existing) {
+    var list = myPassages().filter(function (r) {
+      return !existing || r.title !== existing.title;
+    });
+    list.push({ title: one.title, index: one.index, mine: true,
+                inSheet: !!one.inSheet, paras: one.paras });
+    keepPassages(list);
+  }
+
+  /* What can be done to a passage, behind the same one button an entry has. */
+  function passageMenu(r) {
+    var m = makeMenu("☰", "Options for this passage");
+    var edit = el("button", "menu-item", "Edit passage");
+    edit.type = "button";
+    edit.id = "passage-edit";
+    edit.addEventListener("click", function () {
+      m.close();
+      openPassageForm(r);
+    });
+    m.menu.appendChild(edit);
+    var del = el("button", "menu-item danger", "Delete this passage");
+    del.type = "button";
+    del.id = "passage-delete";
+    del.addEventListener("click", function () {
+      m.close();
+      removePassage(r);
+    });
+    m.menu.appendChild(del);
+    return m.wrap;
+  }
+
+  function removePassage(r) {
+    if (!window.confirm("Remove “" + r.title + "” from the passages?")) return;
+    var fromSheet = canWriteSheet() && (r.inSheet || !r.mine);
+    var job = fromSheet
+      ? callSheet({ action: "delpassage", was: { title: r.title } })
+      : Promise.resolve({ ok: true });
+    job.then(function () {
+      keepPassages(myPassages().filter(function (x) { return x.title !== r.title; }));
+      READINGS = READINGS.filter(function (x) { return x.id !== r.id; });
+      selectedRead = null;
+      selectedId = null;
+      rebuild();
+      refresh();
+      toast("Removed “" + r.title + "”");
+    }, function (err) {
+      toast("Could not remove it: " + (err && err.message ? err.message : String(err)));
     });
   }
 
@@ -5208,6 +5312,8 @@ a.btn[hidden] { display: none; }
     syncViewButtons();
     var row = document.getElementById("to-sheet-row");
     if (row) row.hidden = !canWriteSheet();
+    var prow = document.getElementById("pass-to-sheet-row");
+    if (prow) prow.hidden = !canWriteSheet();
   }
 
   /* ---- page chrome ---------------------------------------------------------- */

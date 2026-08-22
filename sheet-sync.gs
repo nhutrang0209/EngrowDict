@@ -326,6 +326,24 @@ function doPost(e) {
     if (body.action === 'draft') {
       return out(draftEntry(body.word, { eg: body.eg, vi: body.vi }));
     }
+    if (body.action === 'editpassage') {
+      var eplock = LockService.getScriptLock();
+      eplock.waitLock(20000);
+      try {
+        return out(editPassage(body.was, body.entry));
+      } finally {
+        eplock.releaseLock();
+      }
+    }
+    if (body.action === 'delpassage') {
+      var dplock = LockService.getScriptLock();
+      dplock.waitLock(20000);
+      try {
+        return out(deletePassage(body.was));
+      } finally {
+        dplock.releaseLock();
+      }
+    }
     if (body.action === 'passage') {
       var plock = LockService.getScriptLock();
       plock.waitLock(20000);
@@ -642,6 +660,64 @@ function addPassage(p) {
   var at = sh.getLastRow() + 1;
   sh.getRange(at, 1, 2, 2).setValues([[next, title], ['', lines.join('\n')]]);
   return { ok: true, index: next, row: at, paragraphs: lines.length };
+}
+
+/** The rows one passage stands on: the numbered title, and the body under it. */
+function findPassage(sh, title) {
+  var last = sh.getLastRow();
+  if (last < 2) return null;
+  var vals = sh.getRange(1, 1, last, 2).getDisplayValues();
+  var want = flat(title).toLowerCase();
+  for (var i = 1; i < vals.length; i++) {
+    if (!txt(vals[i][0])) continue;                      // a body row
+    if (flat(vals[i][1]).toLowerCase() !== want) continue;
+    var body = (i + 1 < vals.length && !txt(vals[i + 1][0])) ? i + 2 : 0;
+    return { row: i + 1, bodyRow: body, index: txt(vals[i][0]) };
+  }
+  return null;
+}
+
+/** Putting a passage right: the title cell and the body cell, in place. */
+function editPassage(was, p) {
+  var sh = book().getSheetByName('Reading Passage');
+  if (!sh) return { ok: false, error: 'No tab called Reading Passage' };
+  var title = flat(p && p.title);
+  var lines = [];
+  var paras = (p && p.paras) || [];
+  for (var i = 0; i < paras.length; i++) {
+    var one = flat(paras[i]);
+    if (one) lines.push(one);
+  }
+  if (!title) return { ok: false, error: 'The passage has no title' };
+  if (!lines.length) return { ok: false, error: 'The passage has no text' };
+
+  var at = findPassage(sh, was && was.title);
+  if (!at) {
+    return { ok: false, error: 'Could not find "' + flat(was && was.title)
+      + '" among the passages. It may have been changed in the sheet since.' };
+  }
+  sh.getRange(at.row, 2).setValue(title);
+  if (at.bodyRow) {
+    sh.getRange(at.bodyRow, 2).setValue(lines.join('\n'));
+  } else {
+    sh.insertRowsAfter(at.row, 1);
+    sh.getRange(at.row + 1, 1, 1, 2).setValues([['', lines.join('\n')]]);
+  }
+  return { ok: true, index: at.index, row: at.row, paragraphs: lines.length };
+}
+
+/** And taking one out: both its rows, the body first so the other stays put. */
+function deletePassage(was) {
+  var sh = book().getSheetByName('Reading Passage');
+  if (!sh) return { ok: false, error: 'No tab called Reading Passage' };
+  var at = findPassage(sh, was && was.title);
+  if (!at) {
+    return { ok: false, error: 'Could not find "' + flat(was && was.title)
+      + '" among the passages.' };
+  }
+  if (at.bodyRow) sh.deleteRows(at.bodyRow, 1);
+  sh.deleteRows(at.row, 1);
+  return { ok: true, removed: at.bodyRow ? 2 : 1 };
 }
 
 /** The number after the largest already in the first column. */
