@@ -65,6 +65,10 @@ const openMenu = g => {
   ok('  it opens a column beside the passage, not under it',
      !!doc.querySelector('.readsplit .read') && !!doc.querySelector('.readsplit .aipane'),
      doc.querySelector('.readsplit') && doc.querySelector('.readsplit').className);
+  ok('  and the pane gives the pair the whole width, margin and all',
+     doc.getElementById('detail-inner').className === 'detail-inner wide split' &&
+     /\.detail-inner\.split \{ max-width: none/.test(read('app.css')),
+     doc.getElementById('detail-inner').className);
   ok('  and says it is working on it',
      /translating/.test(doc.getElementById('ai-by').textContent),
      doc.getElementById('ai-by').textContent);
@@ -118,8 +122,10 @@ const openMenu = g => {
      doc.querySelector('.ai-para .vi').textContent);
 
   click(w, doc.getElementById('ai-close'));
-  ok('closing it gives the passage the width back',
-     !doc.querySelector('.aipane') && !!doc.querySelector('.read .prose'));
+  ok('closing it gives the passage its measure back',
+     !doc.querySelector('.aipane') && !!doc.querySelector('.read .prose') &&
+     doc.getElementById('detail-inner').className === 'detail-inner wide',
+     doc.getElementById('detail-inner').className);
 
   /* --- another passage does not keep the last one's translation ------------ */
   click(w, doc.getElementById('passage-ai'));   // gone with the pane

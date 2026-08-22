@@ -841,6 +841,10 @@ dialog::backdrop { background: rgba(8, 14, 11, .5); backdrop-filter: blur(2px); 
    Two columns of the same passage, and a rule between them that can be
    dragged: which language wants the room is the reader's to decide, and it
    changes by the paragraph. */
+/* The measure a single column of prose is capped at leaves a wide margin on a
+   wide screen, which is right for one column and is a band of nothing beside a
+   second one. With the translation open the pair take the pane whole. */
+.detail-inner.split { max-width: none; padding-right: 18px; }
 .readsplit {
   display: grid; align-items: start;
   grid-template-columns: minmax(0, 1fr) 7px var(--ai-w, 420px);
@@ -874,7 +878,8 @@ dialog::backdrop { background: rgba(8, 14, 11, .5); backdrop-filter: blur(2px); 
   text-transform: uppercase; color: var(--faint);
 }
 .ai-body {
-  flex: 1; overflow-y: auto; padding: 18px 4px 40px 0;
+  flex: 1; overflow-y: auto; scrollbar-gutter: stable;
+  padding: 18px 2px 40px 0;
   display: flex; flex-direction: column; gap: 18px;
 }
 .ai-para { position: relative; }
@@ -2032,6 +2037,9 @@ a.btn[hidden] { display: none; }
     }
     if (view === "read") {
       if (selectedRead && aiPane && aiPane.id === selectedRead.id) {
+        // two columns want the whole pane: the margin a single column reads
+        // better for is a strip of nothing between the translation and the edge
+        host.className = "detail-inner wide split";
         var split = el("div", "readsplit");
         split.appendChild(readingView(selectedRead));
         split.appendChild(aiSplitter());

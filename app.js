@@ -678,6 +678,9 @@
     }
     if (view === "read") {
       if (selectedRead && aiPane && aiPane.id === selectedRead.id) {
+        // two columns want the whole pane: the margin a single column reads
+        // better for is a strip of nothing between the translation and the edge
+        host.className = "detail-inner wide split";
         var split = el("div", "readsplit");
         split.appendChild(readingView(selectedRead));
         split.appendChild(aiSplitter());
