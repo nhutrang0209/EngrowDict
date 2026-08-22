@@ -3667,6 +3667,10 @@
     watchPlace(detail);
     watchTop(detail);
     measureBar();
+    // the bar is a different height once its own fonts arrive
+    if (document.fonts && document.fonts.ready && document.fonts.ready.then) {
+      document.fonts.ready.then(measureBar);
+    }
     window.addEventListener("resize", function () {
       paint(true);
       measureBar();

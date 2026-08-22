@@ -959,21 +959,27 @@ a.btn[hidden] { display: none; }
   body:not([data-view="detail"]) .detail { display: none; }
   .grid-word { grid-template-columns: 1fr; }
   .fill-box { justify-content: space-between; }
-  /* Three rows of bar over a column of prose. While a passage is open the bar
-     is lifted out of the flow and the passage reads under it, so sliding it
-     away moves nothing but itself — the script slides it by the same number of
-     pixels the thumb moved, and only the settling at the end is animated.
+  /* A bar over a column of prose. While a passage is open the bar is lifted
+     out of the flow and the passage reads under it, so sliding it away moves
+     nothing but itself — the script slides it by the same number of pixels the
+     thumb moved, and only the settling at the end is animated.
+
+     Only while a passage is open. Lifted out of the flow everywhere, the space
+     it left had to be given back as padding the height of the bar, and that
+     height is a number measured by the script: whenever the two disagreed —
+     before the fonts land, after the bar rewraps — the difference showed as a
+     band of nothing under the search box. Nothing scrolls away in the list
+     view anyway, so there the bar stays where it is and there is no number to
+     get wrong.
 
      --bar-h is measured by the script: the height of a wrapped bar is not
      something a stylesheet can know. */
-  .top {
+  .top.settling { transition: transform .18s ease-out; }
+  body[data-view="detail"] .top {
     position: fixed; top: 0; left: 0; right: 0; z-index: 45;
     will-change: transform;
   }
-  .top.settling { transition: transform .18s ease-out; }
-  .work { padding-top: var(--bar-h, 132px); }
   /* Reading: the passage starts below the bar and carries on underneath it. */
-  body[data-view="detail"] .work { padding-top: 0; }
   body[data-view="detail"] .detail-inner { padding-top: calc(26px + var(--bar-h, 132px)); }
 }
 
@@ -4746,6 +4752,10 @@ a.btn[hidden] { display: none; }
     watchPlace(detail);
     watchTop(detail);
     measureBar();
+    // the bar is a different height once its own fonts arrive
+    if (document.fonts && document.fonts.ready && document.fonts.ready.then) {
+      document.fonts.ready.then(measureBar);
+    }
     window.addEventListener("resize", function () {
       paint(true);
       measureBar();

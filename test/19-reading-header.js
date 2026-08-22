@@ -100,8 +100,12 @@ async function openPassage(g) {
 
   /* --- and the passage is not moved by any of it --------------------------- */
   const css = read('app.css');
-  ok('under that breakpoint the bar is out of the flow, so nothing else moves',
-     /@media \(max-width: 760px\)[\s\S]*\.top \{\s*position: fixed/.test(css));
+  ok('under that breakpoint the bar is out of the flow while a passage is read',
+     /@media \(max-width: 760px\)[\s\S]*body\[data-view="detail"\] \.top \{\s*\n?\s*position: fixed/
+       .test(css));
+  ok('  and stays in it everywhere else, so no measured padding can be wrong',
+     !/@media \(max-width: 760px\)[\s\S]*\n  \.top \{\s*\n?\s*position: fixed/.test(css) &&
+     !/\.work \{ padding-top: var\(--bar-h/.test(css));
   ok('  and the passage is padded past it rather than pushed by it',
      /body\[data-view="detail"\] \.detail-inner \{ padding-top: calc\(26px \+ var\(--bar-h/
        .test(css));
