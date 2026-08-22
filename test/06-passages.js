@@ -63,8 +63,10 @@ ok('the shell itself stays light', shell.length < 278000,
      doc.querySelector('.hit.passage .idx')?.textContent === '1' &&
      !doc.querySelector('.hit .senses-n'),
      doc.querySelector('.hit.passage .idx')?.textContent);
+  // the passages are whatever the sheet published last, so the row is checked
+  // against the data rather than against a title written down here
   ok('  and the title sits beside it',
-     doc.querySelector('.hit.passage .col .hw')?.textContent === 'Pine Trees',
+     doc.querySelector('.hit.passage .col .hw')?.textContent === data.readings[0].title,
      doc.querySelector('.hit.passage .col .hw')?.textContent);
 
   ok('  and says selections can be looked up',
