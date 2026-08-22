@@ -119,8 +119,8 @@ const mk = store => boot({
      c.doc.querySelectorAll('.read .prose p').length > 1,
      c.doc.querySelector('.read h1')?.textContent + ' — ' +
      c.doc.querySelectorAll('.read .prose p').length + ' paragraphs');
-  ok('  and the detail pane is the track that grows',
-     /body\[data-list="off"\] \.work \{ grid-template-columns: 7px 1fr/
+  ok('  and the detail pane is the track that grows, the rail keeping its own',
+     /body\[data-list="off"\] \.work \{ grid-template-columns: var\(--nav-w\) 7px 1fr/
        .test(read('app.css')));
 
   done(a.errs.concat(b.errs, c.errs));

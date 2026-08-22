@@ -36,6 +36,7 @@ ol, ul { padding: 0; list-style: none; }
   --r-m: 13px;
   --r-l: 18px;
   --rail-w: 30px;
+  --nav-w: 46px;
   --list-w: 348px;
   --top-h: 62px;
 }
@@ -119,23 +120,39 @@ body {
   letter-spacing: -.022em; white-space: nowrap;
 }
 
-/* two views, shown as a segmented control rather than a switch */
-.tabs {
-  display: flex; gap: 2px; flex: none;
-  padding: 3px; border-radius: var(--r-m); background: var(--sunk);
+/* ---- the places, down the side ------------------------------------------
+   Across the top they fought the search box for the middle of the bar, and
+   every new place made it worse. Down the side there is room for as many as
+   there ever are, and shut they cost 46 pixels. */
+.nav {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 9px 7px; overflow: hidden;
+  background: var(--surface); border-right: 1px solid var(--rule);
 }
 .tab {
+  display: flex; align-items: center; gap: 10px;
   border: 0; background: none; cursor: pointer;
-  padding: 6px 15px; border-radius: 10px;
+  padding: 9px 8px; border-radius: 10px;
   font-size: 13.5px; font-weight: 500; color: var(--muted);
-  transition: background .14s ease, color .14s ease, box-shadow .14s ease;
+  white-space: nowrap; text-align: left;
+  transition: background .14s ease, color .14s ease;
 }
 .tab[hidden] { display: none; }
-.tab:hover { color: var(--ink); }
+.tab:hover { background: var(--sunk); color: var(--ink); }
 .tab[aria-selected="true"] {
-  background: var(--surface); color: var(--ink);
-  box-shadow: var(--lift-1); font-weight: 600;
+  background: var(--accent-soft); color: var(--accent-hi); font-weight: 600;
 }
+.tab .ico { flex: none; display: inline-flex; width: 18px; height: 18px; }
+.tab .ico svg { width: 18px; height: 18px; }
+.tab .lab { overflow: hidden; text-overflow: ellipsis; }
+body[data-nav="off"] .tab { justify-content: center; padding: 9px 0; }
+body[data-nav="off"] .tab .lab { display: none; }
+.nav-fold {
+  margin-top: auto; align-self: stretch;
+  border: 0; background: none; cursor: pointer; color: var(--faint);
+  padding: 7px 0; border-radius: 8px; font-size: 13px; line-height: 1;
+}
+.nav-fold:hover { background: var(--sunk); color: var(--ink); }
 
 .search { position: relative; flex: 1; max-width: 620px; margin: 0 auto; }
 .search input {
@@ -218,15 +235,16 @@ body {
 }
 .banner[hidden] { display: none; }
 
-/* ---- workspace: letter rail | result list | detail pane ----------------- */
+/* ---- workspace: places | letter rail | result list | detail pane --------- */
+body[data-nav="on"] { --nav-w: 176px; }
 .work {
   flex: 1; min-height: 0; display: grid;
-  grid-template-columns: var(--rail-w) var(--list-w) 7px 1fr;
+  grid-template-columns: var(--nav-w) var(--rail-w) var(--list-w) 7px 1fr;
 }
 /* Folded, only two children are left in the grid, so the template has to
    describe two tracks — leaving four would drop the detail pane into a
    zero-width column and take the page with it. */
-body[data-list="off"] .work { grid-template-columns: 7px 1fr; }
+body[data-list="off"] .work { grid-template-columns: var(--nav-w) 7px 1fr; }
 body[data-list="off"] .alpha, body[data-list="off"] .list { display: none; }
 body.resizing { cursor: col-resize; user-select: none; }
 
@@ -905,7 +923,17 @@ a.btn[hidden] { display: none; }
   .detail-inner { padding: 28px 28px 72px; }
 }
 @media (max-width: 760px) {
-  .work { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  /* A rail down the side of a phone is width nobody has. It lies back down as
+     a strip, with the names on it: there is no hovering for a tooltip here. */
+  .work { grid-template-columns: 1fr; grid-template-rows: auto auto 1fr; }
+  .nav {
+    flex-direction: row; gap: 4px; padding: 6px 8px; overflow-x: auto;
+    border-right: 0; border-bottom: 1px solid var(--rule); scrollbar-width: none;
+  }
+  .nav::-webkit-scrollbar { display: none; }
+  body[data-nav="off"] .tab { justify-content: flex-start; padding: 7px 12px; }
+  body[data-nav="off"] .tab .lab, .nav .tab .lab { display: inline; }
+  .nav-fold { display: none; }
   .alpha {
     flex-direction: row; padding: 4px; gap: 1px;
     border-bottom: 1px solid var(--rule); overflow-x: auto; scrollbar-width: none;
@@ -918,7 +946,11 @@ a.btn[hidden] { display: none; }
   .search { order: 3; flex-basis: 100%; max-width: none; }
   .list { border-left: 0; border-right: 0; }
   .detail-inner { padding: 26px 18px 72px; }
-  body[data-view="detail"] .list, body[data-view="detail"] .alpha { display: none; }
+  /* Reading takes the whole phone, and the passage runs up under the bar: a
+     strip of places left in that gap would read from behind it. Back goes to
+     the list, and the places are there. */
+  body[data-view="detail"] .list, body[data-view="detail"] .alpha,
+  body[data-view="detail"] .nav { display: none; }
   body[data-view="detail"] .back { display: inline-flex; }
   body:not([data-view="detail"]) .detail { display: none; }
   .grid-word { grid-template-columns: 1fr; }

@@ -1208,6 +1208,8 @@
     try { s = JSON.parse(localStorage.getItem(LIST_KEY) || "{}"); } catch (err) { s = {}; }
     listWidth(Math.min(LIST_MAX, Math.max(LIST_MIN, s.w || LIST_DEFAULT)));
     setListOpen(s.open !== false);
+    // room for the names on a wide screen, icons alone where it is tighter
+    setNavOpen(typeof s.nav === "boolean" ? s.nav : (window.innerWidth || 1200) >= 1100);
   }
 
   function buildResizer() {
@@ -1275,16 +1277,39 @@
               ["read", "Passages", "tab-passages"],
               ["book", "Books", "tab-books"]];
 
-  function buildTabs() {
-    var strip = el("div", "tabs");
-    strip.id = "tabs";
-    strip.setAttribute("role", "tablist");
+  /* One stroke weight, one size, drawn the way the search glass in the bar
+     above them is. Anything busier reads as pasted on beside type this plain. */
+  var ICONS = {
+    vocab: '<path d="M2.6 3.4h3.6a2 2 0 0 1 1.8 1.1 2 2 0 0 1 1.8-1.1h3.6v9.2H9.8a2 2 0 0 0-1.8 1 2 2 0 0 0-1.8-1H2.6z"/><path d="M8 4.5v8.1"/>',
+    read: '<rect x="3.2" y="2.6" width="9.6" height="10.8" rx="1.6"/><path d="M5.6 5.8h4.8M5.6 8h4.8M5.6 10.2h3"/>',
+    book: '<rect x="2.6" y="3" width="3.2" height="10" rx="1"/><rect x="6.4" y="3" width="3.2" height="10" rx="1"/><path d="M10.6 4.3l2.4.6-1.9 8.2-2.4-.6z"/>',
+    translate: '<circle cx="8" cy="8" r="5.4"/><path d="M2.7 8h10.6"/><path d="M8 2.6c1.5 1.6 2.3 3.5 2.3 5.4S9.5 12 8 13.4C6.5 12 5.7 9.9 5.7 8s.8-3.8 2.3-5.4z"/>'
+  };
+
+  /* The places to be, down the side rather than across the top: the bar was
+     already two things wide — where you are and what you are looking for —
+     and a fourth place would have been the one that broke it. Collapsed, the
+     rail is the icons alone; the choice is remembered. */
+  function buildNav() {
+    var nav = el("nav", "nav");
+    nav.id = "tabs";
+    nav.setAttribute("role", "tablist");
+    nav.setAttribute("aria-orientation", "vertical");
+    nav.setAttribute("aria-label", "Places");
     TABS.forEach(function (t) {
-      var b = el("button", "tab", t[1]);
+      var b = el("button", "tab");
       b.type = "button";
       b.id = t[2];
       b.setAttribute("role", "tab");
+      b.title = t[1];                       // the label, for when it is hidden
+      b.setAttribute("aria-label", t[1]);
       b.dataset.view = t[0];
+      var ico = el("span", "ico");
+      ico.innerHTML = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" '
+        + 'stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" '
+        + 'aria-hidden="true">' + (ICONS[t[0]] || "") + '</svg>';
+      b.appendChild(ico);
+      b.appendChild(el("span", "lab", t[1]));
       b.addEventListener("click", function () {
         if (view === t[0]) return;
         if (t[0] === "vocab") markPlace(); else cameFrom = null;
@@ -1299,9 +1324,36 @@
         syncViewButtons();
         refresh();
       });
-      strip.appendChild(b);
+      nav.appendChild(b);
     });
-    return strip;
+
+    var fold = el("button", "nav-fold", "«");
+    fold.type = "button";
+    fold.id = "nav-fold";
+    fold.addEventListener("click", function () {
+      setNavOpen(document.body.dataset.nav !== "on");
+    });
+    nav.appendChild(fold);
+    return nav;
+  }
+
+  /* Open is icon and word, shut is icon alone. Kept beside the list's own
+     width, since both are the same kind of answer: how much room the sides
+     are worth to whoever is reading. */
+  function setNavOpen(open) {
+    document.body.dataset.nav = open ? "on" : "off";
+    var fold = document.getElementById("nav-fold");
+    if (fold) {
+      fold.textContent = open ? "«" : "»";
+      fold.title = open ? "Show the icons only" : "Show the names too";
+      fold.setAttribute("aria-label", fold.title);
+      fold.setAttribute("aria-expanded", String(open));
+    }
+    try {
+      var s = JSON.parse(localStorage.getItem(LIST_KEY) || "{}");
+      s.nav = open;
+      localStorage.setItem(LIST_KEY, JSON.stringify(s));
+    } catch (err) { /* private mode */ }
   }
 
   /* Which tab is lit, and what the search box says it will search. */
@@ -3461,7 +3513,7 @@
     var brand = el("div", "brand");
     brand.appendChild(el("span", "mark", "EngrowDict"));
     top.appendChild(brand);
-    top.appendChild(buildTabs());
+
 
     var back = el("button", "btn btn-quiet back", "← List");
     back.type = "button";
@@ -3568,6 +3620,7 @@
     app.appendChild(bn);
 
     var work = el("div", "work");
+    work.appendChild(buildNav());
     var alpha = el("nav", "alpha");
     alpha.id = "alpha";
     alpha.setAttribute("aria-label", "Jump by letter");
