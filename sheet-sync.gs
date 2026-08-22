@@ -326,6 +326,15 @@ function doPost(e) {
     if (body.action === 'draft') {
       return out(draftEntry(body.word, { eg: body.eg, vi: body.vi }));
     }
+    if (body.action === 'passage') {
+      var plock = LockService.getScriptLock();
+      plock.waitLock(20000);
+      try {
+        return out(addPassage(body.entry));
+      } finally {
+        plock.releaseLock();
+      }
+    }
     if (body.action === 'edit') {
       var elock = LockService.getScriptLock();
       elock.waitLock(20000);
@@ -609,6 +618,43 @@ function findEntryRows(sh, tab, was) {
     return { row: i + 1, rows: n };
   }
   return null;
+}
+
+/* ------------------------------------------------------ a passage of theirs */
+
+/** Two rows, the way the tab is already written: the numbered title, and the
+ *  body under it with a line to a paragraph. Which is what parse_sheet.py
+ *  reads and what the sync publishes. */
+function addPassage(p) {
+  var sh = book().getSheetByName('Reading Passage');
+  if (!sh) return { ok: false, error: 'No tab called Reading Passage' };
+  var title = flat(p && p.title);
+  var paras = (p && p.paras) || [];
+  var lines = [];
+  for (var i = 0; i < paras.length; i++) {
+    var one = flat(paras[i]);
+    if (one) lines.push(one);
+  }
+  if (!title) return { ok: false, error: 'The passage has no title' };
+  if (!lines.length) return { ok: false, error: 'The passage has no text' };
+
+  var next = nextPassage(sh);
+  var at = sh.getLastRow() + 1;
+  sh.getRange(at, 1, 2, 2).setValues([[next, title], ['', lines.join('\n')]]);
+  return { ok: true, index: next, row: at, paragraphs: lines.length };
+}
+
+/** The number after the largest already in the first column. */
+function nextPassage(sh) {
+  var last = sh.getLastRow();
+  if (last < 2) return 1;
+  var vals = sh.getRange(1, 1, last, 1).getDisplayValues();
+  var max = 0;
+  for (var i = 1; i < vals.length; i++) {
+    var n = parseInt(txt(vals[i][0]).replace('.0', ''), 10);
+    if (!isNaN(n) && n > max) max = n;
+  }
+  return max + 1;
 }
 
 /* ---------------------------------------------------------------- publish */

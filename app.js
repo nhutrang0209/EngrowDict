@@ -1811,6 +1811,154 @@
     return seq.then(function () { return { text: got.join(" "), via: via }; });
   }
 
+  /* ---- passages of your own -----------------------------------------------
+
+     The passages the page ships with come out of the sheet, so a passage added
+     here goes into the sheet as well: two rows, the numbered title and the
+     body under it, exactly where parse_sheet.py and the sync both look for
+     them. It shows up in the list at once, and it stays on this device until a
+     publish brings it back down as one of the sheet's own. */
+  var MINE_READ_KEY = "engrowdict:passages:v1";
+
+  function myPassages() {
+    try {
+      var raw = localStorage.getItem(MINE_READ_KEY);
+      var list = raw ? JSON.parse(raw) : [];
+      return Array.isArray(list) ? list : [];
+    } catch (err) { return []; }
+  }
+
+  function keepPassages(list) {
+    try { localStorage.setItem(MINE_READ_KEY, JSON.stringify(list)); }
+    catch (err) { /* quota */ }
+  }
+
+  function indexPassage(r, id) {
+    r.id = id;
+    r.paras = (r.paras || []).map(function (p) {
+      return typeof p === "string" ? { text: p } : p;
+    });
+    r._text = r.paras.map(function (x) { return x.text; }).join(" ");
+    r._w = norm(r.title);
+    r._all = norm(r.title + " " + r._text);
+    return r;
+  }
+
+  function passageDialog() {
+    var dlg = document.createElement("dialog");
+    dlg.id = "pass-dlg";
+
+    var head = el("div", "dlg-head");
+    head.appendChild(el("h2", null, "Add a passage"));
+    head.appendChild(el("p", null, "The title, then the passage itself."));
+    dlg.appendChild(head);
+
+    var body = el("div", "dlg-body");
+    body.appendChild(field("Title", "ptitle", "The Hemp Revival", false));
+
+    var f = el("label", "field");
+    f.appendChild(el("span", null, "The passage"));
+    var ta = el("textarea");
+    ta.name = "pbody";
+    ta.rows = 12;
+    ta.placeholder = "Paste it here…";
+    f.appendChild(ta);
+    f.appendChild(el("p", "hint",
+      "One paragraph to a line. Lettered paragraphs — A, B, C — are kept as "
+      + "labels, the way the passages already here have them."));
+    body.appendChild(f);
+    dlg.appendChild(body);
+
+    var foot = el("div", "dlg-foot");
+    var msg = el("span", "dlg-msg");
+    msg.id = "pass-msg";
+    foot.appendChild(msg);
+    foot.appendChild(el("span", "spacer2"));
+    var cancel = el("button", "btn", "Cancel");
+    cancel.type = "button";
+    cancel.addEventListener("click", function () { dlg.close(); });
+    foot.appendChild(cancel);
+    var save = el("button", "btn btn-primary", "Save passage");
+    save.type = "button";
+    save.id = "pass-save";
+    save.addEventListener("click", savePassage);
+    foot.appendChild(save);
+    dlg.appendChild(foot);
+    return dlg;
+  }
+
+  function openPassageForm() {
+    if (!mayAdd()) { openSettings(true); return; }
+    var dlg = document.getElementById("pass-dlg");
+    dlg.querySelector("[name=ptitle]").value = "";
+    dlg.querySelector("[name=pbody]").value = "";
+    passMsg("", "");
+    dlg.showModal();
+    dlg.querySelector("[name=ptitle]").focus();
+  }
+
+  function passMsg(text, tone) {
+    var msg = document.getElementById("pass-msg");
+    if (!msg) return;
+    msg.className = "dlg-msg" + (tone ? " " + tone : "");
+    msg.textContent = text;
+  }
+
+  function savePassage() {
+    var dlg = document.getElementById("pass-dlg");
+    var title = dlg.querySelector("[name=ptitle]").value.trim();
+    var body = dlg.querySelector("[name=pbody]").value;
+    if (!title) { passMsg("Give it a title first.", ""); return; }
+    var paras = [];
+    body.split(/\n+/).forEach(function (line) {
+      var one = line.replace(/[ \t]+/g, " ").trim();
+      if (one) paras.push(one);
+    });
+    if (!paras.length) { passMsg("Paste the passage itself.", ""); return; }
+
+    var btn = document.getElementById("pass-save");
+    btn.disabled = true;
+    var toSheet = canWriteSheet();
+    passMsg(toSheet ? "Writing it into the sheet…" : "Saving…", "warn");
+
+    var job = toSheet
+      ? callSheet({ action: "passage", entry: { title: title, paras: paras } })
+      : Promise.resolve({ ok: true });
+
+    job.then(function (res) {
+      var kept = myPassages();
+      var one = {
+        title: title,
+        index: (res && res.index) ? String(res.index) : "",
+        paras: paras.map(function (t) { return { text: t }; }),
+        mine: true,
+        inSheet: !!toSheet
+      };
+      kept.push(one);
+      keepPassages(kept);
+      READINGS.push(indexPassage(one, "m" + (READINGS.length + kept.length)));
+      rebuild();
+      dlg.close();
+      if (view !== "read") {
+        view = "read";
+        selectedRead = null;
+        query = "";
+        if (qInput) qInput.value = "";
+        syncViewButtons();
+      }
+      refresh();
+      select(one.id);
+      showDetail();
+      toast(toSheet ? "Wrote “" + title + "” into the sheet"
+        : "Saved “" + title + "” on this device", true);
+    }, function (err) {
+      passMsg("Could not write it into the sheet: "
+        + (err && err.message ? err.message : String(err)), "");
+    }).then(function () {
+      btn.disabled = false;
+    });
+  }
+
   /* ---- books --------------------------------------------------------------
 
      A book arrives as a shelf entry — its title and the names of its chapters
@@ -3840,8 +3988,11 @@
   function refreshChrome() {
     var add = document.getElementById("add-word");
     if (add) {
-      add.hidden = !canWrite;
-      add.textContent = mayAdd() ? "+ Add word" : "Unlock to add";
+      // the passages are a place words are read, not a place words are kept:
+      // what is added there is a passage
+      add.hidden = !canWrite || view === "translate";
+      add.textContent = !mayAdd() ? "Unlock to add"
+        : view === "read" ? "+ Add passage" : "+ Add word";
     }
     var open = document.getElementById("open-sheet");
     if (open) {
@@ -3914,7 +4065,9 @@
     var add = el("button", "btn btn-primary", "+ Add word");
     add.type = "button";
     add.id = "add-word";
-    add.addEventListener("click", function () { openForm(query.trim()); });
+    add.addEventListener("click", function () {
+      if (view === "read") openPassageForm(); else openForm(query.trim());
+    });
     acts.appendChild(add);
 
     var more = makeMenu("⋯", "More actions");
@@ -4017,6 +4170,7 @@
     app.appendChild(t);
     app.appendChild(buildRail());
     app.appendChild(buildDialog());
+    app.appendChild(passageDialog());
     app.appendChild(buildSettings());
     refreshChrome();
     restoreList();
@@ -4810,13 +4964,21 @@
     readSettings();
     BASE = data;
     READINGS = data.readings || [];
-    READINGS.forEach(function (r, i) {
-      r.id = "r" + i;
-      // tolerate an older data.json still serving plain strings
-      r.paras = r.paras.map(function (p) { return typeof p === "string" ? { text: p } : p; });
-      r._text = r.paras.map(function (x) { return x.text; }).join(" ");
-      r._w = norm(r.title);
-      r._all = norm(r.title + " " + r._text);
+    // tolerate an older data.json still serving plain strings
+    READINGS.forEach(function (r, i) { indexPassage(r, "r" + i); });
+
+    /* Passages added here stay on this device until a publish brings them back
+       down as the sheet's own; then the local copy is dropped rather than
+       shown twice. */
+    var published = {};
+    READINGS.forEach(function (r) { published[r._w] = true; });
+    var waiting = myPassages().filter(function (r) {
+      return r && r.title && !published[norm(r.title)];
+    });
+    if (waiting.length !== myPassages().length) keepPassages(waiting);
+    waiting.forEach(function (r, i) {
+      r.mine = true;
+      READINGS.push(indexPassage(r, "m" + i));
     });
 
     var backup = readBackup();
