@@ -1018,11 +1018,14 @@ a.btn[hidden] { display: none; }
 .tr-card:focus-within { border-color: var(--accent); box-shadow: var(--ring), var(--lift-2); }
 .tr-half { display: flex; flex-direction: column; min-width: 0; }
 .tr-dst { background: var(--tint); border-left: 1px solid var(--rule); }
-.tr-head { display: flex; align-items: center; padding: 14px 20px 0; }
+.tr-head { display: flex; align-items: center; padding: 15px 20px 2px; }
 .tr-head .grow { flex: 1; }
+/* Which language is which is the one thing on this card that has to be read
+   before anything is typed, so it is not set in the grey the page uses for
+   asides it does not mind you missing. */
 .tr-lang {
-  font-family: var(--mono); font-size: 9.5px; letter-spacing: .13em;
-  text-transform: uppercase; color: var(--faint);
+  font-family: var(--mono); font-size: 11.5px; font-weight: 600;
+  letter-spacing: .13em; text-transform: uppercase; color: var(--accent-hi);
 }
 
 /* The turn, on the join. A circle over the rule is the one place it can sit
