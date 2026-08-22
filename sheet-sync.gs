@@ -344,6 +344,16 @@ function doPost(e) {
         dplock.releaseLock();
       }
     }
+    if (body.action === 'orderpassages') {
+      var olock = LockService.getScriptLock();
+      olock.waitLock(20000);
+      try {
+        return out(orderPassages(body.titles));
+      } finally {
+        olock.releaseLock();
+      }
+    }
+    if (body.action === 'aitranslate') return out(translatePassage(body.paras));
     if (body.action === 'passage') {
       var plock = LockService.getScriptLock();
       plock.waitLock(20000);
@@ -638,6 +648,160 @@ function findEntryRows(sh, tab, was) {
   return null;
 }
 
+/* ------------------------------------------ a passage, in Vietnamese, by AI */
+
+/**
+ * The reader's own translation of a passage. Not the gloss column and not a
+ * machine translator: a person reading a passage in a second language wants
+ * the sentence they are looking at said properly in the first one.
+ *
+ * The paragraphs go over numbered and come back numbered, so the two columns
+ * stay level with each other. In batches, because a model handed 900 words and
+ * asked for 900 back is a model that starts summarising near the end.
+ */
+var AI_PARAS_AT_ONCE = 6;
+
+function passageRules() {
+  return 'You translate English passages into Vietnamese for a Vietnamese '
+    + 'learner of English who is reading the English alongside your translation.'
+    + '\n\nRules:\n'
+    + '- Translate the meaning exactly. Nothing added, nothing left out, '
+    + 'nothing summarised.\n'
+    + '- Natural written Vietnamese: what a Vietnamese writer would have '
+    + 'written, not English words in Vietnamese order.\n'
+    + '- One item per numbered paragraph, in the same order, whole. Never join '
+    + 'two paragraphs and never split one.\n'
+    + '- Keep names, titles, numbers, dates and quotations as they are; put '
+    + 'quotation marks back where the English has them.\n'
+    + '- Keep the register: an academic paragraph stays academic, a quoted '
+    + 'speaker keeps their voice.\n'
+    + '- A term of art that a learner would meet in Vietnamese as the English '
+    + 'may keep the English in brackets after the Vietnamese.\n'
+    + '- No notes, no explanations, no romanised pronunciation.\n\n'
+    + 'Answer with a JSON array of strings, one per paragraph, in order. '
+    + 'Nothing else.';
+}
+
+/** Whatever came back, pulled out of the wrapper, one string a paragraph. */
+function paraList(text, howMany) {
+  var m = String(text).match(/\[[\s\S]*\]/);
+  if (!m) throw new Error('The model did not answer with a list');
+  var list = JSON.parse(m[0]);
+  var out = [];
+  for (var i = 0; i < list.length && i < howMany; i++) out.push(flat(list[i]));
+  while (out.length < howMany) out.push('');
+  return out;
+}
+
+/** One ask, whichever service the key belongs to. Returns what it said. */
+function askAI(system, user, key, model) {
+  var kind = aiKind(key), url, opts;
+
+  if (kind === 'gemini') {
+    var names = model ? [model] : GEMINI_MODELS;
+    var gopts = {
+      method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+      headers: { 'x-goog-api-key': key },
+      payload: JSON.stringify({
+        system_instruction: { parts: [{ text: system }] },
+        contents: [{ role: 'user', parts: [{ text: user }] }],
+        generationConfig: { temperature: 0.3, responseMimeType: 'application/json' }
+      })
+    };
+    var trouble = '';
+    for (var n = 0; n < names.length; n++) {
+      var g = UrlFetchApp.fetch(
+        'https://generativelanguage.googleapis.com/v1beta/models/' + names[n]
+        + ':generateContent', gopts);
+      if (g.getResponseCode() === 200) return geminiText(g.getContentText());
+      trouble = 'Gemini answered ' + g.getResponseCode() + ' for ' + names[n] + ': '
+        + String(g.getContentText()).replace(/\s+/g, ' ').slice(0, 120);
+      if (g.getResponseCode() !== 404 && g.getResponseCode() !== 429
+        && g.getResponseCode() !== 503) break;
+    }
+    throw new Error(trouble || 'Gemini sent nothing back');
+  }
+
+  if (kind === 'claude') {
+    opts = {
+      method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+      headers: {
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+        'anthropic-beta': 'server-side-fallback-2026-07-01'
+      },
+      payload: JSON.stringify({
+        model: model || 'claude-opus-5',
+        max_tokens: 8000,
+        output_config: { effort: 'low' },
+        fallbacks: 'default',
+        system: system,
+        messages: [{ role: 'user', content: user }]
+      })
+    };
+    url = 'https://api.anthropic.com/v1/messages';
+  } else {
+    opts = {
+      method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+      headers: { Authorization: 'Bearer ' + key },
+      payload: JSON.stringify({
+        model: model || 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: user }
+        ]
+      })
+    };
+    url = 'https://api.openai.com/v1/chat/completions';
+  }
+
+  var r = UrlFetchApp.fetch(url, opts);
+  if (r.getResponseCode() !== 200) {
+    throw new Error(aiName(key) + ' answered ' + r.getResponseCode() + ' '
+      + String(r.getContentText()).replace(/\s+/g, ' ').slice(0, 120));
+  }
+  var body = JSON.parse(r.getContentText());
+  var text = '';
+  if (kind === 'claude') {
+    if (body.stop_reason === 'refusal') throw new Error('Claude declined this passage');
+    for (var j = 0; j < (body.content || []).length; j++) {
+      if (body.content[j].type === 'text') text += body.content[j].text;
+    }
+  } else {
+    var choice = (body.choices || [])[0];
+    text = choice && choice.message ? String(choice.message.content || '') : '';
+  }
+  return text;
+}
+
+function translatePassage(paras) {
+  var lines = [];
+  for (var i = 0; i < (paras || []).length; i++) {
+    var one = flat(paras[i]);
+    if (one) lines.push(one);
+  }
+  if (!lines.length) return { ok: false, error: 'There is nothing to translate' };
+
+  var props = PropertiesService.getScriptProperties();
+  var key = props.getProperty(PROP_AI);
+  if (!key) {
+    return { ok: false, error: 'No key for the Vietnamese column is set. '
+      + 'EngrowDict -> Key for the Vietnamese column, in the sheet.' };
+  }
+  var model = props.getProperty(PROP_AI_MODEL);
+
+  var out = [];
+  for (var at = 0; at < lines.length; at += AI_PARAS_AT_ONCE) {
+    var batch = lines.slice(at, at + AI_PARAS_AT_ONCE);
+    var numbered = [];
+    for (var b = 0; b < batch.length; b++) numbered.push((b + 1) + '. ' + batch[b]);
+    var said = askAI(passageRules(), numbered.join('\n\n'), key, model);
+    var got = paraList(said, batch.length);
+    for (var g = 0; g < got.length; g++) out.push(got[g]);
+  }
+  return { ok: true, paras: out, by: aiName(key) };
+}
+
 /* ------------------------------------------------------ a passage of theirs */
 
 /** Two rows, the way the tab is already written: the numbered title, and the
@@ -718,6 +882,52 @@ function deletePassage(was) {
   if (at.bodyRow) sh.deleteRows(at.bodyRow, 1);
   sh.deleteRows(at.row, 1);
   return { ok: true, removed: at.bodyRow ? 2 : 1 };
+}
+
+/**
+ * The order the passages read in, written back into the tab. The page sends
+ * the titles in the order it wants them; the rows are gathered, put in that
+ * order and written down again, numbered from one. A title the page does not
+ * name keeps its place at the end rather than being lost — the sheet may have
+ * grown a passage since the page last read it.
+ */
+function orderPassages(titles) {
+  var sh = book().getSheetByName('Reading Passage');
+  if (!sh) return { ok: false, error: 'No tab called Reading Passage' };
+  var last = sh.getLastRow();
+  if (last < 2) return { ok: false, error: 'There are no passages to put in order' };
+
+  var vals = sh.getRange(1, 1, last, 2).getDisplayValues();
+  var found = [], byTitle = {}, i;
+  for (i = 1; i < vals.length; i++) {
+    if (!txt(vals[i][0])) continue;                       // a body row
+    var body = (i + 1 < vals.length && !txt(vals[i + 1][0])) ? txt(vals[i + 1][1]) : '';
+    var one = { title: flat(vals[i][1]), body: body };
+    found.push(one);
+    byTitle[one.title.toLowerCase()] = one;
+  }
+  if (!found.length) return { ok: false, error: 'There are no passages to put in order' };
+
+  var out = [], seen = {};
+  (titles || []).forEach(function (t) {
+    var k = flat(t).toLowerCase();
+    if (byTitle[k] && !seen[k]) { out.push(byTitle[k]); seen[k] = 1; }
+  });
+  found.forEach(function (one) {
+    var k = one.title.toLowerCase();
+    if (!seen[k]) { out.push(one); seen[k] = 1; }
+  });
+
+  var rows = [];
+  for (i = 0; i < out.length; i++) {
+    rows.push([String(i + 1), out[i].title]);
+    rows.push(['', out[i].body]);
+  }
+  var need = 1 + rows.length;
+  if (sh.getMaxRows() < need) sh.insertRowsAfter(sh.getMaxRows(), need - sh.getMaxRows());
+  sh.getRange(2, 1, last - 1, 2).clearContent();
+  sh.getRange(2, 1, rows.length, 2).setValues(rows);
+  return { ok: true, passages: out.length };
 }
 
 /** The number after the largest already in the first column. */

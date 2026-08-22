@@ -544,7 +544,8 @@
       return b;
     }
     if (e.paras) {                                  // a reading passage
-      b.className = "hit passage";
+      b.className = "hit passage" + (orderMode ? " ordering" : "");
+      b.dataset.orderId = e.id;
       b.appendChild(el("span", "idx", e.index));
       var col = el("div", "col");
       var thw = el("span", "hw");
@@ -554,6 +555,7 @@
       markUp(tg, e.paras[0].text, q);
       col.appendChild(tg);
       b.appendChild(col);
+      if (orderMode && mayAdd()) orderArrows(b, e);
       return b;
     }
     var hw = el("span", "hw");
@@ -588,6 +590,7 @@
   }
 
   function select(id, keepScroll) {
+    if (aiPane && aiPane.id !== id) aiPane = null;   // another passage, another one
     selectedId = id;
     /* One id space for three kinds of thing, so what comes back is checked
        against what the view can draw. A word selected while the passages were
@@ -662,7 +665,15 @@
       return;
     }
     if (view === "read") {
-      host.appendChild(selectedRead ? readingView(selectedRead) : blankView());
+      if (selectedRead && aiPane && aiPane.id === selectedRead.id) {
+        var split = el("div", "readsplit");
+        split.appendChild(readingView(selectedRead));
+        split.appendChild(aiSplitter());
+        split.appendChild(aiPaneView(selectedRead));
+        host.appendChild(split);
+      } else {
+        host.appendChild(selectedRead ? readingView(selectedRead) : blankView());
+      }
       restorePlace();
       return;
     }
@@ -1232,6 +1243,7 @@
     setListOpen(s.open !== false);
     // room for the names on a wide screen, icons alone where it is tighter
     setNavOpen(typeof s.nav === "boolean" ? s.nav : (window.innerWidth || 1200) >= 1100);
+    aiWidth(Math.min(AI_MAX, Math.max(AI_MIN, s.ai || AI_DEFAULT)));
   }
 
   function buildResizer() {
@@ -1808,6 +1820,165 @@
       });
     });
     return seq.then(function () { return { text: got.join(" "), via: via }; });
+  }
+
+  /* ---- the passage in Vietnamese, beside the English ----------------------
+
+     Not the machine translation the selection card falls back on: that is for
+     a phrase nobody wrote a gloss for. This is the whole passage put into
+     Vietnamese by the same model that writes the Vietnamese column, read down
+     the right of the English it belongs to, paragraph beside paragraph.
+
+     It is asked for, never automatic: it costs a call to somebody's API key,
+     and a reader who wants to read the English first should be allowed to. */
+  var AI_MIN = 280, AI_MAX = 760, AI_DEFAULT = 420;
+  var aiPane = null;             // { id, state, paras, by, msg }
+
+  function aiWidth(px) {
+    document.documentElement.style.setProperty("--ai-w", Math.round(px) + "px");
+  }
+
+  function saveAiWidth() {
+    try {
+      var s = JSON.parse(localStorage.getItem(LIST_KEY) || "{}");
+      s.ai = parseInt(document.documentElement.style.getPropertyValue("--ai-w"), 10)
+        || AI_DEFAULT;
+      localStorage.setItem(LIST_KEY, JSON.stringify(s));
+    } catch (err) { /* private mode */ }
+  }
+
+  function openAiPane(r) {
+    if (!canWriteSheet()) {
+      toast("This goes through the sheet's Web App link — set it in Settings first.");
+      return;
+    }
+    if (aiPane && aiPane.id === r.id) { drawDetail(); return; }
+    aiPane = { id: r.id, state: "working", paras: [], by: "", msg: "" };
+    drawDetail();
+    runAiTranslate(r);
+  }
+
+  function closeAiPane() {
+    aiPane = null;
+    drawDetail();
+  }
+
+  function runAiTranslate(r) {
+    var want = r.id;
+    var paras = r.paras.map(function (p) { return stripMarks(p.text); });
+    callSheet({ action: "aitranslate", paras: paras }).then(function (res) {
+      if (!aiPane || aiPane.id !== want) return;      // closed, or another one
+      aiPane.state = "done";
+      aiPane.paras = res.paras || [];
+      aiPane.by = res.by || "the model";
+      drawDetail();
+    }, function (err) {
+      if (!aiPane || aiPane.id !== want) return;
+      aiPane.state = "failed";
+      aiPane.msg = (err && err.message) ? err.message : String(err);
+      drawDetail();
+    });
+  }
+
+  function aiPaneView(r) {
+    var w = el("aside", "aipane");
+    w.id = "ai-pane";
+
+    var head = el("div", "ai-head");
+    head.appendChild(el("span", "ai-title", "Vietnamese"));
+    var by = el("span", "ai-by",
+      aiPane.state === "working" ? "translating…"
+        : aiPane.by ? "by " + aiPane.by : "");
+    by.id = "ai-by";
+    head.appendChild(by);
+    head.appendChild(el("span", "grow"));
+    var again = el("button", "iconbtn", "↻");
+    again.type = "button";
+    again.id = "ai-again";
+    again.title = "Ask again";
+    again.disabled = aiPane.state === "working";
+    again.addEventListener("click", function () {
+      aiPane.state = "working";
+      aiPane.paras = [];
+      aiPane.msg = "";
+      drawDetail();
+      runAiTranslate(r);
+    });
+    head.appendChild(again);
+    var x = el("button", "iconbtn", "×");
+    x.type = "button";
+    x.id = "ai-close";
+    x.title = "Close";
+    x.setAttribute("aria-label", "Close the translation");
+    x.addEventListener("click", closeAiPane);
+    head.appendChild(x);
+    w.appendChild(head);
+
+    var body = el("div", "ai-body");
+    body.id = "ai-body";
+    if (aiPane.state === "failed") {
+      body.appendChild(el("p", "ai-none", aiPane.msg || "It would not answer."));
+    } else {
+      r.paras.forEach(function (p, i) {
+        var b = el("div", "ai-para");
+        if (p.mark) {
+          var m = el("span", "pmark", p.mark);
+          m.setAttribute("aria-hidden", "true");
+          b.appendChild(m);
+        }
+        var said = aiPane.paras[i];
+        b.appendChild(el("p", said ? "vi" : "vi waiting",
+          said || (aiPane.state === "working" ? "…" : "")));
+        body.appendChild(b);
+      });
+    }
+    w.appendChild(body);
+    return w;
+  }
+
+  /* The rule between the two columns, dragged to give one of them more room. */
+  function aiSplitter() {
+    var bar = el("div", "aisplit");
+    bar.id = "ai-split";
+    bar.setAttribute("role", "separator");
+    bar.setAttribute("aria-orientation", "vertical");
+    bar.tabIndex = 0;
+
+    var dragging = false;
+    function move(ev) {
+      if (!dragging) return;
+      var split = document.querySelector(".readsplit");
+      if (!split) return;
+      var x = ev.touches ? ev.touches[0].clientX : ev.clientX;
+      var right = split.getBoundingClientRect().right;
+      aiWidth(Math.min(AI_MAX, Math.max(AI_MIN, right - x)));
+    }
+    function stop() {
+      if (!dragging) return;
+      dragging = false;
+      document.body.classList.remove("resizing");
+      saveAiWidth();
+    }
+    bar.addEventListener("mousedown", function (ev) {
+      dragging = true;
+      document.body.classList.add("resizing");
+      ev.preventDefault();
+    });
+    document.addEventListener("mousemove", move);
+    document.addEventListener("mouseup", stop);
+    bar.addEventListener("touchstart", function () { dragging = true; }, { passive: true });
+    document.addEventListener("touchmove", move, { passive: true });
+    document.addEventListener("touchend", stop);
+    bar.addEventListener("keydown", function (ev) {
+      var now = parseInt(
+        document.documentElement.style.getPropertyValue("--ai-w"), 10) || AI_DEFAULT;
+      if (ev.key === "ArrowLeft") aiWidth(Math.min(AI_MAX, now + 24));
+      else if (ev.key === "ArrowRight") aiWidth(Math.max(AI_MIN, now - 24));
+      else return;
+      ev.preventDefault();
+      saveAiWidth();
+    });
+    return bar;
   }
 
   /* ---- passages of your own -----------------------------------------------
@@ -2413,6 +2584,14 @@
       openPassageForm(r);
     });
     m.menu.appendChild(edit);
+    var ai = el("button", "menu-item", "AI translate");
+    ai.type = "button";
+    ai.id = "passage-ai";
+    ai.addEventListener("click", function () {
+      m.close();
+      openAiPane(r);
+    });
+    m.menu.appendChild(ai);
     var del = el("button", "menu-item danger", "Delete this passage");
     del.type = "button";
     del.id = "passage-delete";
@@ -4431,12 +4610,141 @@
     refreshChrome();
   }
 
+  /* ---- putting the passages in order --------------------------------------
+
+     The order they read in is the order the sheet keeps them in, which is the
+     order they happened to be pasted in. Reorder turns the list into something
+     that can be pushed about — a pair of arrows on every row rather than a
+     drag, because the list is virtual and only draws the rows it can see — and
+     the second button sends the order to the sheet, where it belongs.
+
+     Until it is sent, the order is this browser's opinion; a Sync would undo
+     it. Which is why the sending is a button and not a consequence. */
+  var orderMode = false;
+  var orderDirty = false;
+
+  function canOrder() {
+    return view === "read" && mayAdd() && hits.length > 1;
+  }
+
+  function toggleOrder() {
+    orderMode = !orderMode;
+    if (!orderMode) orderDirty = false;
+    drawCount();
+    paint(true);
+  }
+
+  /* The list is what is on screen; READINGS is what the page holds. Moving one
+     means moving the other, and renumbering both. */
+  function moveRead(id, by) {
+    var at = -1, i;
+    for (i = 0; i < READINGS.length; i++) if (READINGS[i].id === id) at = i;
+    var to = at + by;
+    if (at < 0 || to < 0 || to >= READINGS.length) return;
+    var one = READINGS[at];
+    READINGS.splice(at, 1);
+    READINGS.splice(to, 0, one);
+    /* Numbered where they now stand, and each keeps the id it had: the id is
+       what a selection and a saved place are hung on, and only the order
+       changed. The sheet numbers them the same way when the order is sent. */
+    READINGS.forEach(function (r, n) { r.index = String(n + 1); });
+    BASE.readings = READINGS;
+    orderDirty = true;
+    selectedId = selectedRead ? selectedRead.id : null;
+    rebuild();
+    refresh();
+    /* The row moved with it, so the arrows stay under the thumb. */
+    var moved = document.querySelector('.hit[data-order-id="' + one.id + '"]');
+    if (moved) {
+      var arrow = moved.querySelector(by > 0 ? ".ord-down" : ".ord-up");
+      if (arrow) arrow.focus();
+    }
+  }
+
+  function sendOrder() {
+    if (!canWriteSheet()) { openSettings(true); return; }
+    var btn = document.getElementById("order-save");
+    if (btn) btn.disabled = true;
+    banner("Writing the order into the sheet…", null, null);
+    callSheet({
+      action: "orderpassages",
+      titles: READINGS.map(function (r) { return r.title; })
+    }).then(function (res) {
+      orderDirty = false;
+      document.getElementById("banner").hidden = true;
+      toast(plural(res.passages || READINGS.length, "passage", "passages")
+        + " put in that order in the sheet", true);
+    }, function (err) {
+      banner("Could not write the order: " + (err && err.message ? err.message : err),
+        "Try again", sendOrder);
+    }).then(function () {
+      if (btn) btn.disabled = false;
+      drawCount();
+    });
+  }
+
+  function orderButtons(box) {
+    if (!canOrder()) return;
+    var strip = el("span", "count-acts");
+
+    var toggle = el("button", "iconbtn ord-toggle");
+    toggle.type = "button";
+    toggle.id = "order-passages";
+    toggle.setAttribute("aria-pressed", String(orderMode));
+    toggle.title = orderMode ? "Done reordering" : "Change the order of the passages";
+    toggle.setAttribute("aria-label", toggle.title);
+    toggle.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"'
+      + ' stroke-width="2" stroke-linecap="round" stroke-linejoin="round"'
+      + ' aria-hidden="true"><polyline points="8 7 12 3 16 7"/><line x1="12" y1="3" x2="12" y2="11"/>'
+      + '<polyline points="16 17 12 21 8 17"/><line x1="12" y1="13" x2="12" y2="21"/></svg>';
+    toggle.addEventListener("click", toggleOrder);
+    strip.appendChild(toggle);
+
+    if (orderMode) {
+      var save = el("button", "iconbtn ord-save");
+      save.type = "button";
+      save.id = "order-save";
+      save.disabled = !canWriteSheet();
+      save.title = canWriteSheet()
+        ? "Write this order into the sheet"
+        : "The sheet's Web App link and key are needed for this";
+      save.setAttribute("aria-label", "Write this order into the sheet");
+      save.classList.toggle("wants", orderDirty);
+      save.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"'
+        + ' stroke-width="2" stroke-linecap="round" stroke-linejoin="round"'
+        + ' aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>'
+        + '<polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>';
+      save.addEventListener("click", sendOrder);
+      strip.appendChild(save);
+    }
+    box.appendChild(strip);
+  }
+
+  /* The two arrows a row carries while the order is being changed. */
+  function orderArrows(b, e) {
+    var pair = el("span", "ord-pair");
+    [["ord-up", -1, "Move up", "▲"], ["ord-down", 1, "Move down", "▼"]]
+      .forEach(function (one) {
+        var arrow = el("button", "ord " + one[0], one[3]);
+        arrow.type = "button";
+        arrow.title = one[2] + " — " + e.title;
+        arrow.setAttribute("aria-label", one[2] + ", " + e.title);
+        arrow.addEventListener("click", function (ev) {
+          ev.stopPropagation();               // the row itself opens the passage
+          moveRead(e.id, one[1]);
+        });
+        pair.appendChild(arrow);
+      });
+    b.appendChild(pair);
+  }
+
   function drawCount() {
     var box = document.getElementById("count");
     box.textContent = "";
     var q = query.trim();
     if (view === "read") {
       box.appendChild(document.createTextNode(plural(hits.length, "passage", "passages")));
+      orderButtons(box);
       return;
     }
     if (view === "book") {

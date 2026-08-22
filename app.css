@@ -330,6 +330,33 @@ body.resizing { cursor: col-resize; user-select: none; }
   display: flex; align-items: center; gap: 8px;
 }
 .count .dot { color: var(--rule); }
+/* The two buttons that put the passages in order, at the end of the line that
+   counts them. Icons only: the row is 10px type and a word would shout. */
+.count-acts { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+.count-acts .iconbtn { width: 26px; height: 24px; box-shadow: none; }
+.count-acts .iconbtn svg { width: 13px; height: 13px; display: block; }
+.count-acts .ord-toggle[aria-pressed="true"] {
+  background: var(--accent); border-color: transparent; color: #f2fbf6;
+}
+:root[data-theme="dark"] .count-acts .ord-toggle[aria-pressed="true"] { color: #05130d; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .count-acts .ord-toggle[aria-pressed="true"] { color: #05130d; }
+}
+/* Unsent changes are worth an eye: the sheet still holds the old order. */
+.count-acts .ord-save.wants { border-color: var(--term); color: var(--term); }
+
+/* A row being reordered carries its own pair of arrows. */
+.hit.passage.ordering { padding-right: 34px; position: relative; }
+.ord-pair {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  display: flex; flex-direction: column; gap: 1px;
+}
+.ord {
+  border: 0; background: none; cursor: pointer; padding: 0;
+  width: 22px; height: 15px; line-height: 1; font-size: 8px;
+  color: var(--faint); border-radius: 4px;
+}
+.ord:hover { color: var(--accent-hi); background: var(--accent-soft); }
 
 .scroll { flex: 1; overflow-y: auto; overscroll-behavior: contain; position: relative; }
 .spacer { position: relative; width: 100%; }
@@ -800,6 +827,67 @@ dialog::backdrop { background: rgba(8, 14, 11, .5); backdrop-filter: blur(2px); 
 .field .hint { font-size: 11.5px; color: var(--faint); line-height: 1.45; }
 /* Tight: the box is a container for two fields, and air between them reads as
    distance between things that belong together. */
+/* ---- the passage in Vietnamese, beside the English ----------------------
+   Two columns of the same passage, and a rule between them that can be
+   dragged: which language wants the room is the reader's to decide, and it
+   changes by the paragraph. */
+.readsplit {
+  display: grid; align-items: start;
+  grid-template-columns: minmax(0, 1fr) 7px var(--ai-w, 420px);
+}
+.readsplit .read { max-width: none; padding-right: 30px; }
+.aisplit {
+  align-self: stretch; min-height: 200px;
+  position: relative; cursor: col-resize;
+  background: var(--rule);
+  transition: background .14s ease;
+}
+.aisplit:hover, body.resizing .aisplit { background: var(--accent); }
+.aisplit:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.aipane {
+  position: sticky; top: 0; min-width: 0;
+  max-height: calc(100vh - var(--top-h) - 24px);
+  display: flex; flex-direction: column;
+  padding-left: 22px;
+}
+.ai-head {
+  display: flex; align-items: center; gap: 8px;
+  padding-bottom: 10px; border-bottom: 1px solid var(--rule);
+}
+.ai-head .grow { flex: 1; }
+.ai-title {
+  font-family: var(--mono); font-size: 11.5px; font-weight: 600;
+  letter-spacing: .13em; text-transform: uppercase; color: var(--accent-hi);
+}
+.ai-by {
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: .09em;
+  text-transform: uppercase; color: var(--faint);
+}
+.ai-body {
+  flex: 1; overflow-y: auto; padding: 18px 4px 40px 0;
+  display: flex; flex-direction: column; gap: 18px;
+}
+.ai-para { position: relative; }
+.ai-para .pmark {
+  position: absolute; left: -20px; top: 2px;
+  font-family: var(--mono); font-size: 10px; color: var(--faint);
+}
+.ai-para .vi { font-size: 15.5px; line-height: 1.7; color: var(--ink-2); }
+.ai-para .vi.waiting { color: var(--faint); }
+.ai-none { font-size: 13.5px; color: var(--flag); line-height: 1.6; }
+
+@media (max-width: 900px) {
+  /* Side by side stops being side by side long before a phone: the columns
+     stack, the English first, and the rule between them has nothing to do. */
+  .readsplit { grid-template-columns: minmax(0, 1fr); }
+  .readsplit .read { padding-right: 0; }
+  .aisplit { display: none; }
+  .aipane {
+    position: static; max-height: none; padding-left: 0; margin-top: 30px;
+    border-top: 1px solid var(--rule); padding-top: 16px;
+  }
+}
+
 /* ---- how a passage reads, and the buttons that write it -----------------
    The formatting lives in the text as marks, so what is styled here is what
    the reader was given, never markup somebody could paste in. */

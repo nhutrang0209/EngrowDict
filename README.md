@@ -384,6 +384,20 @@ needs the GitHub token — the file is a commit like any other — which lives
 under *This page's own repo* in Settings and is the same token that puts a book
 on the shelf. Reading the file back needs nothing but the passcode.
 
+### The order the passages read in
+
+The order is the sheet's, which is the order they happened to be pasted in.
+Two icon buttons sit at the end of the line that counts them, for whoever has
+unlocked the page: the first turns every row's pair of arrows on, the second
+writes the order into the sheet. Arrows rather than a drag, because the list is
+virtual and draws only the rows it can see.
+
+Moving a passage is this browser's opinion until it is sent — a Sync would undo
+it — so the sending is a button, and it lights amber while there is something
+unsent. On the sheet side the Reading Passage tab is gathered, put in the order
+the page names, and written down again numbered from one; a passage the page
+never knew about keeps its place at the end rather than being lost.
+
 ## Books
 
 A whole book is not a passage. It is too big to ship inside the page and too
