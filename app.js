@@ -1915,100 +1915,222 @@
     return node;
   }
 
-  /* ---- the buttons over the box ------------------------------------------ */
-  function markBar(ta, onChange) {
+  /* ---- writing a passage --------------------------------------------------
+
+     What you type is what it looks like: the box is the passage, set the way
+     the reader will see it, and the buttons act on what is selected in it. The
+     marks are still what goes to the sheet — a passage is one cell there and a
+     plain string in data.json — but they are put on when it is saved and taken
+     off when it is opened, so nobody has to look at them.
+
+     The wrapping is done with ranges rather than execCommand: the old command
+     is deprecated, it writes whatever markup the browser fancies, and half of
+     what it writes would have to be untangled again on the way out. */
+  function passEditor() { return document.getElementById("pass-body"); }
+
+  function editorFromParas(paras) {
+    var box = passEditor();
+    if (!box) return;
+    box.textContent = "";
+    var lines = (paras && paras.length) ? paras : [{ text: "" }];
+    lines.forEach(function (x) { box.appendChild(proseNode(x)); });
+  }
+
+  /* Back out again: one line to a block, with the marks put on. */
+  function parasFromEditor() {
+    var box = passEditor(), out = [];
+    if (!box) return out;
+    for (var i = 0; i < box.childNodes.length; i++) {
+      var n = box.childNodes[i];
+      if (n.nodeType === 3) {                 // typed straight into the box
+        var loose = String(n.nodeValue).replace(/[ \t\n]+/g, " ").trim();
+        if (loose) out.push(loose);
+        continue;
+      }
+      if (n.nodeType !== 1 || n.tagName === "BR") continue;
+      var line = lineMarks(n);
+      if (line) out.push(line);
+    }
+    return out;
+  }
+
+  function lineMarks(node) {
+    var cls = String(node.className || ""), pre = "";
+    var deep = /in(\d)/.exec(cls);
+    var depth = deep ? Number(deep[1]) : 0;
+    while (depth-- > 0) pre += "> ";
+    if (node.tagName === "H1" || node.tagName === "H2" || node.tagName === "H3") pre += "# ";
+    else if (node.tagName === "LI" || cls.indexOf("bullet") > -1) pre += "- ";
+    var body = inlineMarks(node).replace(/[ \t\n]+/g, " ").trim();
+    return body ? pre + body : "";
+  }
+
+  function inlineMarks(node) {
+    var out = "";
+    for (var i = 0; i < node.childNodes.length; i++) {
+      var n = node.childNodes[i];
+      if (n.nodeType === 3) { out += n.nodeValue; continue; }
+      if (n.nodeType !== 1) continue;
+      var cls = String(n.className || "");
+      if (cls.indexOf("pmark") > -1) continue;     // the A/B/C label is not text
+      if (n.tagName === "BR") { out += " "; continue; }
+      var inner = inlineMarks(n);
+      var colour = /c-(red|green|amber|grey)/.exec(cls);
+      if (n.tagName === "B" || n.tagName === "STRONG") out += "**" + inner + "**";
+      else if (n.tagName === "I" || n.tagName === "EM") out += "*" + inner + "*";
+      else if (n.tagName === "U") out += "__" + inner + "__";
+      else if (n.tagName === "CODE" || n.tagName === "TT") out += "`" + inner + "`";
+      else if (colour) out += "[" + colour[1] + "]" + inner + "[/]";
+      else out += inner;
+    }
+    return out;
+  }
+
+  /* ---- what the buttons do ------------------------------------------------ */
+
+  function editorRange() {
+    var sel = window.getSelection && window.getSelection();
+    if (!sel || !sel.rangeCount) return null;
+    var range = sel.getRangeAt(0);
+    var box = passEditor();
+    if (!box || !box.contains(range.commonAncestorContainer)) return null;
+    return { sel: sel, range: range };
+  }
+
+  /* The element of this kind the selection sits inside, if it sits inside one:
+     pressing Bold on something already bold takes the bold off. */
+  function inside(node, test) {
+    var box = passEditor();
+    while (node && node !== box) {
+      if (node.nodeType === 1 && test(node)) return node;
+      node = node.parentNode;
+    }
+    return null;
+  }
+
+  function unwrap(node) {
+    var parent = node.parentNode;
+    while (node.firstChild) parent.insertBefore(node.firstChild, node);
+    parent.removeChild(node);
+  }
+
+  function toggleInline(tag, cls) {
+    var got = editorRange();
+    if (!got) return;
+    var test = function (n) {
+      return cls ? String(n.className || "").indexOf(cls) > -1 : n.tagName === tag;
+    };
+    var had = inside(got.range.startContainer, test)
+      || inside(got.range.endContainer, test);
+    if (had) { unwrap(had); return; }
+    if (got.range.collapsed) return;
+    var wrap = document.createElement(tag);
+    if (cls) wrap.className = cls;
+    try {
+      wrap.appendChild(got.range.extractContents());
+      got.range.insertNode(wrap);
+      var after = document.createRange();
+      after.selectNodeContents(wrap);
+      got.sel.removeAllRanges();
+      got.sel.addRange(after);
+    } catch (err) { /* a selection across two paragraphs: leave it alone */ }
+  }
+
+  /* Every block the selection touches, for the buttons that work on lines. */
+  function blocksTouched() {
+    var box = passEditor();
+    if (!box) return [];
+    var got = editorRange();
+    if (!got) return [];
+    var from = inside(got.range.startContainer, function (n) { return n.parentNode === box; });
+    var to = inside(got.range.endContainer, function (n) { return n.parentNode === box; });
+    if (!from) return [];
+    var out = [], on = from;
+    while (on) {
+      out.push(on);
+      if (on === to || !to) break;
+      on = on.nextSibling;
+    }
+    return out;
+  }
+
+  function swapTag(node, tag) {
+    var made = document.createElement(tag);
+    made.className = node.className;
+    while (node.firstChild) made.appendChild(node.firstChild);
+    node.parentNode.replaceChild(made, node);
+    return made;
+  }
+
+  function setDepth(node, by) {
+    var cls = String(node.className || "");
+    var deep = /in(\d)/.exec(cls);
+    var depth = Math.max(0, Math.min(4, (deep ? Number(deep[1]) : 0) + by));
+    cls = cls.replace(/ ?in\d/g, "").trim();
+    node.className = (cls + (depth ? " in" + depth : "")).trim();
+  }
+
+  function markButtons(onChange) {
     var bar = el("div", "markbar");
-
-    function around(before, after) {
-      var s = ta.selectionStart, e = ta.selectionEnd;
-      var picked = ta.value.slice(s, e) || "";
-      ta.value = ta.value.slice(0, s) + before + picked + after + ta.value.slice(e);
-      ta.focus();
-      ta.selectionStart = s + before.length;
-      ta.selectionEnd = s + before.length + picked.length;
-      onChange();
-    }
-
-    /* A line button works on every line the selection touches, the way a
-       word processor's list and indent buttons do. */
-    function eachLine(fn) {
-      var s = ta.selectionStart, e = ta.selectionEnd;
-      var from = ta.value.lastIndexOf("\n", s - 1) + 1;
-      var to = ta.value.indexOf("\n", e);
-      if (to < 0) to = ta.value.length;
-      var lines = ta.value.slice(from, to).split("\n").map(fn);
-      var made = lines.join("\n");
-      ta.value = ta.value.slice(0, from) + made + ta.value.slice(to);
-      ta.focus();
-      ta.selectionStart = from;
-      ta.selectionEnd = from + made.length;
-      onChange();
-    }
 
     function press(label, title, run, cls) {
       var b = el("button", "markbtn" + (cls ? " " + cls : ""), label);
       b.type = "button";
       b.title = title;
       b.setAttribute("aria-label", title);
-      b.addEventListener("click", function (ev) { ev.preventDefault(); run(); });
+      b.dataset.act = title;
+      // mousedown, not click: the box must not lose what is selected in it
+      b.addEventListener("mousedown", function (ev) { ev.preventDefault(); });
+      b.addEventListener("click", function (ev) {
+        ev.preventDefault();
+        run();
+        onChange();
+      });
       bar.appendChild(b);
       return b;
     }
 
-    press("B", "Bold", function () { around("**", "**"); }, "mb-b");
-    press("I", "Italic", function () { around("*", "*"); }, "mb-i");
-    press("U", "Underline", function () { around("__", "__"); }, "mb-u");
-    press("</>", "Monospace", function () { around("`", "`"); }, "mb-code");
+    press("B", "Bold", function () { toggleInline("B", ""); }, "mb-b");
+    press("I", "Italic", function () { toggleInline("I", ""); }, "mb-i");
+    press("U", "Underline", function () { toggleInline("U", ""); }, "mb-u");
+    press("</>", "Monospace", function () { toggleInline("CODE", ""); }, "mb-code");
     bar.appendChild(el("span", "mb-sep"));
+
     press("H", "Heading", function () {
-      eachLine(function (line) {
-        return /^#[ \t]+/.test(line) ? line.replace(/^#[ \t]+/, "") : "# " + line;
+      blocksTouched().forEach(function (b) {
+        swapTag(b, b.tagName === "H2" ? "P" : "H2");
       });
     }, "mb-h");
-    press("•", "Bullet", function () {
-      eachLine(function (line) {
-        return /^-[ \t]+/.test(line) ? line.replace(/^-[ \t]+/, "") : "- " + line;
+    press("\u2022", "Bullet", function () {
+      blocksTouched().forEach(function (b) {
+        var cls = String(b.className || "");
+        b.className = cls.indexOf("bullet") > -1
+          ? cls.replace(/ ?bullet/, "").trim() : (cls + " bullet").trim();
       });
     });
-    press("→", "Indent", function () {
-      eachLine(function (line) { return "> " + line; });
+    press("\u2192", "Indent", function () {
+      blocksTouched().forEach(function (b) { setDepth(b, 1); });
     });
-    press("←", "Outdent", function () {
-      eachLine(function (line) { return line.replace(/^>[ \t]?/, ""); });
+    press("\u2190", "Outdent", function () {
+      blocksTouched().forEach(function (b) { setDepth(b, -1); });
     });
     bar.appendChild(el("span", "mb-sep"));
 
     COLOURS.forEach(function (c) {
-      var b = press("", c[1], function () { around("[" + c[0] + "]", "[/]"); },
+      var b = press("", c[1], function () { toggleInline("SPAN", "c-" + c[0]); },
         "mb-c c-dot-" + c[0]);
       b.appendChild(el("span", "dot"));
     });
-    press("⌫", "Take the marks off", function () {
-      var s = ta.selectionStart, e = ta.selectionEnd;
-      if (s === e) return;
-      var clean = stripMarks(ta.value.slice(s, e));
-      ta.value = ta.value.slice(0, s) + clean + ta.value.slice(e);
-      ta.focus();
-      ta.selectionStart = s;
-      ta.selectionEnd = s + clean.length;
-      onChange();
+    press("\u232b", "Take the marks off", function () {
+      blocksTouched().forEach(function (b) {
+        var text = b.textContent;
+        b.textContent = "";
+        b.className = String(b.className || "").replace(/ ?in\d| ?bullet/g, "").trim();
+        var plain = b.tagName === "H2" ? swapTag(b, "P") : b;
+        plain.textContent = text;
+      });
     });
     return bar;
-  }
-
-  function paintPassagePreview() {
-    var box = document.getElementById("pass-preview");
-    var ta = document.querySelector("#pass-dlg [name=pbody]");
-    if (!box || !ta) return;
-    box.textContent = "";
-    var any = false;
-    ta.value.split(/\n+/).forEach(function (line) {
-      var one = line.replace(/[ \t]+/g, " ").trim();
-      if (!one) return;
-      any = true;
-      box.appendChild(proseNode({ text: one }));
-    });
-    if (!any) box.appendChild(el("p", "tr-none", "What it will look like."));
   }
 
   function passageDialog() {
@@ -2027,24 +2149,34 @@
 
     var f = el("div", "field");
     f.appendChild(el("span", null, "The passage"));
-    var ta = el("textarea");
-    ta.name = "pbody";
-    ta.rows = 12;
-    ta.placeholder = "Paste it here…";
-    ta.setAttribute("aria-label", "The passage");
-    ta.addEventListener("input", paintPassagePreview);
-    f.appendChild(markBar(ta, paintPassagePreview));
-    f.appendChild(ta);
+    var box = el("div", "prose pass-edit");
+    box.id = "pass-body";
+    box.setAttribute("contenteditable", "true");
+    box.setAttribute("role", "textbox");
+    box.setAttribute("aria-multiline", "true");
+    box.setAttribute("aria-label", "The passage");
+    /* Pasting brings whatever markup the page it came from was built out of.
+       Only the words are taken, a line to a paragraph, and this page decides
+       how they look. */
+    box.addEventListener("paste", function (ev) {
+      if (!ev.clipboardData) return;
+      ev.preventDefault();
+      var text = ev.clipboardData.getData("text/plain") || "";
+      var made = document.createDocumentFragment();
+      text.split(/\n+/).forEach(function (line) {
+        var one = line.replace(/[ \t]+/g, " ").trim();
+        if (one) made.appendChild(el("p", null, one));
+      });
+      var got = editorRange();
+      if (got) { got.range.deleteContents(); got.range.insertNode(made); }
+      else box.appendChild(made);
+    });
+    f.appendChild(markButtons(function () { box.focus(); }));
+    f.appendChild(box);
     f.appendChild(el("p", "hint",
-      "One paragraph to a line. Lettered paragraphs — A, B, C — are kept as "
-      + "labels, the way the passages already here have them."));
-    var pv = el("div", "field");
-    pv.appendChild(el("span", null, "As it will read"));
-    var out = el("div", "prose pass-preview");
-    out.id = "pass-preview";
-    pv.appendChild(out);
+      "It is set here the way it will be read. Lettered paragraphs — A, B, C — "
+      + "are kept as labels, the way the passages already here have them."));
     body.appendChild(f);
-    body.appendChild(pv);
     dlg.appendChild(body);
 
     var foot = el("div", "dlg-foot");
@@ -2084,10 +2216,7 @@
     editingPassage = existing || null;
     var dlg = document.getElementById("pass-dlg");
     dlg.querySelector("[name=ptitle]").value = existing ? existing.title : "";
-    dlg.querySelector("[name=pbody]").value = existing
-      ? existing.paras.map(function (p) {
-        return (p.mark ? p.mark + " " : "") + p.text;
-      }).join("\n") : "";
+    editorFromParas(existing ? existing.paras : []);
     document.getElementById("pass-head").textContent = existing
       ? "Edit a passage" : "Add a passage";
     document.getElementById("pass-save").textContent = existing
@@ -2095,7 +2224,6 @@
     var tick = document.getElementById("pass-to-sheet");
     if (tick) tick.checked = existing ? !!existing.inSheet || !existing.mine : true;
     passMsg("", "");
-    paintPassagePreview();
     dlg.showModal();
     dlg.querySelector("[name=ptitle]").focus();
   }
@@ -2110,14 +2238,9 @@
   function readPassageForm() {
     var dlg = document.getElementById("pass-dlg");
     var title = dlg.querySelector("[name=ptitle]").value.trim();
-    var body = dlg.querySelector("[name=pbody]").value;
     if (!title) return { err: "Give it a title first." };
-    var paras = [];
-    body.split(/\n+/).forEach(function (line) {
-      var one = line.replace(/[ \t]+/g, " ").trim();
-      if (one) paras.push(one);
-    });
-    if (!paras.length) return { err: "Paste the passage itself." };
+    var paras = parasFromEditor();
+    if (!paras.length) return { err: "Write the passage itself." };
     return { title: title, paras: paras };
   }
 
@@ -4019,20 +4142,28 @@
     return new Promise(function (done) { setTimeout(done, ms); });
   }
 
-  function freshData(want, tries) {
+  function freshData(want, stamp, tries) {
     return fetch("data.json?ts=" + Date.now(), { cache: "reload" })
       .then(function (r) {
         if (!r.ok) throw new Error("data.json " + r.status);
         return r.json();
       })
       .then(function (fresh) {
-        var n = fresh && fresh.entries ? fresh.entries.length : 0;
-        if (!want || n === want) return fresh;
+        /* The stamp the sheet says it wrote is the only sure sign the file is
+           the new one: a passage rewritten or a word put right leaves the
+           count exactly where it was. Without a stamp — an older script — the
+           count is all there is. */
+        if (stamp) {
+          if (fresh && fresh.at === stamp) return fresh;
+        } else {
+          var n = fresh && fresh.entries ? fresh.entries.length : 0;
+          if (!want || n === want) return fresh;
+        }
         if (tries >= SYNC_TRIES) throw new Error("still the old copy");
         banner("Sheet read, " + plural(want, "entry", "entries")
           + " published. Waiting for GitHub to serve the new copy…", null, null);
         return sleep(SYNC_WAITS[Math.min(tries, SYNC_WAITS.length - 1)])
-          .then(function () { return freshData(want, tries + 1); });
+          .then(function () { return freshData(want, stamp, tries + 1); });
       });
   }
 
@@ -4046,7 +4177,7 @@
       if (res.published) {
         banner("Sheet read, " + plural(res.entries, "entry", "entries")
           + " published. Loading the new copy…", null, null);
-        return freshData(res.entries, 0)
+        return freshData(res.entries, res.at, 0)
           .then(function (fresh) {
             applySync(fresh, res.entries);
             document.getElementById("banner").hidden = true;
@@ -4078,7 +4209,21 @@
   /* Words of mine that already reached the sheet now arrive as ordinary
      entries, so drop them from the local list to avoid showing both. */
   function applySync(fresh, count) {
-    BASE = { entries: fresh.entries, readings: BASE.readings || [] };
+    /* The passages come down with the words. They used to be held back — a
+       payload with none of them would have taken every passage off the page,
+       which was the risk when the sheet had no tab for them — but the script
+       carries the published ones through now, so a file with passages in it is
+       the truth about passages, and a file with none is still not worth
+       believing. Without this, a passage put right in the sheet was never put
+       right here: Sync updated the words around it and nothing else. */
+    if (fresh.readings && fresh.readings.length) {
+      READINGS = fresh.readings;
+      READINGS.forEach(function (r, i) { indexPassage(r, "r" + i); });
+      BASE = { entries: fresh.entries, readings: READINGS };
+      selectedRead = null;
+    } else {
+      BASE = { entries: fresh.entries, readings: BASE.readings || [] };
+    }
     var before = ADDED.length;
     ADDED = ADDED.filter(function (e) { return !e.inSheet; });
     if (ADDED.length !== before) writeBackup(ADDED);

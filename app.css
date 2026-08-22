@@ -816,11 +816,11 @@ dialog::backdrop { background: rgba(8, 14, 11, .5); backdrop-filter: blur(2px); 
 .read .prose .in2 { padding-left: 52px; }
 .read .prose .in3 { padding-left: 78px; }
 .read .prose .in4 { padding-left: 104px; }
-.read .prose code, .pass-preview code {
+.read .prose code, .pass-edit code {
   font-family: var(--mono); font-size: .88em;
   background: var(--sunk); border-radius: 5px; padding: 1px 5px;
 }
-.read .prose u, .pass-preview u { text-underline-offset: 3px; }
+.read .prose u, .pass-edit u { text-underline-offset: 3px; }
 .c-red { color: var(--flag); }
 .c-green { color: var(--accent-hi); }
 .c-amber { color: var(--term); }
@@ -850,23 +850,28 @@ dialog::backdrop { background: rgba(8, 14, 11, .5); backdrop-filter: blur(2px); 
 .c-dot-amber .dot { background: var(--term); }
 .c-dot-grey .dot { background: var(--muted); }
 
-.pass-preview {
-  border: 1px solid var(--rule); border-radius: var(--r-s);
+/* The box is the passage: what is typed in it is set the way it will be read,
+   so there is nothing to preview and no marks to look at. */
+.pass-edit {
+  border: 1px solid var(--rule); border-radius: 0 0 var(--r-s) var(--r-s);
   background: var(--tint); padding: 14px 16px;
-  max-height: 220px; overflow-y: auto;
+  min-height: 220px; max-height: 44vh; overflow-y: auto;
   display: flex; flex-direction: column; gap: 12px;
-  font-size: 15px; line-height: 1.6;
+  font-size: 15.5px; line-height: 1.65; color: var(--ink);
 }
-.pass-preview h2 {
+.pass-edit:focus {
+  outline: none; border-color: var(--accent);
+  box-shadow: var(--ring); background: var(--surface);
+}
+.pass-edit h2 {
   font-family: var(--serif); font-size: 19px; font-weight: 600; color: var(--ink);
 }
-.pass-preview p.bullet { padding-left: 18px; position: relative; }
-.pass-preview p.bullet::before { content: "\2022"; position: absolute; left: 3px; color: var(--accent); }
-.pass-preview .in1 { padding-left: 22px; }
-.pass-preview .in2 { padding-left: 44px; }
-.pass-preview .in3 { padding-left: 66px; }
-.pass-preview .in4 { padding-left: 88px; }
-.pass-preview .tr-none { color: var(--faint); }
+.pass-edit p.bullet { padding-left: 18px; position: relative; }
+.pass-edit p.bullet::before { content: "2"; position: absolute; left: 3px; color: var(--accent); }
+.pass-edit .in1 { padding-left: 22px; }
+.pass-edit .in2 { padding-left: 44px; }
+.pass-edit .in3 { padding-left: 66px; }
+.pass-edit .in4 { padding-left: 88px; }
 
 .sense-edit {
   border: 1px solid var(--rule); border-radius: var(--r-m);

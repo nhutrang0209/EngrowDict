@@ -93,6 +93,34 @@ function page(store, posts, reply, dataNow) {
      a.doc.querySelector('.hit .hw')?.textContent + ' — ' + a.doc.querySelector('.hit .gloss')?.textContent);
   ok('the banner is cleared afterwards', a.doc.getElementById('banner').hidden);
 
+  /* --- a passage rewritten, and not one word added --------------------- */
+  /* The count cannot tell that file from the one before it, so what is
+     published carries a stamp and the page waits for that stamp to arrive. */
+  const SAME = JSON.parse(JSON.stringify(REAL));
+  const EDITED = JSON.parse(JSON.stringify(REAL));
+  EDITED.at = '2026-08-22T09:00:00.000Z';
+  EDITED.readings[0] = Object.assign({}, EDITED.readings[0], { title: 'Pine Trees, put right' });
+  let servedEdit = SAME;
+  const postsEdit = [];
+  const edit = page(unlockedStore(CFG), postsEdit,
+    () => ({ ok: true, published: true, entries: REAL.entries.length,
+             at: EDITED.at, error: null, data: null }),
+    () => servedEdit);
+  await wait(900);
+  click(edit.window, edit.doc.getElementById('sync-sheet'));
+  await wait(400);
+  ok('a file with the same number of entries is not taken for the new one',
+     /Waiting for GitHub/.test(edit.doc.getElementById('banner').textContent),
+     edit.doc.getElementById('banner').textContent);
+
+  servedEdit = EDITED;
+  await wait(1800);
+  click(edit.window, edit.doc.getElementById('tab-passages'));
+  await wait(60);
+  ok('  the rewritten passage arrives once the stamp does',
+     /Pine Trees, put right/.test(edit.doc.querySelector('.hit .hw').textContent),
+     edit.doc.querySelector('.hit .hw').textContent);
+
   /* --- the copy GitHub is still catching up with ----------------------- */
   /* Pages serves a commit thirty to sixty seconds after it lands, so the fetch
      straight after a sync is very often the file that was already there. It

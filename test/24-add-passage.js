@@ -35,11 +35,35 @@ function page(store, posts, reply) {
   return g;
 }
 
+/* The passage box is the passage: what is written into it is set the way it
+   will be read, so a test writes paragraphs into it rather than lines. */
 const fill = (g, title, body) => {
   const dlg = g.doc.getElementById('pass-dlg');
   dlg.querySelector('[name=ptitle]').value = title;
-  dlg.querySelector('[name=pbody]').value = body;
+  const box = g.doc.getElementById('pass-body');
+  box.textContent = '';
+  String(body).split('\n').forEach(line => {
+    if (!line.trim()) return;
+    const p = g.doc.createElement('p');
+    p.textContent = line.trim();
+    box.appendChild(p);
+  });
 };
+
+/* Put the caret over a run of one paragraph, the way a pointer would. */
+const selectIn = (g, node, from, to) => {
+  node.normalize();               // unwrapping leaves the text in pieces
+  const range = g.doc.createRange();
+  const text = node.firstChild;
+  range.setStart(text, from);
+  range.setEnd(text, to === undefined ? text.nodeValue.length : to);
+  const sel = g.window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+  return range;
+};
+const toolBtn = (g, title) => [...g.doc.querySelectorAll('#pass-dlg .markbtn')]
+  .find(b => b.title === title);
 
 (async () => {
   /* --- the button is where the passages are ------------------------------- */
@@ -62,7 +86,7 @@ const fill = (g, title, body) => {
   click(w, add());
   const dlg = doc.getElementById('pass-dlg');
   ok('pressing it opens a form for one', dlg.open &&
-     !!dlg.querySelector('[name=ptitle]') && !!dlg.querySelector('[name=pbody]'));
+     !!dlg.querySelector('[name=ptitle]') && !!dlg.querySelector('#pass-body'));
 
   /* --- what it will not save --------------------------------------------- */
   fill(a, '', 'A paragraph.');
@@ -74,7 +98,7 @@ const fill = (g, title, body) => {
   fill(a, 'A Title', '   ');
   click(w, doc.getElementById('pass-save'));
   await wait(40);
-  ok('  and one with no text', /Paste the passage/.test(doc.getElementById('pass-msg').textContent),
+  ok('  and one with no text', /Write the passage/.test(doc.getElementById('pass-msg').textContent),
      doc.getElementById('pass-msg').textContent);
 
   /* --- saving it ---------------------------------------------------------- */
@@ -127,8 +151,9 @@ const fill = (g, title, body) => {
   await wait(40);
   ok('Edit opens the form on that passage',
      dlg.open && dlg.querySelector('[name=ptitle]').value === 'Kept Here Only' &&
-     dlg.querySelector('[name=pbody]').value === 'A paragraph of it.',
-     dlg.querySelector('[name=ptitle]').value);
+     doc.getElementById('pass-body').textContent === 'A paragraph of it.',
+     dlg.querySelector('[name=ptitle]').value + ' / '
+       + doc.getElementById('pass-body').textContent);
   ok('  and says it is an edit', doc.getElementById('pass-save').textContent === 'Save changes',
      doc.getElementById('pass-head').textContent);
 
@@ -175,67 +200,106 @@ const fill = (g, title, body) => {
 
   /* --- writing it with the buttons ---------------------------------------- */
   click(w, add());
-  const ta = dlg.querySelector('[name=pbody]');
-  const bar = dlg.querySelector('.markbar');
-  const press = label => click(w,
-    [...bar.querySelectorAll('.markbtn')].find(b => (b.title || '') === label));
-  ok('the box has a row of buttons over it', !!bar &&
-     bar.querySelectorAll('.markbtn').length >= 8,
-     bar && bar.querySelectorAll('.markbtn').length + ' buttons');
+  const box = doc.getElementById('pass-body');
+  ok('the passage is written in a box that shows what it will look like',
+     !!box && box.getAttribute('contenteditable') === 'true' &&
+     !doc.querySelector('#pass-dlg [name=pbody]'),
+     box && box.className);
+  ok('  with a row of buttons over it',
+     doc.querySelectorAll('#pass-dlg .markbtn').length >= 8,
+     doc.querySelectorAll('#pass-dlg .markbtn').length + ' buttons');
 
-  ta.value = 'A word in it';
-  ta.selectionStart = 2; ta.selectionEnd = 6;
-  press('Bold');
-  ok('Bold marks what was selected', ta.value === 'A **word** in it', ta.value);
-  ta.selectionStart = 0; ta.selectionEnd = ta.value.length;
-  press('Take the marks off');
-  ok('  and the eraser takes it off again', ta.value === 'A word in it', ta.value);
+  fill(a, 'Marked Up', 'A word in it');
+  const para = () => box.querySelector('p');
+  selectIn(a, para(), 2, 6);
+  click(w, toolBtn(a, 'Bold'));
+  ok('Bold makes the selected words bold there and then',
+     !!para().querySelector('b') && para().querySelector('b').textContent === 'word' &&
+     para().textContent === 'A word in it',
+     para().innerHTML);
+  ok('  and no marks are shown in the box', para().textContent.indexOf('*') === -1,
+     para().textContent);
 
-  ta.value = 'A heading';
-  ta.selectionStart = ta.selectionEnd = 3;
-  press('Heading');
-  ok('Heading works on the line, not the selection', ta.value === '# A heading', ta.value);
-  press('Heading');
-  ok('  and pressing it again takes it back', ta.value === 'A heading', ta.value);
-  press('Indent');
-  press('Indent');
-  ok('Indent steps the line in, once for each press', ta.value === '> > A heading',
-     JSON.stringify(ta.value));
-  press('Outdent');
-  ok('  and Outdent steps it back', ta.value === '> A heading', JSON.stringify(ta.value));
+  selectIn(a, para().querySelector('b'), 0, 4);
+  click(w, toolBtn(a, 'Bold'));
+  ok('  pressing it again takes the bold off', !para().querySelector('b'),
+     para().innerHTML);
 
-  ta.value = 'Red for danger';
-  ta.selectionStart = 0; ta.selectionEnd = 3;
-  press('Red');
-  ok('a colour is a mark like any other', ta.value === '[red]Red[/] for danger', ta.value);
+  selectIn(a, para(), 0, 1);
+  click(w, toolBtn(a, 'Heading'));
+  ok('Heading makes the line a heading', !!box.querySelector('h2'),
+     box.innerHTML.slice(0, 60));
+  selectIn(a, box.querySelector('h2'), 0, 1);
+  click(w, toolBtn(a, 'Heading'));
+  ok('  and pressing it again puts it back to a paragraph',
+     !box.querySelector('h2') && !!box.querySelector('p'), box.innerHTML.slice(0, 60));
 
-  /* --- the preview shows what it will look like --------------------------- */
-  ta.value = '# A Heading\n- a bullet\n> stepped in\nplain **bold** and [green]green[/]';
-  ta.dispatchEvent(new w.Event('input'));
-  const pv = doc.getElementById('pass-preview');
-  ok('the form previews it as it will read',
-     !!pv && pv.querySelector('h2') && pv.querySelector('h2').textContent === 'A Heading',
-     pv && pv.textContent.slice(0, 40));
-  ok('  bullets, indents, bold and colour and all',
-     !!pv.querySelector('p.bullet') && !!pv.querySelector('.in1') &&
-     !!pv.querySelector('b') && !!pv.querySelector('.c-green'),
-     [...pv.children].map(n => n.className || n.tagName).join(', '));
+  selectIn(a, para(), 0, 1);
+  click(w, toolBtn(a, 'Indent'));
+  click(w, toolBtn(a, 'Indent'));
+  ok('Indent steps the line in, once a press',
+     /in2/.test(para().className), para().className);
+  click(w, toolBtn(a, 'Outdent'));
+  ok('  and Outdent steps it back', /in1/.test(para().className), para().className);
+  click(w, toolBtn(a, 'Outdent'));
 
-  /* --- and the passage itself reads that way ------------------------------ */
+  selectIn(a, para(), 0, 1);
+  click(w, toolBtn(a, 'Bullet'));
+  ok('Bullet marks the line as one', /bullet/.test(para().className), para().className);
+  click(w, toolBtn(a, 'Bullet'));
+
+  selectIn(a, para(), 2, 6);
+  click(w, toolBtn(a, 'Red'));
+  ok('a colour is shown in the colour, not as a tag',
+     !!para().querySelector('.c-red') &&
+     para().querySelector('.c-red').textContent === 'word' &&
+     para().textContent.indexOf('[') === -1,
+     para().innerHTML);
+
+  /* --- and what goes to the sheet is the text with its marks -------------- */
+  box.textContent = '';
+  const h = doc.createElement('h2');
+  h.textContent = 'A Heading';
+  box.appendChild(h);
+  const bullet = doc.createElement('p');
+  bullet.className = 'bullet';
+  bullet.textContent = 'a bullet';
+  box.appendChild(bullet);
+  const stepped = doc.createElement('p');
+  stepped.className = 'in1';
+  stepped.textContent = 'stepped in';
+  box.appendChild(stepped);
+  const mixed = doc.createElement('p');
+  mixed.innerHTML = 'plain <b>bold</b> and <span class="c-green">green</span>';
+  box.appendChild(mixed);
   dlg.querySelector('[name=ptitle]').value = 'A Formatted Passage';
+  posts.length = 0;
   click(w, doc.getElementById('pass-save'));
   await wait(300);
+  const written = (posts.find(p => p.body.action === 'passage') || {}).body;
+  ok('the marks are put on for the sheet, a line to a paragraph',
+     !!written && written.entry.paras.join(' | ') ===
+       '# A Heading | - a bullet | > stepped in | plain **bold** and [green]green[/]',
+     written && JSON.stringify(written.entry.paras));
+
   const prose = doc.querySelector('.read .prose');
-  ok('the passage carries the formatting through',
+  ok('  and the passage reads the same way it was written',
      !!prose.querySelector('h2') && !!prose.querySelector('p.bullet') &&
      !!prose.querySelector('.in1') && !!prose.querySelector('b') &&
      !!prose.querySelector('.c-green'),
-     prose.innerHTML.slice(0, 120));
-  ok('  and the marks themselves are nowhere on screen',
-     !/[*\\[]/.test(prose.textContent), prose.textContent.slice(0, 60));
-  ok('  what went to the sheet is the text with its marks, one line a paragraph',
-     (posts.find(p => p.body.action === 'passage') || {}).body.entry.paras[0] === '# A Heading',
-     JSON.stringify((posts.find(p => p.body.action === 'passage') || {}).body.entry.paras));
+     prose.innerHTML.slice(0, 110));
+  ok('  with no marks anywhere on screen', !/[*\\[`]/.test(prose.textContent),
+     prose.textContent.slice(0, 60));
+
+  /* --- opening it again shows it formatted, not as marks ------------------ */
+  click(w, doc.querySelector('.read .entry-nav .iconbtn'));
+  click(w, doc.getElementById('passage-edit'));
+  await wait(40);
+  ok('Edit opens it set the way it reads',
+     !!box.querySelector('h2') && !!box.querySelector('b') &&
+     !!box.querySelector('.c-green') && !/[*\\[`]/.test(box.textContent),
+     box.innerHTML.slice(0, 110));
+  click(w, doc.querySelector('#pass-dlg .dlg-foot .btn'));   // Cancel
 
   /* --- and it is there on the next visit ---------------------------------- */
   const b = page(store, [], () => ({ ok: true }));

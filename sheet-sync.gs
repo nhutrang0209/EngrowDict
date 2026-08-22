@@ -755,12 +755,17 @@ function publishToRepo() {
   // A sheet with no Reading Passage tab must not take the passages off the
   // site: what is published stays published unless the sheet has its own.
   if (!payload.readings.length) payload.readings = publishedReadings(repo, token, branch);
+  /* A stamp on what is published, and the same stamp in the answer. Counting
+     entries was the old way of telling the new copy from the old one, and it
+     cannot see a passage that was rewritten or a word that was put right: the
+     count is the same and the file is not. */
+  payload.at = new Date().toISOString();
   var json = JSON.stringify(payload);
   var sha = shaOf(repo, token, branch, TARGET);
   var res = ghPut(repo, token, branch, TARGET, json, sha,
     'Sync from Google Sheet: ' + data.entries.length + ' entries');
   if (res.code === 200 || res.code === 201) {
-    return { ok: true, published: true, entries: data.entries.length };
+    return { ok: true, published: true, entries: data.entries.length, at: payload.at };
   }
   return { ok: true, published: false, entries: data.entries.length, payload: payload,
            error: 'GitHub answered ' + res.code + '. ' + String(res.body).slice(0, 160) };
@@ -775,6 +780,7 @@ function syncForWeb() {
     ok: true,
     published: !!r.published,
     entries: r.entries,
+    at: r.at || null,
     error: r.error || null,
     data: r.published ? null : r.payload,
   };
