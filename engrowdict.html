@@ -716,9 +716,24 @@ dialog::backdrop { background: rgba(8, 14, 11, .5); backdrop-filter: blur(2px); 
 }
 .card-list { display: flex; flex-direction: column; gap: 5px; }
 .card-row {
-  display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 6px;
+  display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 6px;
   padding: 6px 8px; border-radius: var(--r-s);
   background: var(--tint); border: 1px solid var(--hair);
+}
+/* A card that wants reading says so twice: in its own colour and with a mark
+   beside it. A rail of grey lines is easy to work beside and easy to forget. */
+.card-row.is-ready { background: var(--accent-soft); border-color: var(--accent); }
+.card-row.is-failed { background: var(--flag-soft); border-color: var(--flag); }
+.card-bell {
+  width: 16px; height: 16px; flex: none; border-radius: 999px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-family: var(--mono); font-size: 10px; font-weight: 600; line-height: 1;
+  background: var(--accent); color: #f2fbf6;
+}
+.card-row.is-failed .card-bell { background: var(--flag); }
+:root[data-theme="dark"] .card-bell { color: #05130d; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .card-bell { color: #05130d; }
 }
 .card-open {
   display: flex; flex-direction: column; gap: 1px; min-width: 0;
@@ -729,6 +744,9 @@ dialog::backdrop { background: rgba(8, 14, 11, .5); backdrop-filter: blur(2px); 
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .card-state { font-family: var(--mono); font-size: 9.5px; color: var(--faint); }
+.card-state.s-filling, .card-state.s-writing, .card-state.s-saving { color: var(--term); }
+.card-state.s-ready { color: var(--accent-hi); }
+.card-state.s-failed { color: var(--flag); }
 .card-open:hover .card-word { color: var(--accent-hi); }
 .card-x {
   border: 0; background: none; padding: 0 2px; cursor: pointer;
@@ -3536,14 +3554,25 @@ a.btn[hidden] { display: none; }
     var list = document.getElementById("card-list");
     list.textContent = "";
     parked.forEach(function (card) {
-      var row = el("div", "card-row");
+      var state = cardState(card);
+      /* Still going is amber, come back is green, and a card that wants
+         reading carries a mark: a rail of quiet grey lines is easy to work
+         beside and easy to forget. */
+      var row = el("div", "card-row"
+        + (state === "ready" ? " is-ready" : state === "failed" ? " is-failed" : ""));
       row.dataset.word = card.word;
       var open = el("button", "card-open");
       open.type = "button";
       open.appendChild(el("span", "card-word", cardLabel(card)));
-      open.appendChild(el("span", "card-state", stateWord(cardState(card))));
+      open.appendChild(el("span", "card-state s-" + state, stateWord(state)));
       open.addEventListener("click", function () { showCard(card); });
       row.appendChild(open);
+      if (state === "ready" || state === "failed") {
+        var mark = el("span", "card-bell", "!");
+        mark.setAttribute("aria-hidden", "true");
+        mark.title = state === "ready" ? "Ready to look over" : "Nothing came back";
+        row.appendChild(mark);
+      }
       var x = el("button", "card-x", "×");
       x.type = "button";
       x.title = "Throw " + cardName(card) + " away";

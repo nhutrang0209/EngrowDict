@@ -129,6 +129,14 @@ function ask(g, word) {
   await wait(60);
   ok('a word that comes back is ready on the rail',
      rail(g)[0] === 'abaft:ready' && dlg(g).open === false, rail(g).join(' | '));
+  ok('  it is marked as wanting attention, and coloured for it',
+     doc.querySelector('#card-list .card-row.is-ready .card-bell').textContent === '!' &&
+     doc.querySelector('#card-list .card-state.s-ready').textContent === 'ready',
+     doc.querySelector('#card-list .card-row').className);
+  ok('  while one still going round is amber and unmarked',
+     !!doc.querySelector('#card-list .card-state.s-filling') &&
+     doc.querySelectorAll('#card-list .card-bell').length === 1,
+     doc.querySelectorAll('#card-list .card-bell').length + ' marks');
   ok('  and says so at the bottom of the screen, in green',
      /abaft came back/.test(toastOf(g).textContent) &&
      toastOf(g).className === 'toast good',

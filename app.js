@@ -2507,14 +2507,25 @@
     var list = document.getElementById("card-list");
     list.textContent = "";
     parked.forEach(function (card) {
-      var row = el("div", "card-row");
+      var state = cardState(card);
+      /* Still going is amber, come back is green, and a card that wants
+         reading carries a mark: a rail of quiet grey lines is easy to work
+         beside and easy to forget. */
+      var row = el("div", "card-row"
+        + (state === "ready" ? " is-ready" : state === "failed" ? " is-failed" : ""));
       row.dataset.word = card.word;
       var open = el("button", "card-open");
       open.type = "button";
       open.appendChild(el("span", "card-word", cardLabel(card)));
-      open.appendChild(el("span", "card-state", stateWord(cardState(card))));
+      open.appendChild(el("span", "card-state s-" + state, stateWord(state)));
       open.addEventListener("click", function () { showCard(card); });
       row.appendChild(open);
+      if (state === "ready" || state === "failed") {
+        var mark = el("span", "card-bell", "!");
+        mark.setAttribute("aria-hidden", "true");
+        mark.title = state === "ready" ? "Ready to look over" : "Nothing came back";
+        row.appendChild(mark);
+      }
       var x = el("button", "card-x", "×");
       x.type = "button";
       x.title = "Throw " + cardName(card) + " away";
