@@ -388,9 +388,12 @@ on the shelf. Reading the file back needs nothing but the passcode.
 
 The order is the sheet's, which is the order they happened to be pasted in.
 Two icon buttons sit at the end of the line that counts them, for whoever has
-unlocked the page: the first turns every row's pair of arrows on, the second
-writes the order into the sheet. Arrows rather than a drag, because the list is
-virtual and draws only the rows it can see.
+unlocked the page: the first turns reordering on, the second writes the order
+into the sheet. With it on, a row is dragged where it should go — the way the
+senses in the word form are — and carries a pair of arrows as well, for a thumb
+or a keyboard. The list is virtual, so a drag works off the layout the list
+already keeps rather than off the rows, which are thrown away and drawn again
+on every move.
 
 Moving a passage is this browser's opinion until it is sent — a Sync would undo
 it — so the sending is a button, and it lights amber while there is something

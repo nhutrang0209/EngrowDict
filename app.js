@@ -526,7 +526,12 @@
     b.type = "button";
     b.dataset.i = r.i;
     b.setAttribute("aria-current", e.id === selectedId ? "true" : "false");
-    b.addEventListener("click", function () { select(e.id); showDetail(); });
+    b.addEventListener("click", function () {
+      // a row let go of after a drag is not a row that was pressed
+      if (draggedRead) { draggedRead = false; return; }
+      select(e.id);
+      showDetail();
+    });
 
     var line = el("div", "top-line");
     if (e.chapters) {                               // a book on the shelf
@@ -555,7 +560,14 @@
       markUp(tg, e.paras[0].text, q);
       col.appendChild(tg);
       b.appendChild(col);
-      if (orderMode && mayAdd()) orderArrows(b, e);
+      if (orderMode && mayAdd()) {
+        orderArrows(b, e);
+        b.addEventListener("mousedown", function (ev) {
+          if (ev.button !== 0) return;
+          if (ev.target && ev.target.closest && ev.target.closest(".ord")) return;
+          dragRead(e.id, ev);
+        });
+      }
       return b;
     }
     var hw = el("span", "hw");
@@ -4634,13 +4646,16 @@
     paint(true);
   }
 
+  function indexOfRead(id) {
+    for (var i = 0; i < READINGS.length; i++) if (READINGS[i].id === id) return i;
+    return -1;
+  }
+
   /* The list is what is on screen; READINGS is what the page holds. Moving one
      means moving the other, and renumbering both. */
-  function moveRead(id, by) {
-    var at = -1, i;
-    for (i = 0; i < READINGS.length; i++) if (READINGS[i].id === id) at = i;
-    var to = at + by;
-    if (at < 0 || to < 0 || to >= READINGS.length) return;
+  function moveReadTo(id, to) {
+    var at = indexOfRead(id);
+    if (at < 0 || to < 0 || to >= READINGS.length || to === at) return;
     var one = READINGS[at];
     READINGS.splice(at, 1);
     READINGS.splice(to, 0, one);
@@ -4650,15 +4665,69 @@
     READINGS.forEach(function (r, n) { r.index = String(n + 1); });
     BASE.readings = READINGS;
     orderDirty = true;
-    selectedId = selectedRead ? selectedRead.id : null;
-    rebuild();
-    refresh();
+    relistPassages();
+  }
+
+  /* Just the list. Reordering changes neither what is in the passages nor what
+     is open on the right, and redrawing those on every pixel of a drag is how
+     a drag comes to stutter. */
+  function relistPassages() {
+    search();
+    spacer.style.height = layout() + "px";
+    paint(true);
+    drawCount();
+  }
+
+  function moveRead(id, by) {
+    moveReadTo(id, indexOfRead(id) + by);
     /* The row moved with it, so the arrows stay under the thumb. */
-    var moved = document.querySelector('.hit[data-order-id="' + one.id + '"]');
+    var moved = windowBox.querySelector('.hit[data-order-id="' + id + '"]');
     if (moved) {
       var arrow = moved.querySelector(by > 0 ? ".ord-down" : ".ord-up");
       if (arrow) arrow.focus();
     }
+  }
+
+  /* ---- and the same by hand ----------------------------------------------
+
+     Dragged rather than pressed, the way the senses in the word form are. The
+     list is virtual, so where the pointer is is worked out from the layout the
+     list already keeps — every row is one ROW_H tall — rather than from the
+     rows themselves, which are thrown away and drawn again on every move. */
+  var draggedRead = false;
+
+  function readUnder(clientY) {
+    var box = scrollBox.getBoundingClientRect();
+    var y = clientY - box.top + scrollBox.scrollTop;
+    var at = Math.floor(y / ROW_H);
+    if (at < 0) at = 0;
+    if (at > hits.length - 1) at = hits.length - 1;
+    return hits[at];
+  }
+
+  function liftRead(id, on) {
+    var row = windowBox.querySelector('.hit[data-order-id="' + id + '"]');
+    if (row) row.classList.toggle("lifting", on !== false);
+  }
+
+  function dragRead(id, ev) {
+    ev.preventDefault();
+    draggedRead = false;
+    liftRead(id, true);
+    var move = function (at) {
+      var over = readUnder(at.clientY);
+      if (!over || over.id === id) return;
+      draggedRead = true;
+      moveReadTo(id, indexOfRead(over.id));
+      liftRead(id, true);
+    };
+    var up = function () {
+      liftRead(id, false);
+      document.removeEventListener("mousemove", move);
+      document.removeEventListener("mouseup", up);
+    };
+    document.addEventListener("mousemove", move);
+    document.addEventListener("mouseup", up);
   }
 
   function sendOrder() {
@@ -5032,7 +5101,11 @@
       }
     });
     document.addEventListener("keydown", function (ev) {
-      if (isTyping(ev.target)) return;
+      // a divider being nudged with the arrow keys has already dealt with them;
+      // stepping to the next entry as well is not what was asked for
+      if (ev.defaultPrevented || isTyping(ev.target)) return;
+      if (ev.target && ev.target.getAttribute
+        && ev.target.getAttribute("role") === "separator") return;
       if (ev.key === "/") { ev.preventDefault(); qInput.focus(); qInput.select(); }
       else if (ev.key === "d" && (view === "read" || view === "book")) {
         ev.preventDefault();

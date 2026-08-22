@@ -89,12 +89,45 @@ const arrows = (g, row) => g.doc.querySelectorAll('.hit.passage')[row]
   ok('  and the button says there is something to send',
      doc.getElementById('order-save').classList.contains('wants'));
 
+  /* --- dragged, the way the senses in the word form are ------------------- */
+  /* jsdom does no layout, so the drag works off the list's own maths: every
+     row is 64px tall and the box starts at nought. */
+  const rowsNow = () => titles(g);
+  const dragFrom = (row, toY) => {
+    const node = doc.querySelectorAll('.hit.passage')[row];
+    node.dispatchEvent(new w.MouseEvent('mousedown',
+      { clientY: row * 64 + 32, button: 0, bubbles: true, cancelable: true }));
+    doc.dispatchEvent(new w.MouseEvent('mousemove', { clientY: toY, bubbles: true }));
+    doc.dispatchEvent(new w.MouseEvent('mouseup', { clientY: toY, bubbles: true }));
+  };
+
+  const before = rowsNow().slice(0, 4);
+  dragFrom(3, 32);                          // the fourth row up to the first
+  await wait(40);
+  ok('a passage can be dragged to a different place in the list',
+     rowsNow()[0] === before[3] &&
+     rowsNow().slice(1, 4).join('|') === before.slice(0, 3).join('|'),
+     rowsNow().slice(0, 4).join(' | '));
+  ok('  and is numbered where it lands',
+     [...doc.querySelectorAll('.hit.passage .idx')].slice(0, 4)
+       .map(n => n.textContent).join(',') === '1,2,3,4');
+  ok('  the drag is not taken for a press: no passage is opened by it',
+     doc.body.dataset.view !== 'detail' ||
+     doc.querySelector('.read h1') === null ||
+     doc.querySelector('.read h1').textContent !== before[3],
+     doc.querySelector('.read h1') ? doc.querySelector('.read h1').textContent : '(nothing open)');
+  ok('  and nothing was sent to the sheet by dragging',
+     posts.length === 0, JSON.stringify(posts));
+
   click(w, doc.getElementById('order-save'));
   await wait(200);
   ok('the second button sends the order, and nothing else',
      posts.length === 1 && posts[0].action === 'orderpassages' &&
-     posts[0].titles[0] === first[1] && posts[0].titles[1] === first[0],
-     JSON.stringify(posts[0] && posts[0].titles.slice(0, 2)));
+     posts[0].titles.slice(0, 4).join('|') === titles(g).slice(0, 4).join('|') &&
+     // the list draws only the rows it can see; what is sent is all of them
+     posts[0].titles.length === 33,
+     posts[0].titles.length + ' titles: '
+       + JSON.stringify(posts[0] && posts[0].titles.slice(0, 2)));
   ok('  and says so once the sheet has it',
      /passages put in that order/.test(doc.getElementById('toast').textContent) &&
      doc.getElementById('toast').className === 'toast good',

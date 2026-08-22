@@ -357,6 +357,12 @@ body.resizing { cursor: col-resize; user-select: none; }
   color: var(--faint); border-radius: 4px;
 }
 .ord:hover { color: var(--accent-hi); background: var(--accent-soft); }
+/* The row is its own handle while the order is being changed. */
+.hit.passage.ordering { cursor: grab; user-select: none; }
+.hit.passage.ordering:active { cursor: grabbing; }
+.hit.passage.lifting {
+  background: var(--accent-soft); box-shadow: var(--lift-2); opacity: .9;
+}
 
 .scroll { flex: 1; overflow-y: auto; overscroll-behavior: contain; position: relative; }
 .spacer { position: relative; width: 100%; }
