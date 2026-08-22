@@ -930,7 +930,6 @@ a.btn[hidden] { display: none; }
 @media (max-width: 1000px) {
   :root { --list-w: 300px; }
   .tr-grid { grid-template-columns: 1fr; }
-  .tr-side { position: static; }
   .detail-inner { padding: 28px 28px 72px; }
 }
 @media (max-width: 760px) {
@@ -967,9 +966,8 @@ a.btn[hidden] { display: none; }
   /* Translate lives in the pane and has no list behind it, so the pane is the
      page here whatever the phone thinks it is showing. */
   body[data-solo="on"]:not([data-view="detail"]) .detail { display: block; }
-  .tr-grid { grid-template-columns: 1fr; gap: 20px; }
-  .tr-side { position: static; }
-  .tr-side textarea { min-height: 200px; }
+  .tr-grid { grid-template-columns: 1fr; gap: 14px; }
+  .tr-pane textarea, .tr-out { min-height: 170px; font-size: 16px; }
   .grid-word { grid-template-columns: 1fr; }
   .fill-box { justify-content: space-between; }
   /* A bar over a column of prose. While a passage is open the bar is lifted
@@ -1000,46 +998,64 @@ a.btn[hidden] { display: none; }
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
 
-/* ---- translate: paste on the left, read it back on the right ------------- */
-.translate h1 {
-  font-family: var(--serif); font-size: 30px; font-weight: 600;
-  font-variation-settings: "opsz" 40; letter-spacing: -.015em;
+/* ---- translate: two boxes, the way everybody already knows -------------- */
+.tr-bar {
+  display: flex; align-items: center; gap: 14px;
+  padding-bottom: 12px; border-bottom: 1px solid var(--rule);
 }
-.translate .hint {
-  margin-top: 10px; max-width: 68ch;
-  font-size: 13px; color: var(--faint); line-height: 1.6;
+.tr-lang {
+  flex: 1; font-family: var(--mono); font-size: 10px; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--muted);
 }
+.tr-lang + .tr-swap + .tr-lang { text-align: left; }
+.tr-swap { flex: none; }
 .tr-grid {
-  margin-top: 24px; display: grid; gap: 26px;
-  grid-template-columns: 1fr 1fr; align-items: start;
+  margin-top: 14px; display: grid; gap: 18px;
+  grid-template-columns: 1fr 1fr; align-items: stretch;
 }
-.tr-side { position: sticky; top: 0; display: flex; flex-direction: column; gap: 12px; }
-.tr-side textarea {
-  width: 100%; min-height: 320px; resize: vertical;
+.tr-pane {
+  display: flex; flex-direction: column; min-width: 0;
   border: 1px solid var(--rule); border-radius: var(--r-m);
-  background: var(--tint); color: var(--ink);
-  padding: 14px 15px; font-family: var(--sans); font-size: 15px; line-height: 1.6;
-  transition: border-color .14s ease, box-shadow .14s ease, background .14s ease;
+  background: var(--surface); overflow: hidden;
 }
-.tr-side textarea:focus {
-  outline: none; border-color: var(--accent);
-  box-shadow: var(--ring); background: var(--surface);
+.tr-pane:focus-within { border-color: var(--accent); box-shadow: var(--ring); }
+.tr-result { background: var(--tint); }
+.tr-pane textarea {
+  flex: 1; width: 100%; min-height: 320px; resize: vertical;
+  border: 0; background: none; color: var(--ink);
+  padding: 16px 17px; font-family: var(--sans); font-size: 17px; line-height: 1.6;
 }
-.tr-row { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
-.tr-row .btn[hidden] { display: none; }
-.tr-msg { font-size: 12.5px; color: var(--faint); line-height: 1.5; }
-.tr-msg.warn { color: var(--term); }
-.tr-out { min-width: 0; display: flex; flex-direction: column; gap: 20px; }
-.tr-none { font-size: 14px; color: var(--faint); }
-.tr-para {
-  padding-left: 15px; border-left: 2px solid var(--hair);
-  display: flex; flex-direction: column; gap: 7px;
+.tr-pane textarea:focus { outline: none; }
+.tr-out {
+  flex: 1; min-height: 320px; padding: 16px 17px;
+  display: flex; flex-direction: column; gap: 14px;
+  font-size: 17px; line-height: 1.6; overflow-wrap: break-word;
 }
-.tr-para .en { font-size: 14px; color: var(--muted); line-height: 1.6; }
-.tr-para .vi { font-size: 16px; color: var(--ink); line-height: 1.65; }
+.tr-none { color: var(--faint); }
+.tr-para .vi { color: var(--ink); }
 .tr-para .vi.waiting { color: var(--faint); }
-.tr-para .none { font-size: 13px; color: var(--flag); }
-.tr-para .btn { align-self: flex-start; }
+.tr-para .none { font-size: 13.5px; color: var(--flag); }
+.tr-para .btn { align-self: flex-start; margin-top: 8px; }
+.tr-foot {
+  display: flex; align-items: center; gap: 4px;
+  padding: 7px 10px; border-top: 1px solid var(--hair);
+}
+.tr-foot .grow { flex: 1; }
+.tr-act {
+  border: 0; background: none; cursor: pointer; color: var(--faint);
+  width: 32px; height: 30px; border-radius: 8px;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.tr-act svg { width: 17px; height: 17px; }
+.tr-act:hover { background: var(--sunk); color: var(--ink); }
+.tr-act[hidden] { display: none; }
+.tr-x {
+  border: 0; background: none; cursor: pointer; color: var(--faint);
+  width: 30px; height: 30px; border-radius: 8px; font-size: 18px; line-height: 1;
+}
+.tr-x:hover { background: var(--sunk); color: var(--ink); }
+.tr-msg { font-size: 11.5px; color: var(--faint); text-align: right; }
+.tr-msg.warn { color: var(--term); }
 
 /* ---- the floating dictionary, for use while reading --------------------- */
 .popdict {
@@ -1244,19 +1260,27 @@ a.btn[hidden] { display: none; }
       && typeof window.SpeechSynthesisUtterance === "function";
   }
 
-  function speak(word) {
+  /* A headword is said in English, since that is what a headword is. Anything
+     else says which language it is in, and the best voice for it is whichever
+     the browser has: the preferred one first, then any voice of that language
+     at all, and silence rather than a Vietnamese sentence read as English. */
+  var VOICE = { en: ["en-GB", "en"], vi: ["vi-VN", "vi"] };
+
+  function speak(word, lang) {
     if (!canSpeak() || !word) return;
+    var want = VOICE[lang] ? lang : "en";
     try {
       window.speechSynthesis.cancel();       // a second press interrupts the first
       var say = new window.SpeechSynthesisUtterance(word);
-      say.lang = "en-GB";
+      say.lang = VOICE[want][0];
       say.rate = 0.95;                       // a word on its own, not a sentence
       var voices = window.speechSynthesis.getVoices
         ? (window.speechSynthesis.getVoices() || []) : [];
       var pick = null, i;
       for (i = 0; i < voices.length; i++) {
-        if (!pick && /^en/i.test(voices[i].lang)) pick = voices[i];
-        if (/^en[-_]GB/i.test(voices[i].lang)) { pick = voices[i]; break; }
+        if (!pick && new RegExp("^" + want, "i").test(voices[i].lang)) pick = voices[i];
+        if (new RegExp("^" + VOICE[want][0].replace("-", "[-_]"), "i")
+          .test(voices[i].lang)) { pick = voices[i]; break; }
       }
       if (pick) say.voice = pick;
       window.speechSynthesis.speak(say);
@@ -1359,15 +1383,17 @@ a.btn[hidden] { display: none; }
     return null;
   }
 
-  function translateUrl(text) {
-    return "https://translate.google.com/?sl=en&tl=vi&op=translate&text="
+  function translateUrl(text, from, to) {
+    return "https://translate.google.com/?sl=" + (from || "en")
+      + "&tl=" + (to || "vi") + "&op=translate&text="
       + encodeURIComponent(text);
   }
 
   /* The notebook holds advanced vocabulary, so most running words in a passage
-     are not in it. Machine translation covers the rest — English to Vietnamese,
-     the only direction this is ever used in. It needs the open web, so it works
-     on the published site and not inside the claude.ai artifact.
+     are not in it. Machine translation covers the rest — English to Vietnamese
+     under a passage, either way round on the Translate tab. It needs the open
+     web, so it works on the published site and not inside the claude.ai
+     artifact.
 
      Two sources, tried in order. Google's is what people mean by "translate
      this word"; it is an undocumented endpoint, so it may change without
@@ -1378,9 +1404,10 @@ a.btn[hidden] { display: none; }
      translated — "imprisonment" came back as "sợ bỏ tù", the fear of it. */
   var mtCache = {};
 
-  function gTranslate(text) {
+  function gTranslate(text, from, to) {
     return fetch("https://translate.googleapis.com/translate_a/single"
-      + "?client=gtx&sl=en&tl=vi&dt=t&q=" + encodeURIComponent(text))
+      + "?client=gtx&sl=" + (from || "en") + "&tl=" + (to || "vi")
+      + "&dt=t&q=" + encodeURIComponent(text))
       .then(function (r) { return r.json(); })
       .then(function (d) {
         if (!d || !d[0] || !d[0].length) throw new Error("unexpected shape");
@@ -1393,8 +1420,9 @@ a.btn[hidden] { display: none; }
       });
   }
 
-  function memoryTranslate(text) {
-    return fetch("https://api.mymemory.translated.net/get?langpair=en%7Cvi&q="
+  function memoryTranslate(text, from, to) {
+    return fetch("https://api.mymemory.translated.net/get?langpair="
+      + (from || "en") + "%7C" + (to || "vi") + "&q="
       + encodeURIComponent(text))
       .then(function (r) { return r.json(); })
       .then(function (d) {
@@ -1404,14 +1432,17 @@ a.btn[hidden] { display: none; }
       });
   }
 
-  function machineTranslate(text) {
-    var key = text.toLowerCase();
+  function machineTranslate(text, from, to) {
+    from = from || "en";
+    to = to || "vi";
+    // the same words the other way round are not the same answer
+    var key = from + ">" + to + ">" + text.toLowerCase();
     if (mtCache[key]) return Promise.resolve(mtCache[key]);
     if (MODE !== "static" || typeof fetch !== "function") {
       return Promise.reject(new Error("offline"));
     }
-    return gTranslate(text).catch(function () {
-      return memoryTranslate(text);
+    return gTranslate(text, from, to).catch(function () {
+      return memoryTranslate(text, from, to);
     }).then(function (got) {
       mtCache[key] = got;
       return got;
@@ -2609,82 +2640,178 @@ a.btn[hidden] { display: none; }
   /* ---- translating something of your own ----------------------------------
 
      The passages tab is for what the notebook ships with; this is for whatever
-     you have in front of you. Paste it, and it comes back paragraph by
-     paragraph, English above and Vietnamese below, because a translation you
-     cannot check against the original is not much use to somebody learning.
+     you have in front of you. Two boxes side by side, the way everybody
+     already knows how to use: type into the left and the right keeps up. Both
+     ways round, since a learner writes as often as they read.
+
+     It translates as you type — after the typing pauses, not on the keystroke.
+     A request per character would be a request nobody answers twice, and the
+     free endpoints stop answering long before the sentence is finished.
 
      The same two translators the selection card uses, in the same order:
      Google first, MyMemory behind it. Both take the text in the URL, so a
      paragraph goes over in pieces cut at the ends of sentences and comes back
-     joined. One paragraph at a time — a page of them fired off at once is how
-     a free endpoint decides it has heard enough from you. */
+     joined, and the paragraphs go one at a time. */
   var TR_CHUNK = 900;
+  var TR_WAIT = 450;                  // how long a pause counts as stopping
   var trSource = "", trOut = [], trState = "", trMsg = "";
+  var trDir = "en-vi", trTimer = 0, trRun = 0;
+
+  var LANGS = { en: "English", vi: "Vietnamese" };
+
+  function trFrom() { return trDir.split("-")[0]; }
+  function trTo() { return trDir.split("-")[1]; }
 
   function canTranslate() {
     return MODE === "static" && typeof fetch === "function";
   }
 
+  function trText() {
+    return trOut.map(function (p) { return p.vi || ""; }).join("\n\n").trim();
+  }
+
   function translateView() {
     var w = el("div", "translate");
-    w.appendChild(el("h1", null, "Translate"));
-    w.appendChild(el("p", "hint",
-      "Paste English — a paragraph, a page — and read it back in Vietnamese. "
-      + "It is machine translation, so read it twice; select any word in it to "
-      + "see what the notebook has on that one."));
+
+    /* The bar that says which way round it is. Two languages, so the swap is
+       one button rather than two menus of the world. */
+    var bar = el("div", "tr-bar");
+    var from = el("span", "tr-lang", LANGS[trFrom()]);
+    from.id = "tr-from";
+    bar.appendChild(from);
+    var swap = el("button", "iconbtn tr-swap", "⇄");
+    swap.type = "button";
+    swap.id = "tr-swap";
+    swap.title = "Translate the other way";
+    swap.setAttribute("aria-label", swap.title);
+    swap.addEventListener("click", swapDirection);
+    bar.appendChild(swap);
+    var to = el("span", "tr-lang", LANGS[trTo()]);
+    to.id = "tr-to";
+    bar.appendChild(to);
+    w.appendChild(bar);
 
     var grid = el("div", "tr-grid");
-    var left = el("div", "tr-side");
+
+    /* --- what you are writing --- */
+    var left = el("div", "tr-pane");
     var ta = el("textarea");
     ta.id = "tr-in";
-    ta.placeholder = "Paste the English here…";
+    ta.placeholder = "Type or paste here…";
     ta.value = trSource;
-    ta.addEventListener("input", function () { trSource = ta.value; });
-    ta.addEventListener("keydown", function (ev) {
-      if ((ev.metaKey || ev.ctrlKey) && ev.key === "Enter") {
-        ev.preventDefault();
-        runTranslate();
-      }
+    ta.setAttribute("aria-label", "The text to translate");
+    ta.addEventListener("input", function () {
+      trSource = ta.value;
+      trTyped();
     });
     left.appendChild(ta);
-
-    var row = el("div", "tr-row");
-    var go = el("button", "btn btn-primary", "Translate");
-    go.type = "button";
-    go.id = "tr-go";
-    go.addEventListener("click", runTranslate);
-    row.appendChild(go);
-    var clear = el("button", "btn", "Clear");
+    var lfoot = el("div", "tr-foot");
+    lfoot.appendChild(sayThis("tr-say-in", function () { return trSource; },
+      function () { return trFrom(); }));
+    lfoot.appendChild(copyThis("tr-copy-in", function () { return trSource; }));
+    lfoot.appendChild(el("span", "grow"));
+    var clear = el("button", "tr-x", "×");
     clear.type = "button";
     clear.id = "tr-clear";
+    clear.title = "Clear it";
+    clear.setAttribute("aria-label", clear.title);
     clear.addEventListener("click", function () {
       trSource = ""; trOut = []; trState = ""; trMsg = "";
-      drawDetail();
+      var box = document.getElementById("tr-in");
+      if (box) { box.value = ""; box.focus(); }
+      paintTranslation();
     });
-    row.appendChild(clear);
-    var copy = el("button", "btn", "Copy the Vietnamese");
-    copy.type = "button";
-    copy.id = "tr-copy";
-    copy.hidden = true;
-    copy.addEventListener("click", copyTranslation);
-    row.appendChild(copy);
-    left.appendChild(row);
-    var msg = el("p", "tr-msg", "");
-    msg.id = "tr-msg";
-    left.appendChild(msg);
+    lfoot.appendChild(clear);
+    left.appendChild(lfoot);
     grid.appendChild(left);
 
+    /* --- what it says --- */
+    var right = el("div", "tr-pane tr-result");
     var out = el("div", "tr-out");
     out.id = "tr-out";
-    /* The same select-to-look-up the passages have, on the English and the
-       Vietnamese alike: a word you had to translate is exactly the sort of
-       word the notebook should be told about. */
-    out.addEventListener("mouseup", onSelectInProse);
-    out.addEventListener("touchend", onSelectInProse);
-    grid.appendChild(out);
+    /* Select-to-look-up, but only where the answer is English: the notebook is
+       an English notebook, and a Vietnamese word selected in it would be
+       looked up in the one language it cannot help with. */
+    if (trTo() === "en") {
+      out.addEventListener("mouseup", onSelectInProse);
+      out.addEventListener("touchend", onSelectInProse);
+    }
+    right.appendChild(out);
+    var rfoot = el("div", "tr-foot");
+    rfoot.appendChild(sayThis("tr-say-out", trText, function () { return trTo(); }));
+    rfoot.appendChild(copyThis("tr-copy-out", trText));
+    rfoot.appendChild(el("span", "grow"));
+    var msg = el("span", "tr-msg", "");
+    msg.id = "tr-msg";
+    rfoot.appendChild(msg);
+    right.appendChild(rfoot);
+    grid.appendChild(right);
 
     w.appendChild(grid);
     return w;
+  }
+
+  /* The two buttons every box carries. Both go quiet when their box is empty
+     rather than answering with nothing. */
+  function sayThis(id, textOf, langOf) {
+    var b = el("button", "tr-act");
+    b.type = "button";
+    b.id = id;
+    b.title = "Read it out";
+    b.setAttribute("aria-label", b.title);
+    b.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"'
+      + ' stroke-width="2" stroke-linecap="round" stroke-linejoin="round"'
+      + ' aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>'
+      + '<path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>'
+      + '<path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>';
+    b.hidden = !canSpeak();
+    b.addEventListener("click", function () { speak(textOf(), langOf()); });
+    return b;
+  }
+
+  function copyThis(id, textOf) {
+    var b = el("button", "tr-act");
+    b.type = "button";
+    b.id = id;
+    b.title = "Copy it";
+    b.setAttribute("aria-label", b.title);
+    b.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"'
+      + ' stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"'
+      + ' aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/>'
+      + '<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+    b.addEventListener("click", function () { copyText(textOf()); });
+    return b;
+  }
+
+  function copyText(text) {
+    if (!text) return;
+    if (!navigator.clipboard || !navigator.clipboard.writeText) {
+      toast("This browser will not let the page copy for you.");
+      return;
+    }
+    navigator.clipboard.writeText(text).then(function () {
+      toast("Copied");
+    }, function () {
+      toast("Could not copy it.");
+    });
+  }
+
+  /* Swapping puts the answer in the box you type into, which is what you
+     wanted it for: check the Vietnamese by reading it back as English. */
+  function swapDirection() {
+    var answer = trText();
+    trDir = trDir === "en-vi" ? "vi-en" : "en-vi";
+    trSource = answer || trSource;
+    trOut = [];
+    trState = "";
+    trMsg = "";
+    drawDetail();
+    runTranslate();
+  }
+
+  function trTyped() {
+    if (trTimer) clearTimeout(trTimer);
+    trTimer = setTimeout(function () { trTimer = 0; runTranslate(); }, TR_WAIT);
   }
 
   function paintTranslation() {
@@ -2692,24 +2819,23 @@ a.btn[hidden] { display: none; }
     if (!box) return;
     box.textContent = "";
     if (!trOut.length) {
-      box.appendChild(el("p", "tr-none", "The Vietnamese appears here."));
+      box.appendChild(el("p", "tr-none", "Translation"));
     } else {
       trOut.forEach(function (p) {
         var b = el("div", "tr-para");
-        b.appendChild(el("p", "en", p.en));
         if (p.vi) {
           b.appendChild(el("p", "vi", p.vi));
         } else if (p.err) {
-          b.appendChild(el("p", "none", "Neither translator would answer for this one."));
+          b.appendChild(el("p", "none", "Neither translator would answer for this."));
           var a = document.createElement("a");
           a.className = "btn";
           a.target = "_blank";
           a.rel = "noopener";
-          a.href = translateUrl(p.en);
+          a.href = translateUrl(p.en, trFrom(), trTo());
           a.textContent = "Open it in Google Translate";
           b.appendChild(a);
         } else {
-          b.appendChild(el("p", "vi waiting", "…"));
+          b.appendChild(el("p", "vi waiting", p.en));
         }
         box.appendChild(b);
       });
@@ -2719,62 +2845,69 @@ a.btn[hidden] { display: none; }
       msg.className = "tr-msg" + (trState === "working" ? " warn" : "");
       msg.textContent = trMsg;
     }
-    var copy = document.getElementById("tr-copy");
-    if (copy) {
-      copy.hidden = trState !== "done"
-        || !trOut.some(function (p) { return !!p.vi; });
-    }
-    var go = document.getElementById("tr-go");
-    if (go) {
-      go.disabled = trState === "working";
-      go.textContent = trState === "working" ? "Translating…" : "Translate";
-    }
+    var some = !!trText();
+    [["tr-say-out", some], ["tr-copy-out", some],
+     ["tr-say-in", !!trSource.trim()], ["tr-copy-in", !!trSource.trim()]]
+      .forEach(function (pair) {
+        var b = document.getElementById(pair[0]);
+        if (!b) return;
+        if (pair[0] === "tr-say-in" || pair[0] === "tr-say-out") {
+          b.hidden = !canSpeak() || !pair[1];
+        } else {
+          b.hidden = !pair[1];
+        }
+      });
   }
 
   function runTranslate() {
-    if (trState === "working") return;
     var text = (trSource || "").trim();
-    if (!text) { trState = ""; trMsg = "Paste something first."; paintTranslation(); return; }
+    var mine = ++trRun;                      // anything older than this is stale
+    if (!text) {
+      trOut = []; trState = ""; trMsg = "";
+      paintTranslation();
+      return;
+    }
     if (!canTranslate()) {
       trState = "";
       trMsg = "This copy of the page cannot reach a translator — open the site itself.";
       paintTranslation();
       return;
     }
-    trOut = [];
+    var paras = [];
     text.split(/\n+/).forEach(function (p) {
       var one = p.trim();
-      if (one) trOut.push({ en: one, vi: "", via: "", err: false });
+      if (one) paras.push({ en: one, vi: "", via: "", err: false });
     });
-    if (!trOut.length) return;
+    if (!paras.length) return;
+    trOut = paras;
     trState = "working";
-    trMsg = "Translating " + plural(trOut.length, "paragraph", "paragraphs") + "…";
+    trMsg = "Translating…";
     paintTranslation();
 
-    var seq = Promise.resolve(), done = 0, total = trOut.length;
-    trOut.forEach(function (p) {
+    var seq = Promise.resolve(), from = trFrom(), to = trTo();
+    paras.forEach(function (p) {
       seq = seq.then(function () {
-        return translateLong(p.en).then(function (got) {
+        if (mine !== trRun) return null;     // typed again since; let it go
+        return translateLong(p.en, from, to).then(function (got) {
           p.vi = got.text;
           p.via = got.via;
         }, function () {
           p.err = true;
         }).then(function () {
-          done++;
-          if (done < total) trMsg = "Translating… " + done + " of " + total;
-          paintTranslation();
+          if (mine === trRun) paintTranslation();
         });
       });
     });
     seq.then(function () {
+      if (mine !== trRun) return;
       trState = "done";
       var by = {};
       trOut.forEach(function (p) { if (p.via) by[p.via] = true; });
       var names = Object.keys(by);
       var lost = trOut.filter(function (p) { return p.err; }).length;
-      trMsg = !names.length ? "Nothing came back at all."
+      trMsg = !names.length ? "Nothing came back."
         : (lost ? plural(lost, "paragraph", "paragraphs") + " did not come back. " : "")
-          + "Machine-translated by " + names.join(" and ") + " — read it twice.";
+          + "Machine translation, by " + names.join(" and ");
       paintTranslation();
     });
   }
@@ -2802,32 +2935,19 @@ a.btn[hidden] { display: none; }
     return out.map(function (x) { return x.trim(); }).filter(Boolean);
   }
 
-  function translateLong(text) {
+  function translateLong(text, from, to) {
     var parts = trChunks(text);
     var got = [], via = "";
     var seq = Promise.resolve();
     parts.forEach(function (bit) {
       seq = seq.then(function () {
-        return machineTranslate(bit).then(function (one) {
+        return machineTranslate(bit, from, to).then(function (one) {
           got.push(one.text);
           via = one.via;
         });
       });
     });
     return seq.then(function () { return { text: got.join(" "), via: via }; });
-  }
-
-  function copyTranslation() {
-    var text = trOut.map(function (p) { return p.vi || p.en; }).join("\n\n");
-    if (!navigator.clipboard || !navigator.clipboard.writeText) {
-      toast("This browser will not let the page copy for you.");
-      return;
-    }
-    navigator.clipboard.writeText(text).then(function () {
-      toast("The Vietnamese is on the clipboard");
-    }, function () {
-      toast("Could not copy it.");
-    });
   }
 
   /* ---- books --------------------------------------------------------------
