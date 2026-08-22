@@ -41,7 +41,7 @@ for name, text in (('app.css', css), ('app.js', js)):
     for bad in ('</style', '</script'):
         assert bad not in text, name + ' contains ' + bad
 
-FONTS = ("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700"
+FONTS = ("https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700"
          "&amp;family=IBM+Plex+Mono:wght@400;500;600"
          "&amp;family=IBM+Plex+Sans:wght@400;450;500;600&amp;display=swap")
 

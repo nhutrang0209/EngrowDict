@@ -10,7 +10,7 @@
 (function () {
   "use strict";
 
-  var FONT_URL = "https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;450;500;600&display=swap";
+  var FONT_URL = "https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;450;500;600&display=swap";
   var BACKUP_KEY = "engrowdict:added:v1";
   var SETTINGS_KEY = "engrowdict:settings:v1";
   var DEFAULT_PASSCODE = "229922";
