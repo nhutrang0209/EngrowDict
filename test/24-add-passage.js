@@ -173,6 +173,70 @@ const fill = (g, title, body) => {
   ok('  and from the device', !JSON.parse(store[MINE]).some(r => r.title === 'Kept Here Only'),
      store[MINE]);
 
+  /* --- writing it with the buttons ---------------------------------------- */
+  click(w, add());
+  const ta = dlg.querySelector('[name=pbody]');
+  const bar = dlg.querySelector('.markbar');
+  const press = label => click(w,
+    [...bar.querySelectorAll('.markbtn')].find(b => (b.title || '') === label));
+  ok('the box has a row of buttons over it', !!bar &&
+     bar.querySelectorAll('.markbtn').length >= 8,
+     bar && bar.querySelectorAll('.markbtn').length + ' buttons');
+
+  ta.value = 'A word in it';
+  ta.selectionStart = 2; ta.selectionEnd = 6;
+  press('Bold');
+  ok('Bold marks what was selected', ta.value === 'A **word** in it', ta.value);
+  ta.selectionStart = 0; ta.selectionEnd = ta.value.length;
+  press('Take the marks off');
+  ok('  and the eraser takes it off again', ta.value === 'A word in it', ta.value);
+
+  ta.value = 'A heading';
+  ta.selectionStart = ta.selectionEnd = 3;
+  press('Heading');
+  ok('Heading works on the line, not the selection', ta.value === '# A heading', ta.value);
+  press('Heading');
+  ok('  and pressing it again takes it back', ta.value === 'A heading', ta.value);
+  press('Indent');
+  press('Indent');
+  ok('Indent steps the line in, once for each press', ta.value === '> > A heading',
+     JSON.stringify(ta.value));
+  press('Outdent');
+  ok('  and Outdent steps it back', ta.value === '> A heading', JSON.stringify(ta.value));
+
+  ta.value = 'Red for danger';
+  ta.selectionStart = 0; ta.selectionEnd = 3;
+  press('Red');
+  ok('a colour is a mark like any other', ta.value === '[red]Red[/] for danger', ta.value);
+
+  /* --- the preview shows what it will look like --------------------------- */
+  ta.value = '# A Heading\n- a bullet\n> stepped in\nplain **bold** and [green]green[/]';
+  ta.dispatchEvent(new w.Event('input'));
+  const pv = doc.getElementById('pass-preview');
+  ok('the form previews it as it will read',
+     !!pv && pv.querySelector('h2') && pv.querySelector('h2').textContent === 'A Heading',
+     pv && pv.textContent.slice(0, 40));
+  ok('  bullets, indents, bold and colour and all',
+     !!pv.querySelector('p.bullet') && !!pv.querySelector('.in1') &&
+     !!pv.querySelector('b') && !!pv.querySelector('.c-green'),
+     [...pv.children].map(n => n.className || n.tagName).join(', '));
+
+  /* --- and the passage itself reads that way ------------------------------ */
+  dlg.querySelector('[name=ptitle]').value = 'A Formatted Passage';
+  click(w, doc.getElementById('pass-save'));
+  await wait(300);
+  const prose = doc.querySelector('.read .prose');
+  ok('the passage carries the formatting through',
+     !!prose.querySelector('h2') && !!prose.querySelector('p.bullet') &&
+     !!prose.querySelector('.in1') && !!prose.querySelector('b') &&
+     !!prose.querySelector('.c-green'),
+     prose.innerHTML.slice(0, 120));
+  ok('  and the marks themselves are nowhere on screen',
+     !/[*\\[]/.test(prose.textContent), prose.textContent.slice(0, 60));
+  ok('  what went to the sheet is the text with its marks, one line a paragraph',
+     (posts.find(p => p.body.action === 'passage') || {}).body.entry.paras[0] === '# A Heading',
+     JSON.stringify((posts.find(p => p.body.action === 'passage') || {}).body.entry.paras));
+
   /* --- and it is there on the next visit ---------------------------------- */
   const b = page(store, [], () => ({ ok: true }));
   await wait(900);
@@ -201,8 +265,9 @@ const fill = (g, title, body) => {
     .filter(n => n.textContent === 'The Hemp Revival');
   ok('once the sheet carries it, it is not shown twice', again.length === 1,
      again.length + ' copies');
-  ok('  and the device stops keeping its own', JSON.parse(store[MINE]).length === 0,
-     store[MINE]);
+  ok('  and the device stops keeping its own copy of that one',
+     !JSON.parse(store[MINE]).some(r => r.title === 'The Hemp Revival'),
+     store[MINE].slice(0, 80));
 
   /* --- with no sheet to write to ------------------------------------------ */
   const alone = {};

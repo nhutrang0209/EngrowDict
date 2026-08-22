@@ -16,7 +16,7 @@ ok('the public data carries the passages', data.readings.length > 30,
 ok('every passage keeps its title and paragraphs',
    data.readings.every(r => r.title && r.paras && r.paras.length > 0));
 ok('the artifact copy has them too', art.includes('Methuselah'));
-ok('the shell itself stays light', shell.length < 262000,
+ok('the shell itself stays light', shell.length < 270000,
    Math.round(shell.length / 1024) + ' KB');
 
 /* --- and they work in the page ------------------------------------------ */

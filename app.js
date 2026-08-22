@@ -1474,15 +1474,7 @@
     w.appendChild(el("p", "hint",
       "Select any word or phrase to see what the notebook has on it — English to Vietnamese."));
     var prose = el("div", "prose");
-    r.paras.forEach(function (x) {
-      var node = el("p", x.mark ? "labelled" : null, x.text);
-      if (x.mark) {
-        var m = el("span", "pmark", x.mark);
-        m.setAttribute("aria-hidden", "true");
-        node.insertBefore(m, node.firstChild);
-      }
-      prose.appendChild(node);
-    });
+    r.paras.forEach(function (x) { prose.appendChild(proseNode(x)); });
     prose.addEventListener("mouseup", onSelectInProse);
     prose.addEventListener("touchend", onSelectInProse);
     w.appendChild(prose);
@@ -1845,10 +1837,178 @@
     r.paras = (r.paras || []).map(function (p) {
       return typeof p === "string" ? { text: p } : p;
     });
-    r._text = r.paras.map(function (x) { return x.text; }).join(" ");
+    r._text = r.paras.map(function (x) { return stripMarks(x.text); }).join(" ");
     r._w = norm(r.title);
     r._all = norm(r.title + " " + r._text);
     return r;
+  }
+
+  /* ---- how a passage is written -------------------------------------------
+
+     A passage lives in one cell of the sheet and comes down in data.json as
+     plain strings, so the formatting has to live in the text itself. Marks
+     rather than markup: **bold**, *italic*, __underline__, `code`, [red]…[/]
+     for one of four colours, and at the start of a line # for a heading, - for
+     a bullet and > for a step of indent, repeated for more.
+
+     Which means the sheet still reads as a passage to anybody looking at it,
+     parse_sheet.py and the sync need not know any of this, and a passage
+     written before today renders exactly as it did. The buttons over the box
+     put the marks in; nobody has to remember them. */
+  var COLOURS = [["red", "Red"], ["green", "Green"], ["amber", "Amber"], ["grey", "Grey"]];
+  var INLINE_RE = new RegExp("(\\*\\*[^*\\n]+\\*\\*|__[^_\\n]+__|\\*[^*\\n]+\\*|`[^`\\n]+`|\\[(?:red|green|amber|grey)\\][^\\[\\]\\n]*\\[\\/\\])", "g");
+
+  function inlineInto(host, text) {
+    var at = 0, m;
+    INLINE_RE.lastIndex = 0;
+    while ((m = INLINE_RE.exec(text))) {
+      if (m.index > at) host.appendChild(document.createTextNode(text.slice(at, m.index)));
+      var t = m[0];
+      if (t.slice(0, 2) === "**") host.appendChild(el("b", null, t.slice(2, -2)));
+      else if (t.slice(0, 2) === "__") host.appendChild(el("u", null, t.slice(2, -2)));
+      else if (t.charAt(0) === "*") host.appendChild(el("i", null, t.slice(1, -1)));
+      else if (t.charAt(0) === "`") host.appendChild(el("code", null, t.slice(1, -1)));
+      else {
+        var shut = t.indexOf("]");
+        host.appendChild(el("span", "c-" + t.slice(1, shut),
+          t.slice(shut + 1, t.lastIndexOf("[/]"))));
+      }
+      at = m.index + t.length;
+    }
+    if (at < text.length) host.appendChild(document.createTextNode(text.slice(at)));
+  }
+
+  /* The line's own shape: what it is, and how far in it sits. */
+  function blockOf(text) {
+    var t = String(text || ""), depth = 0, kind = "p";
+    while (/^>[ \t]?/.test(t)) { depth++; t = t.replace(/^>[ \t]?/, ""); }
+    if (/^#[ \t]+/.test(t)) { kind = "h"; t = t.replace(/^#[ \t]+/, ""); }
+    else if (/^-[ \t]+/.test(t)) { kind = "li"; t = t.replace(/^-[ \t]+/, ""); }
+    return { kind: kind, depth: Math.min(depth, 4), text: t };
+  }
+
+  /* The same line with the marks taken off, for the places that hold no
+     formatting: the list, the search, the count of words. */
+  function stripMarks(text) {
+    var b = blockOf(text);
+    INLINE_RE.lastIndex = 0;
+    return b.text.replace(INLINE_RE, function (t) {
+      if (t.slice(0, 2) === "**" || t.slice(0, 2) === "__") return t.slice(2, -2);
+      if (t.charAt(0) === "*" || t.charAt(0) === "`") return t.slice(1, -1);
+      var shut = t.indexOf("]");
+      return t.slice(shut + 1, t.lastIndexOf("[/]"));
+    });
+  }
+
+  /* One paragraph, as it is meant to be read. */
+  function proseNode(x) {
+    var b = blockOf(x.text);
+    var node = el(b.kind === "h" ? "h2" : "p",
+      (b.kind === "li" ? "bullet" : "") + (x.mark ? " labelled" : "")
+      + (b.depth ? " in" + b.depth : ""));
+    if (x.mark) {
+      var m = el("span", "pmark", x.mark);
+      m.setAttribute("aria-hidden", "true");
+      node.appendChild(m);
+    }
+    inlineInto(node, b.text);
+    return node;
+  }
+
+  /* ---- the buttons over the box ------------------------------------------ */
+  function markBar(ta, onChange) {
+    var bar = el("div", "markbar");
+
+    function around(before, after) {
+      var s = ta.selectionStart, e = ta.selectionEnd;
+      var picked = ta.value.slice(s, e) || "";
+      ta.value = ta.value.slice(0, s) + before + picked + after + ta.value.slice(e);
+      ta.focus();
+      ta.selectionStart = s + before.length;
+      ta.selectionEnd = s + before.length + picked.length;
+      onChange();
+    }
+
+    /* A line button works on every line the selection touches, the way a
+       word processor's list and indent buttons do. */
+    function eachLine(fn) {
+      var s = ta.selectionStart, e = ta.selectionEnd;
+      var from = ta.value.lastIndexOf("\n", s - 1) + 1;
+      var to = ta.value.indexOf("\n", e);
+      if (to < 0) to = ta.value.length;
+      var lines = ta.value.slice(from, to).split("\n").map(fn);
+      var made = lines.join("\n");
+      ta.value = ta.value.slice(0, from) + made + ta.value.slice(to);
+      ta.focus();
+      ta.selectionStart = from;
+      ta.selectionEnd = from + made.length;
+      onChange();
+    }
+
+    function press(label, title, run, cls) {
+      var b = el("button", "markbtn" + (cls ? " " + cls : ""), label);
+      b.type = "button";
+      b.title = title;
+      b.setAttribute("aria-label", title);
+      b.addEventListener("click", function (ev) { ev.preventDefault(); run(); });
+      bar.appendChild(b);
+      return b;
+    }
+
+    press("B", "Bold", function () { around("**", "**"); }, "mb-b");
+    press("I", "Italic", function () { around("*", "*"); }, "mb-i");
+    press("U", "Underline", function () { around("__", "__"); }, "mb-u");
+    press("</>", "Monospace", function () { around("`", "`"); }, "mb-code");
+    bar.appendChild(el("span", "mb-sep"));
+    press("H", "Heading", function () {
+      eachLine(function (line) {
+        return /^#[ \t]+/.test(line) ? line.replace(/^#[ \t]+/, "") : "# " + line;
+      });
+    }, "mb-h");
+    press("•", "Bullet", function () {
+      eachLine(function (line) {
+        return /^-[ \t]+/.test(line) ? line.replace(/^-[ \t]+/, "") : "- " + line;
+      });
+    });
+    press("→", "Indent", function () {
+      eachLine(function (line) { return "> " + line; });
+    });
+    press("←", "Outdent", function () {
+      eachLine(function (line) { return line.replace(/^>[ \t]?/, ""); });
+    });
+    bar.appendChild(el("span", "mb-sep"));
+
+    COLOURS.forEach(function (c) {
+      var b = press("", c[1], function () { around("[" + c[0] + "]", "[/]"); },
+        "mb-c c-dot-" + c[0]);
+      b.appendChild(el("span", "dot"));
+    });
+    press("⌫", "Take the marks off", function () {
+      var s = ta.selectionStart, e = ta.selectionEnd;
+      if (s === e) return;
+      var clean = stripMarks(ta.value.slice(s, e));
+      ta.value = ta.value.slice(0, s) + clean + ta.value.slice(e);
+      ta.focus();
+      ta.selectionStart = s;
+      ta.selectionEnd = s + clean.length;
+      onChange();
+    });
+    return bar;
+  }
+
+  function paintPassagePreview() {
+    var box = document.getElementById("pass-preview");
+    var ta = document.querySelector("#pass-dlg [name=pbody]");
+    if (!box || !ta) return;
+    box.textContent = "";
+    var any = false;
+    ta.value.split(/\n+/).forEach(function (line) {
+      var one = line.replace(/[ \t]+/g, " ").trim();
+      if (!one) return;
+      any = true;
+      box.appendChild(proseNode({ text: one }));
+    });
+    if (!any) box.appendChild(el("p", "tr-none", "What it will look like."));
   }
 
   function passageDialog() {
@@ -1865,17 +2025,26 @@
     var body = el("div", "dlg-body");
     body.appendChild(field("Title", "ptitle", "The Hemp Revival", false));
 
-    var f = el("label", "field");
+    var f = el("div", "field");
     f.appendChild(el("span", null, "The passage"));
     var ta = el("textarea");
     ta.name = "pbody";
     ta.rows = 12;
     ta.placeholder = "Paste it here…";
+    ta.setAttribute("aria-label", "The passage");
+    ta.addEventListener("input", paintPassagePreview);
+    f.appendChild(markBar(ta, paintPassagePreview));
     f.appendChild(ta);
     f.appendChild(el("p", "hint",
       "One paragraph to a line. Lettered paragraphs — A, B, C — are kept as "
       + "labels, the way the passages already here have them."));
+    var pv = el("div", "field");
+    pv.appendChild(el("span", null, "As it will read"));
+    var out = el("div", "prose pass-preview");
+    out.id = "pass-preview";
+    pv.appendChild(out);
     body.appendChild(f);
+    body.appendChild(pv);
     dlg.appendChild(body);
 
     var foot = el("div", "dlg-foot");
@@ -1926,6 +2095,7 @@
     var tick = document.getElementById("pass-to-sheet");
     if (tick) tick.checked = existing ? !!existing.inSheet || !existing.mine : true;
     passMsg("", "");
+    paintPassagePreview();
     dlg.showModal();
     dlg.querySelector("[name=ptitle]").focus();
   }
