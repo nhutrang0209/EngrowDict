@@ -409,6 +409,7 @@
   function pool() {
     if (view === "read") return READINGS;
     if (view === "book") return BOOKS;
+    if (view === "translate") return [];      // nothing here is a list of things
     if (kindFilter === "all") return entries;
     return entries.filter(function (e) {
       return kindFilter === "mine" ? !!e.mine : e.type === kindFilter;
@@ -637,8 +638,14 @@
     host.textContent = "";
     // a passage runs the full width; an entry keeps a narrower measure
     var wide = (view === "read" && selectedRead)
-      || (view === "book" && selectedBook && openChapter);
+      || (view === "book" && selectedBook && openChapter)
+      || view === "translate";
     host.className = "detail-inner" + (wide ? " wide" : "");
+    if (view === "translate") {
+      host.appendChild(translateView());
+      paintTranslation();      // it fills nodes by id, so only once they are in
+      return;
+    }
     if (view === "read") {
       host.appendChild(selectedRead ? readingView(selectedRead) : blankView());
       restorePlace();
@@ -1275,7 +1282,8 @@
      rather than a switch on one place. */
   var TABS = [["vocab", "Dictionary", "tab-dictionary"],
               ["read", "Passages", "tab-passages"],
-              ["book", "Books", "tab-books"]];
+              ["book", "Books", "tab-books"],
+              ["translate", "Translate", "tab-translate"]];
 
   /* One stroke weight, one size, drawn the way the search glass in the bar
      above them is. Anything busier reads as pasted on beside type this plain. */
@@ -1365,13 +1373,19 @@
         bs[i].setAttribute("aria-selected", String(bs[i].dataset.view === view));
         var v = bs[i].dataset.view;
         bs[i].hidden = (v === "read" && !READINGS.length)
-          || (v === "book" && !BOOKS.length && !canAddBooks());
+          || (v === "book" && !BOOKS.length && !canAddBooks())
+          // the artifact copy has no way out to a translator, so it says so by
+          // not offering the place at all
+          || (v === "translate" && !canTranslate());
       }
     }
     var addRow = document.getElementById("shelf-add");
     if (addRow) addRow.hidden = view !== "book" || !canAddBooks();
     var pubRow = document.getElementById("book-pub-row");
     if (pubRow) pubRow.hidden = !!(addRow && addRow.hidden) || !canPublishBooks();
+    document.body.dataset.solo = view === "translate" ? "on" : "off";
+    var box = document.querySelector(".search");
+    if (box) box.hidden = view === "translate";
     if (qInput) {
       qInput.placeholder = view === "read" ? "Search inside the passages…"
         : view === "book" ? "Search the shelf by title or author…"
@@ -1451,6 +1465,230 @@
     prose.addEventListener("touchend", onSelectInProse);
     w.appendChild(prose);
     return w;
+  }
+
+  /* ---- translating something of your own ----------------------------------
+
+     The passages tab is for what the notebook ships with; this is for whatever
+     you have in front of you. Paste it, and it comes back paragraph by
+     paragraph, English above and Vietnamese below, because a translation you
+     cannot check against the original is not much use to somebody learning.
+
+     The same two translators the selection card uses, in the same order:
+     Google first, MyMemory behind it. Both take the text in the URL, so a
+     paragraph goes over in pieces cut at the ends of sentences and comes back
+     joined. One paragraph at a time — a page of them fired off at once is how
+     a free endpoint decides it has heard enough from you. */
+  var TR_CHUNK = 900;
+  var trSource = "", trOut = [], trState = "", trMsg = "";
+
+  function canTranslate() {
+    return MODE === "static" && typeof fetch === "function";
+  }
+
+  function translateView() {
+    var w = el("div", "translate");
+    w.appendChild(el("h1", null, "Translate"));
+    w.appendChild(el("p", "hint",
+      "Paste English — a paragraph, a page — and read it back in Vietnamese. "
+      + "It is machine translation, so read it twice; select any word in it to "
+      + "see what the notebook has on that one."));
+
+    var grid = el("div", "tr-grid");
+    var left = el("div", "tr-side");
+    var ta = el("textarea");
+    ta.id = "tr-in";
+    ta.placeholder = "Paste the English here…";
+    ta.value = trSource;
+    ta.addEventListener("input", function () { trSource = ta.value; });
+    ta.addEventListener("keydown", function (ev) {
+      if ((ev.metaKey || ev.ctrlKey) && ev.key === "Enter") {
+        ev.preventDefault();
+        runTranslate();
+      }
+    });
+    left.appendChild(ta);
+
+    var row = el("div", "tr-row");
+    var go = el("button", "btn btn-primary", "Translate");
+    go.type = "button";
+    go.id = "tr-go";
+    go.addEventListener("click", runTranslate);
+    row.appendChild(go);
+    var clear = el("button", "btn", "Clear");
+    clear.type = "button";
+    clear.id = "tr-clear";
+    clear.addEventListener("click", function () {
+      trSource = ""; trOut = []; trState = ""; trMsg = "";
+      drawDetail();
+    });
+    row.appendChild(clear);
+    var copy = el("button", "btn", "Copy the Vietnamese");
+    copy.type = "button";
+    copy.id = "tr-copy";
+    copy.hidden = true;
+    copy.addEventListener("click", copyTranslation);
+    row.appendChild(copy);
+    left.appendChild(row);
+    var msg = el("p", "tr-msg", "");
+    msg.id = "tr-msg";
+    left.appendChild(msg);
+    grid.appendChild(left);
+
+    var out = el("div", "tr-out");
+    out.id = "tr-out";
+    /* The same select-to-look-up the passages have, on the English and the
+       Vietnamese alike: a word you had to translate is exactly the sort of
+       word the notebook should be told about. */
+    out.addEventListener("mouseup", onSelectInProse);
+    out.addEventListener("touchend", onSelectInProse);
+    grid.appendChild(out);
+
+    w.appendChild(grid);
+    return w;
+  }
+
+  function paintTranslation() {
+    var box = document.getElementById("tr-out");
+    if (!box) return;
+    box.textContent = "";
+    if (!trOut.length) {
+      box.appendChild(el("p", "tr-none", "The Vietnamese appears here."));
+    } else {
+      trOut.forEach(function (p) {
+        var b = el("div", "tr-para");
+        b.appendChild(el("p", "en", p.en));
+        if (p.vi) {
+          b.appendChild(el("p", "vi", p.vi));
+        } else if (p.err) {
+          b.appendChild(el("p", "none", "Neither translator would answer for this one."));
+          var a = document.createElement("a");
+          a.className = "btn";
+          a.target = "_blank";
+          a.rel = "noopener";
+          a.href = translateUrl(p.en);
+          a.textContent = "Open it in Google Translate";
+          b.appendChild(a);
+        } else {
+          b.appendChild(el("p", "vi waiting", "…"));
+        }
+        box.appendChild(b);
+      });
+    }
+    var msg = document.getElementById("tr-msg");
+    if (msg) {
+      msg.className = "tr-msg" + (trState === "working" ? " warn" : "");
+      msg.textContent = trMsg;
+    }
+    var copy = document.getElementById("tr-copy");
+    if (copy) {
+      copy.hidden = trState !== "done"
+        || !trOut.some(function (p) { return !!p.vi; });
+    }
+    var go = document.getElementById("tr-go");
+    if (go) {
+      go.disabled = trState === "working";
+      go.textContent = trState === "working" ? "Translating…" : "Translate";
+    }
+  }
+
+  function runTranslate() {
+    if (trState === "working") return;
+    var text = (trSource || "").trim();
+    if (!text) { trState = ""; trMsg = "Paste something first."; paintTranslation(); return; }
+    if (!canTranslate()) {
+      trState = "";
+      trMsg = "This copy of the page cannot reach a translator — open the site itself.";
+      paintTranslation();
+      return;
+    }
+    trOut = [];
+    text.split(/\n+/).forEach(function (p) {
+      var one = p.trim();
+      if (one) trOut.push({ en: one, vi: "", via: "", err: false });
+    });
+    if (!trOut.length) return;
+    trState = "working";
+    trMsg = "Translating " + plural(trOut.length, "paragraph", "paragraphs") + "…";
+    paintTranslation();
+
+    var seq = Promise.resolve(), done = 0, total = trOut.length;
+    trOut.forEach(function (p) {
+      seq = seq.then(function () {
+        return translateLong(p.en).then(function (got) {
+          p.vi = got.text;
+          p.via = got.via;
+        }, function () {
+          p.err = true;
+        }).then(function () {
+          done++;
+          if (done < total) trMsg = "Translating… " + done + " of " + total;
+          paintTranslation();
+        });
+      });
+    });
+    seq.then(function () {
+      trState = "done";
+      var by = {};
+      trOut.forEach(function (p) { if (p.via) by[p.via] = true; });
+      var names = Object.keys(by);
+      var lost = trOut.filter(function (p) { return p.err; }).length;
+      trMsg = !names.length ? "Nothing came back at all."
+        : (lost ? plural(lost, "paragraph", "paragraphs") + " did not come back. " : "")
+          + "Machine-translated by " + names.join(" and ") + " — read it twice.";
+      paintTranslation();
+    });
+  }
+
+  /* A paragraph goes over in pieces: both translators take the text in the
+     URL, and a URL is no place for a page of prose. The cuts are made at the
+     ends of sentences, so each piece is still something a translator can
+     read; a sentence longer than a piece is cut at a space. */
+  function trChunks(text) {
+    if (text.length <= TR_CHUNK) return [text];
+    var out = [], cur = "";
+    var sentences = text.match(/[^.!?…]+[.!?…]*\s*/g) || [text];
+    sentences.forEach(function (s) {
+      while (s.length > TR_CHUNK) {
+        var cut = s.lastIndexOf(" ", TR_CHUNK);
+        if (cut < 1) cut = TR_CHUNK;
+        if (cur.trim()) { out.push(cur); cur = ""; }
+        out.push(s.slice(0, cut));
+        s = s.slice(cut).replace(/^\s+/, "");
+      }
+      if ((cur + s).length > TR_CHUNK) { out.push(cur); cur = s; }
+      else cur += s;
+    });
+    if (cur.trim()) out.push(cur);
+    return out.map(function (x) { return x.trim(); }).filter(Boolean);
+  }
+
+  function translateLong(text) {
+    var parts = trChunks(text);
+    var got = [], via = "";
+    var seq = Promise.resolve();
+    parts.forEach(function (bit) {
+      seq = seq.then(function () {
+        return machineTranslate(bit).then(function (one) {
+          got.push(one.text);
+          via = one.via;
+        });
+      });
+    });
+    return seq.then(function () { return { text: got.join(" "), via: via }; });
+  }
+
+  function copyTranslation() {
+    var text = trOut.map(function (p) { return p.vi || p.en; }).join("\n\n");
+    if (!navigator.clipboard || !navigator.clipboard.writeText) {
+      toast("This browser will not let the page copy for you.");
+      return;
+    }
+    navigator.clipboard.writeText(text).then(function () {
+      toast("The Vietnamese is on the clipboard");
+    }, function () {
+      toast("Could not copy it.");
+    });
   }
 
   /* ---- books --------------------------------------------------------------
@@ -3431,6 +3669,7 @@
       box.appendChild(document.createTextNode(plural(hits.length, "book", "books")));
       return;
     }
+    if (view === "translate") return;
     box.appendChild(document.createTextNode(plural(hits.length, "entry", "entries")));
     box.appendChild(el("span", "dot", "·"));
     box.appendChild(document.createTextNode(fmt(senseCount(hits)) + " senses"));
@@ -3442,7 +3681,7 @@
 
   function drawChips() {
     var box = document.getElementById("chips");
-    box.hidden = view === "read" || view === "book";
+    box.hidden = view !== "vocab";
     box.textContent = "";
     var defs = [["all", "All"]].concat(CHIP_KINDS.map(function (k) { return [k, KINDS[k].filter]; }));
     defs.forEach(function (d) {
@@ -3459,7 +3698,7 @@
 
   function drawAlpha() {
     var box = document.getElementById("alpha");
-    box.hidden = view === "read" || view === "book" || !!query.trim();
+    box.hidden = view !== "vocab" || !!query.trim();
     if (box.hidden) return;
     if (box.dataset.done === kindFilter) return;
     box.dataset.done = kindFilter;

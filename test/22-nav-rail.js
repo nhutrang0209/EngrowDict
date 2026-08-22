@@ -33,7 +33,8 @@ const mk = (store, width) => boot({
 
   const tabs = [...nav().querySelectorAll('.tab')];
   ok('every place is on it', tabs.map(t => t.id).join(' ') ===
-     'tab-dictionary tab-passages tab-books', tabs.map(t => t.id).join(' '));
+     'tab-dictionary tab-passages tab-books tab-translate',
+     tabs.map(t => t.id).join(' '));
   ok('  each with an icon and its name',
      tabs.every(t => t.querySelector('.ico svg') && t.querySelector('.lab')),
      tabs.map(t => (t.querySelector('.lab') || {}).textContent).join(', '));
