@@ -220,15 +220,32 @@ const toolBtn = (g, title) => [...g.doc.querySelectorAll('#pass-dlg .markbtn')]
   ok('  and no marks are shown in the box', para().textContent.indexOf('*') === -1,
      para().textContent);
 
-  selectIn(a, para().querySelector('b'), 0, 4);
+  ok('  and the B button lights up for what the caret is standing in', (() => {
+    selectIn(a, para().querySelector('b'), 0, 4);
+    box.dispatchEvent(new w.Event('mouseup'));
+    return toolBtn(a, 'Bold').getAttribute('aria-pressed') === 'true' &&
+      toolBtn(a, 'Italic').getAttribute('aria-pressed') === 'false';
+  })(), toolBtn(a, 'Bold').getAttribute('aria-pressed'));
+
   click(w, toolBtn(a, 'Bold'));
   ok('  pressing it again takes the bold off', !para().querySelector('b'),
      para().innerHTML);
+  ok('    and the words that were bold are still the words selected',
+     String(w.getSelection()).trim() === 'word', JSON.stringify(String(w.getSelection())));
+  ok('    with the button no longer lit', (() => {
+    box.dispatchEvent(new w.Event('mouseup'));
+    return toolBtn(a, 'Bold').getAttribute('aria-pressed') === 'false';
+  })(), toolBtn(a, 'Bold').getAttribute('aria-pressed'));
 
   selectIn(a, para(), 0, 1);
   click(w, toolBtn(a, 'Heading'));
   ok('Heading makes the line a heading', !!box.querySelector('h2'),
      box.innerHTML.slice(0, 60));
+  ok('  and says so on the button', (() => {
+    selectIn(a, box.querySelector('h2'), 0, 1);
+    box.dispatchEvent(new w.Event('mouseup'));
+    return toolBtn(a, 'Heading').getAttribute('aria-pressed') === 'true';
+  })(), toolBtn(a, 'Heading').getAttribute('aria-pressed'));
   selectIn(a, box.querySelector('h2'), 0, 1);
   click(w, toolBtn(a, 'Heading'));
   ok('  and pressing it again puts it back to a paragraph',

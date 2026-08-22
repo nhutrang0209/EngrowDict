@@ -1988,13 +1988,72 @@
 
   /* ---- what the buttons do ------------------------------------------------ */
 
-  function editorRange() {
+  /* Where the caret was last seen in the box. Pressing a button can only ever
+     be about what was selected before it was pressed, and a browser that hands
+     focus to the button on the way takes the selection with it. */
+  var lastRange = null;
+
+  function liveRange() {
     var sel = window.getSelection && window.getSelection();
-    if (!sel || !sel.rangeCount) return null;
-    var range = sel.getRangeAt(0);
     var box = passEditor();
-    if (!box || !box.contains(range.commonAncestorContainer)) return null;
+    if (!box || !sel || !sel.rangeCount) return null;
+    var range = sel.getRangeAt(0);
+    if (!box.contains(range.commonAncestorContainer)) return null;
     return { sel: sel, range: range };
+  }
+
+  function editorRange() {
+    var got = liveRange();
+    if (got) return got;
+    var sel = window.getSelection && window.getSelection();
+    var box = passEditor();
+    if (!sel || !box || !lastRange) return null;
+    if (!box.contains(lastRange.commonAncestorContainer)) return null;
+    sel.removeAllRanges();
+    sel.addRange(lastRange);
+    return { sel: sel, range: lastRange };
+  }
+
+  function rememberRange() {
+    var got = liveRange();
+    if (got) lastRange = got.range.cloneRange();
+    syncMarkBar();
+  }
+
+  function tagIs(tag) {
+    return function (n) { return n.tagName === tag; };
+  }
+  function classIs(cls) {
+    return function (n) { return String(n.className || "").indexOf(cls) > -1; };
+  }
+
+  /* The buttons for what the caret is standing in are lit: pressing one of
+     those takes that formatting off again, and it should look like it will. */
+  function syncMarkBar() {
+    var bar = document.querySelector("#pass-dlg .markbar");
+    var box = passEditor();
+    if (!bar || !box) return;
+    var got = liveRange();
+    var at = got ? got.range.startContainer : null;
+    var on = {};
+    if (at) {
+      on.Bold = !!inside(at, tagIs("B"));
+      on.Italic = !!inside(at, tagIs("I"));
+      on.Underline = !!inside(at, tagIs("U"));
+      on.Monospace = !!inside(at, tagIs("CODE"));
+      COLOURS.forEach(function (c) { on[c[1]] = !!inside(at, classIs("c-" + c[0])); });
+      var block = inside(at, function (n) { return n.parentNode === box; });
+      if (block) {
+        on.Heading = block.tagName === "H2";
+        on.Bullet = String(block.className || "").indexOf("bullet") > -1;
+      }
+    }
+    var btns = bar.querySelectorAll(".markbtn");
+    for (var i = 0; i < btns.length; i++) {
+      var lit = !!on[btns[i].dataset.act];
+      btns[i].setAttribute("aria-pressed", String(lit));
+      if (btns[i].classList) btns[i].classList.toggle("on", lit);
+    }
   }
 
   /* The element of this kind the selection sits inside, if it sits inside one:
@@ -2022,18 +2081,41 @@
     };
     var had = inside(got.range.startContainer, test)
       || inside(got.range.endContainer, test);
-    if (had) { unwrap(had); return; }
+    if (had) {
+      /* The words that were inside it stay selected — not the paragraph they
+         sit in, or the next press would act on the whole of it. */
+      var first = had.firstChild, last = had.lastChild;
+      unwrap(had);
+      if (first && last) {
+        var back = document.createRange();
+        back.setStartBefore(first);
+        back.setEndAfter(last);
+        var sel = window.getSelection && window.getSelection();
+        if (sel) { sel.removeAllRanges(); sel.addRange(back); }
+        lastRange = back.cloneRange();
+      }
+      return;
+    }
     if (got.range.collapsed) return;
     var wrap = document.createElement(tag);
     if (cls) wrap.className = cls;
     try {
       wrap.appendChild(got.range.extractContents());
       got.range.insertNode(wrap);
-      var after = document.createRange();
-      after.selectNodeContents(wrap);
-      got.sel.removeAllRanges();
-      got.sel.addRange(after);
+      keepSelection(wrap);
     } catch (err) { /* a selection across two paragraphs: leave it alone */ }
+  }
+
+  /* The words that were acted on stay selected, so the next button acts on
+     them too and the caret does not walk off to the end of the box. */
+  function keepSelection(node) {
+    var sel = window.getSelection && window.getSelection();
+    if (!sel || !node) return;
+    var range = document.createRange();
+    range.selectNodeContents(node);
+    sel.removeAllRanges();
+    sel.addRange(range);
+    lastRange = range.cloneRange();
   }
 
   /* Every block the selection touches, for the buttons that work on lines. */
@@ -2171,7 +2253,11 @@
       if (got) { got.range.deleteContents(); got.range.insertNode(made); }
       else box.appendChild(made);
     });
-    f.appendChild(markButtons(function () { box.focus(); }));
+    box.addEventListener("keyup", rememberRange);
+    box.addEventListener("mouseup", rememberRange);
+    box.addEventListener("focus", rememberRange);
+    box.addEventListener("input", rememberRange);
+    f.appendChild(markButtons(syncMarkBar));
     f.appendChild(box);
     f.appendChild(el("p", "hint",
       "It is set here the way it will be read. Lettered paragraphs — A, B, C — "
@@ -2224,6 +2310,7 @@
     var tick = document.getElementById("pass-to-sheet");
     if (tick) tick.checked = existing ? !!existing.inSheet || !existing.mine : true;
     passMsg("", "");
+    syncMarkBar();
     dlg.showModal();
     dlg.querySelector("[name=ptitle]").focus();
   }
@@ -4413,6 +4500,8 @@
       add.textContent = !mayAdd() ? "Unlock to add"
         : view === "read" ? "+ Add passage" : "+ Add word";
     }
+    var addHere = document.getElementById("add-word-here");
+    if (addHere) addHere.hidden = view !== "read" || !mayAdd();
     var open = document.getElementById("open-sheet");
     if (open) {
       open.hidden = !settings.sheetUrl;
@@ -4482,6 +4571,16 @@
       if (popOpen()) closePopDict(); else openPopDict("");
     });
     acts.appendChild(pop);
+
+    /* A passage is where words are met, so the notebook's own button belongs
+       there as well: Add passage is what that tab makes, Add word is what the
+       whole thing is for. */
+    var addWord = el("button", "btn", "+ Add word");
+    addWord.type = "button";
+    addWord.id = "add-word-here";
+    addWord.hidden = true;
+    addWord.addEventListener("click", function () { openForm(""); });
+    acts.appendChild(addWord);
 
     var add = el("button", "btn btn-primary", "+ Add word");
     add.type = "button";

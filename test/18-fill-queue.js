@@ -432,10 +432,18 @@ function ask(g, word) {
   const paras = () => doc.querySelectorAll('.read .prose p').length;
   const reading = paras();
   ok('a passage is open and has its paragraphs', reading > 0, reading + ' paragraphs');
+  ok('the passages offer both: a passage to add, and a word to add',
+     doc.getElementById('add-word').textContent === '+ Add passage' &&
+     !doc.getElementById('add-word-here').hidden &&
+     doc.getElementById('add-word-here').textContent === '+ Add word',
+     doc.getElementById('add-word').textContent + ' | ' +
+     doc.getElementById('add-word-here').textContent);
   const box = doc.querySelector('.detail');
   box.scrollTop = 300;                    // halfway down it
 
-  press(g, 'add-word');
+  press(g, 'add-word-here');
+  ok('  and the word one opens the word form, not the passage form',
+     dlg(g).open && !!doc.querySelector('#form-dlg [name=word]'));
   type(g, '#form-dlg [name=word]', 'parole officer');
   type(g, '#sense-list [name=def]', 'the officer who supervises a released prisoner');
   type(g, '#sense-list [name=vi]', 'cán bộ quản chế');
