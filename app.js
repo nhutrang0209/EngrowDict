@@ -1517,29 +1517,16 @@
 
   function translateView() {
     var w = el("div", "translate");
-
-    /* The bar that says which way round it is. Two languages, so the swap is
-       one button rather than two menus of the world. */
-    var bar = el("div", "tr-bar");
-    var from = el("span", "tr-lang", LANGS[trFrom()]);
-    from.id = "tr-from";
-    bar.appendChild(from);
-    var swap = el("button", "iconbtn tr-swap", "⇄");
-    swap.type = "button";
-    swap.id = "tr-swap";
-    swap.title = "Translate the other way";
-    swap.setAttribute("aria-label", swap.title);
-    swap.addEventListener("click", swapDirection);
-    bar.appendChild(swap);
-    var to = el("span", "tr-lang", LANGS[trTo()]);
-    to.id = "tr-to";
-    bar.appendChild(to);
-    w.appendChild(bar);
-
-    var grid = el("div", "tr-grid");
+    var card = el("div", "tr-card");
 
     /* --- what you are writing --- */
-    var left = el("div", "tr-pane");
+    var left = el("div", "tr-half tr-src");
+    var lhead = el("div", "tr-head");
+    var from = el("span", "tr-lang", LANGS[trFrom()]);
+    from.id = "tr-from";
+    lhead.appendChild(from);
+    left.appendChild(lhead);
+
     var ta = el("textarea");
     ta.id = "tr-in";
     ta.placeholder = "Type or paste here…";
@@ -1548,18 +1535,22 @@
     ta.addEventListener("input", function () {
       trSource = ta.value;
       trTyped();
+      paintTrButtons();
     });
     left.appendChild(ta);
+
     var lfoot = el("div", "tr-foot");
     lfoot.appendChild(sayThis("tr-say-in", function () { return trSource; },
       function () { return trFrom(); }));
     lfoot.appendChild(copyThis("tr-copy-in", function () { return trSource; }));
-    lfoot.appendChild(el("span", "grow"));
-    var clear = el("button", "tr-x", "×");
+    var clear = el("button", "tr-act tr-x");
     clear.type = "button";
     clear.id = "tr-clear";
     clear.title = "Clear it";
     clear.setAttribute("aria-label", clear.title);
+    clear.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"'
+      + ' stroke-width="2" stroke-linecap="round" aria-hidden="true">'
+      + '<path d="M6 6l12 12M18 6L6 18"/></svg>';
     clear.addEventListener("click", function () {
       trSource = ""; trOut = []; trState = ""; trMsg = "";
       var box = document.getElementById("tr-in");
@@ -1567,11 +1558,31 @@
       paintTranslation();
     });
     lfoot.appendChild(clear);
+    lfoot.appendChild(el("span", "grow"));
+    var count = el("span", "tr-count", "");
+    count.id = "tr-count";
+    lfoot.appendChild(count);
     left.appendChild(lfoot);
-    grid.appendChild(left);
+    card.appendChild(left);
+
+    /* --- the turn between them, on the join itself --- */
+    var swap = el("button", "tr-swap", "⇄");
+    swap.type = "button";
+    swap.id = "tr-swap";
+    swap.title = "Translate the other way";
+    swap.setAttribute("aria-label", swap.title);
+    swap.addEventListener("click", swapDirection);
+    card.appendChild(swap);
 
     /* --- what it says --- */
-    var right = el("div", "tr-pane tr-result");
+    var right = el("div", "tr-half tr-dst");
+    var rhead = el("div", "tr-head");
+    rhead.appendChild(el("span", "grow"));
+    var to = el("span", "tr-lang", LANGS[trTo()]);
+    to.id = "tr-to";
+    rhead.appendChild(to);
+    right.appendChild(rhead);
+
     var out = el("div", "tr-out");
     out.id = "tr-out";
     /* Select-to-look-up, but only where the answer is English: the notebook is
@@ -1582,6 +1593,7 @@
       out.addEventListener("touchend", onSelectInProse);
     }
     right.appendChild(out);
+
     var rfoot = el("div", "tr-foot");
     rfoot.appendChild(sayThis("tr-say-out", trText, function () { return trTo(); }));
     rfoot.appendChild(copyThis("tr-copy-out", trText));
@@ -1590,14 +1602,15 @@
     msg.id = "tr-msg";
     rfoot.appendChild(msg);
     right.appendChild(rfoot);
-    grid.appendChild(right);
+    card.appendChild(right);
 
-    w.appendChild(grid);
+    w.appendChild(card);
     return w;
   }
 
-  /* The two buttons every box carries. Both go quiet when their box is empty
-     rather than answering with nothing. */
+  /* The two buttons every box carries. A button with nothing to act on is
+     dimmed rather than taken away: a row of them that comes and goes is a row
+     that moves everything else with it. */
   function sayThis(id, textOf, langOf) {
     var b = el("button", "tr-act");
     b.type = "button";
@@ -1605,7 +1618,7 @@
     b.title = "Read it out";
     b.setAttribute("aria-label", b.title);
     b.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"'
-      + ' stroke-width="2" stroke-linecap="round" stroke-linejoin="round"'
+      + ' stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"'
       + ' aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>'
       + '<path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>'
       + '<path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>';
@@ -1690,18 +1703,21 @@
       msg.className = "tr-msg" + (trState === "working" ? " warn" : "");
       msg.textContent = trMsg;
     }
-    var some = !!trText();
-    [["tr-say-out", some], ["tr-copy-out", some],
-     ["tr-say-in", !!trSource.trim()], ["tr-copy-in", !!trSource.trim()]]
-      .forEach(function (pair) {
-        var b = document.getElementById(pair[0]);
-        if (!b) return;
-        if (pair[0] === "tr-say-in" || pair[0] === "tr-say-out") {
-          b.hidden = !canSpeak() || !pair[1];
-        } else {
-          b.hidden = !pair[1];
-        }
-      });
+    paintTrButtons();
+  }
+
+  /* What can be acted on, and how much there is of it. */
+  function paintTrButtons() {
+    var src = (trSource || "").trim(), answer = trText();
+    [["tr-say-in", src], ["tr-copy-in", src], ["tr-clear", src],
+     ["tr-say-out", answer], ["tr-copy-out", answer]].forEach(function (pair) {
+      var b = document.getElementById(pair[0]);
+      if (b) b.disabled = !pair[1];
+    });
+    var count = document.getElementById("tr-count");
+    if (count) {
+      count.textContent = src ? fmt(src.length) + " characters" : "";
+    }
   }
 
   function runTranslate() {

@@ -74,6 +74,13 @@ const outText = g => [...g.doc.querySelectorAll('.tr-para .vi')]
      doc.getElementById('tr-from').textContent + ' to ' + doc.getElementById('tr-to').textContent);
   ok('  the far box says what it is for',
      (doc.querySelector('.tr-none') || {}).textContent === 'Translation');
+  ok('  both halves are one card, split, with the turn on the split',
+     !!doc.querySelector('.tr-card .tr-src') && !!doc.querySelector('.tr-card .tr-dst') &&
+     doc.getElementById('tr-swap').parentNode.className === 'tr-card',
+     doc.getElementById('tr-swap').parentNode.className);
+  ok('  each language sits over its own half',
+     doc.querySelector('.tr-src .tr-lang').id === 'tr-from' &&
+     doc.querySelector('.tr-dst .tr-lang').id === 'tr-to');
   ok('  there is no Translate button to press', !doc.getElementById('tr-go'));
 
   /* --- it keeps up with the typing --------------------------------------- */
@@ -83,6 +90,9 @@ const outText = g => [...g.doc.querySelectorAll('.tr-para .vi')]
   await wait(700);
   ok('a pause in the typing is what sends it', g.sent.length === 1,
      g.sent.length + ' requests');
+  ok('  and the box counts what is in it as you go',
+     /20 characters/.test(doc.getElementById('tr-count').textContent),
+     doc.getElementById('tr-count').textContent);
   ok('  and the answer lands in the far box',
      outText(g) === '[vi] The first paragraph.', outText(g));
   ok('  named for what wrote it',
@@ -150,8 +160,13 @@ const outText = g => [...g.doc.querySelectorAll('.tr-para .vi')]
   ok('the cross empties both boxes',
      doc.getElementById('tr-in').value === '' && !doc.querySelector('.tr-para'),
      doc.getElementById('tr-in').value);
-  ok('  and takes the copy and the speaker with it, having nothing to give',
-     doc.getElementById('tr-copy-out').hidden && doc.getElementById('tr-say-out').hidden);
+  ok('  and dims the buttons that now have nothing to act on',
+     doc.getElementById('tr-copy-out').disabled &&
+     doc.getElementById('tr-say-out').disabled &&
+     doc.getElementById('tr-copy-in').disabled,
+     'out ' + doc.getElementById('tr-copy-out').disabled);
+  ok('  without taking them out of the row and moving everything else',
+     !doc.getElementById('tr-copy-out').hidden);
 
   /* --- long enough to be cut up ------------------------------------------ */
   const back = mk();

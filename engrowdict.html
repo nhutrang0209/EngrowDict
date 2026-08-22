@@ -929,7 +929,11 @@ a.btn[hidden] { display: none; }
 .back { display: none; }
 @media (max-width: 1000px) {
   :root { --list-w: 300px; }
-  .tr-grid { grid-template-columns: 1fr; }
+  .tr-card { grid-template-columns: 1fr; min-height: 0; }
+  .tr-dst { border-left: 0; border-top: 1px solid var(--rule); }
+  .tr-half textarea, .tr-out { min-height: 180px; }
+  .tr-swap { transform: translate(-50%, -50%) rotate(90deg); }
+  .tr-swap:hover { transform: translate(-50%, -50%) rotate(270deg); }
   .detail-inner { padding: 28px 28px 72px; }
 }
 @media (max-width: 760px) {
@@ -966,8 +970,8 @@ a.btn[hidden] { display: none; }
   /* Translate lives in the pane and has no list behind it, so the pane is the
      page here whatever the phone thinks it is showing. */
   body[data-solo="on"]:not([data-view="detail"]) .detail { display: block; }
-  .tr-grid { grid-template-columns: 1fr; gap: 14px; }
-  .tr-pane textarea, .tr-out { min-height: 170px; font-size: 16px; }
+  .tr-half textarea, .tr-out { min-height: 150px; font-size: 16.5px; padding: 10px 15px 4px; }
+  .tr-head { padding: 12px 15px 0; }
   .grid-word { grid-template-columns: 1fr; }
   .fill-box { justify-content: space-between; }
   /* A bar over a column of prose. While a passage is open the bar is lifted
@@ -998,63 +1002,83 @@ a.btn[hidden] { display: none; }
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
 
-/* ---- translate: two boxes, the way everybody already knows -------------- */
-.tr-bar {
-  display: flex; align-items: center; gap: 14px;
-  padding-bottom: 12px; border-bottom: 1px solid var(--rule);
+/* ---- translate: one card, split down the middle -------------------------
+   Two boxes floating apart with a bar of labels above them read as three
+   unrelated things. One card with a rule down it reads as what it is: the
+   same text twice, and the turn between them sits on the rule. */
+.translate { max-width: 1180px; margin: 0 auto; }
+.tr-card {
+  position: relative;
+  display: grid; grid-template-columns: 1fr 1fr;
+  min-height: min(58vh, 480px);
+  border: 1px solid var(--rule); border-radius: var(--r-l);
+  background: var(--surface); box-shadow: var(--lift-2); overflow: hidden;
+  transition: border-color .14s ease, box-shadow .14s ease;
 }
+.tr-card:focus-within { border-color: var(--accent); box-shadow: var(--ring), var(--lift-2); }
+.tr-half { display: flex; flex-direction: column; min-width: 0; }
+.tr-dst { background: var(--tint); border-left: 1px solid var(--rule); }
+.tr-head { display: flex; align-items: center; padding: 14px 20px 0; }
+.tr-head .grow { flex: 1; }
 .tr-lang {
-  flex: 1; font-family: var(--mono); font-size: 10px; letter-spacing: .12em;
-  text-transform: uppercase; color: var(--muted);
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: .13em;
+  text-transform: uppercase; color: var(--faint);
 }
-.tr-lang + .tr-swap + .tr-lang { text-align: left; }
-.tr-swap { flex: none; }
-.tr-grid {
-  margin-top: 14px; display: grid; gap: 18px;
-  grid-template-columns: 1fr 1fr; align-items: stretch;
+
+/* The turn, on the join. A circle over the rule is the one place it can sit
+   that belongs to neither half and reads as being about both. */
+.tr-swap {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  z-index: 3; width: 38px; height: 38px; padding: 0;
+  border: 1px solid var(--rule); border-radius: 50%;
+  background: var(--surface); color: var(--muted);
+  font-size: 15px; line-height: 1; cursor: pointer;
+  box-shadow: var(--lift-2);
+  transition: color .14s ease, border-color .14s ease, transform .14s ease;
 }
-.tr-pane {
-  display: flex; flex-direction: column; min-width: 0;
-  border: 1px solid var(--rule); border-radius: var(--r-m);
-  background: var(--surface); overflow: hidden;
+.tr-swap:hover {
+  color: var(--accent-hi); border-color: var(--accent);
+  transform: translate(-50%, -50%) rotate(180deg);
 }
-.tr-pane:focus-within { border-color: var(--accent); box-shadow: var(--ring); }
-.tr-result { background: var(--tint); }
-.tr-pane textarea {
-  flex: 1; width: 100%; min-height: 320px; resize: vertical;
+
+.tr-half textarea {
+  flex: 1; width: 100%; resize: none;
   border: 0; background: none; color: var(--ink);
-  padding: 16px 17px; font-family: var(--sans); font-size: 17px; line-height: 1.6;
+  padding: 10px 20px 4px; font-family: var(--sans);
+  font-size: 18px; line-height: 1.6;
 }
-.tr-pane textarea:focus { outline: none; }
+.tr-half textarea::placeholder { color: var(--faint); }
+.tr-half textarea:focus { outline: none; }
 .tr-out {
-  flex: 1; min-height: 320px; padding: 16px 17px;
-  display: flex; flex-direction: column; gap: 14px;
-  font-size: 17px; line-height: 1.6; overflow-wrap: break-word;
+  flex: 1; min-width: 0; overflow-y: auto;
+  padding: 10px 20px 4px; font-size: 18px; line-height: 1.6;
+  display: flex; flex-direction: column; gap: 15px; overflow-wrap: break-word;
 }
 .tr-none { color: var(--faint); }
 .tr-para .vi { color: var(--ink); }
 .tr-para .vi.waiting { color: var(--faint); }
-.tr-para .none { font-size: 13.5px; color: var(--flag); }
-.tr-para .btn { align-self: flex-start; margin-top: 8px; }
+.tr-para .none { font-size: 14px; color: var(--flag); }
+.tr-para .btn { align-self: flex-start; margin-top: 9px; }
+
 .tr-foot {
-  display: flex; align-items: center; gap: 4px;
-  padding: 7px 10px; border-top: 1px solid var(--hair);
+  display: flex; align-items: center; gap: 2px;
+  padding: 8px 14px 10px; min-height: 46px;
 }
 .tr-foot .grow { flex: 1; }
 .tr-act {
-  border: 0; background: none; cursor: pointer; color: var(--faint);
-  width: 32px; height: 30px; border-radius: 8px;
+  border: 0; background: none; cursor: pointer; color: var(--muted);
+  width: 32px; height: 32px; border-radius: 9px;
   display: inline-flex; align-items: center; justify-content: center;
+  transition: background .14s ease, color .14s ease;
 }
 .tr-act svg { width: 17px; height: 17px; }
-.tr-act:hover { background: var(--sunk); color: var(--ink); }
+.tr-act:hover:not([disabled]) { background: var(--sunk); color: var(--ink); }
+.tr-act[disabled] { color: var(--hair); cursor: default; }
 .tr-act[hidden] { display: none; }
-.tr-x {
-  border: 0; background: none; cursor: pointer; color: var(--faint);
-  width: 30px; height: 30px; border-radius: 8px; font-size: 18px; line-height: 1;
+.tr-count, .tr-msg {
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: .09em;
+  text-transform: uppercase; color: var(--faint); text-align: right;
 }
-.tr-x:hover { background: var(--sunk); color: var(--ink); }
-.tr-msg { font-size: 11.5px; color: var(--faint); text-align: right; }
 .tr-msg.warn { color: var(--term); }
 
 /* ---- the floating dictionary, for use while reading --------------------- */
@@ -2672,29 +2696,16 @@ a.btn[hidden] { display: none; }
 
   function translateView() {
     var w = el("div", "translate");
-
-    /* The bar that says which way round it is. Two languages, so the swap is
-       one button rather than two menus of the world. */
-    var bar = el("div", "tr-bar");
-    var from = el("span", "tr-lang", LANGS[trFrom()]);
-    from.id = "tr-from";
-    bar.appendChild(from);
-    var swap = el("button", "iconbtn tr-swap", "⇄");
-    swap.type = "button";
-    swap.id = "tr-swap";
-    swap.title = "Translate the other way";
-    swap.setAttribute("aria-label", swap.title);
-    swap.addEventListener("click", swapDirection);
-    bar.appendChild(swap);
-    var to = el("span", "tr-lang", LANGS[trTo()]);
-    to.id = "tr-to";
-    bar.appendChild(to);
-    w.appendChild(bar);
-
-    var grid = el("div", "tr-grid");
+    var card = el("div", "tr-card");
 
     /* --- what you are writing --- */
-    var left = el("div", "tr-pane");
+    var left = el("div", "tr-half tr-src");
+    var lhead = el("div", "tr-head");
+    var from = el("span", "tr-lang", LANGS[trFrom()]);
+    from.id = "tr-from";
+    lhead.appendChild(from);
+    left.appendChild(lhead);
+
     var ta = el("textarea");
     ta.id = "tr-in";
     ta.placeholder = "Type or paste here…";
@@ -2703,18 +2714,22 @@ a.btn[hidden] { display: none; }
     ta.addEventListener("input", function () {
       trSource = ta.value;
       trTyped();
+      paintTrButtons();
     });
     left.appendChild(ta);
+
     var lfoot = el("div", "tr-foot");
     lfoot.appendChild(sayThis("tr-say-in", function () { return trSource; },
       function () { return trFrom(); }));
     lfoot.appendChild(copyThis("tr-copy-in", function () { return trSource; }));
-    lfoot.appendChild(el("span", "grow"));
-    var clear = el("button", "tr-x", "×");
+    var clear = el("button", "tr-act tr-x");
     clear.type = "button";
     clear.id = "tr-clear";
     clear.title = "Clear it";
     clear.setAttribute("aria-label", clear.title);
+    clear.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"'
+      + ' stroke-width="2" stroke-linecap="round" aria-hidden="true">'
+      + '<path d="M6 6l12 12M18 6L6 18"/></svg>';
     clear.addEventListener("click", function () {
       trSource = ""; trOut = []; trState = ""; trMsg = "";
       var box = document.getElementById("tr-in");
@@ -2722,11 +2737,31 @@ a.btn[hidden] { display: none; }
       paintTranslation();
     });
     lfoot.appendChild(clear);
+    lfoot.appendChild(el("span", "grow"));
+    var count = el("span", "tr-count", "");
+    count.id = "tr-count";
+    lfoot.appendChild(count);
     left.appendChild(lfoot);
-    grid.appendChild(left);
+    card.appendChild(left);
+
+    /* --- the turn between them, on the join itself --- */
+    var swap = el("button", "tr-swap", "⇄");
+    swap.type = "button";
+    swap.id = "tr-swap";
+    swap.title = "Translate the other way";
+    swap.setAttribute("aria-label", swap.title);
+    swap.addEventListener("click", swapDirection);
+    card.appendChild(swap);
 
     /* --- what it says --- */
-    var right = el("div", "tr-pane tr-result");
+    var right = el("div", "tr-half tr-dst");
+    var rhead = el("div", "tr-head");
+    rhead.appendChild(el("span", "grow"));
+    var to = el("span", "tr-lang", LANGS[trTo()]);
+    to.id = "tr-to";
+    rhead.appendChild(to);
+    right.appendChild(rhead);
+
     var out = el("div", "tr-out");
     out.id = "tr-out";
     /* Select-to-look-up, but only where the answer is English: the notebook is
@@ -2737,6 +2772,7 @@ a.btn[hidden] { display: none; }
       out.addEventListener("touchend", onSelectInProse);
     }
     right.appendChild(out);
+
     var rfoot = el("div", "tr-foot");
     rfoot.appendChild(sayThis("tr-say-out", trText, function () { return trTo(); }));
     rfoot.appendChild(copyThis("tr-copy-out", trText));
@@ -2745,14 +2781,15 @@ a.btn[hidden] { display: none; }
     msg.id = "tr-msg";
     rfoot.appendChild(msg);
     right.appendChild(rfoot);
-    grid.appendChild(right);
+    card.appendChild(right);
 
-    w.appendChild(grid);
+    w.appendChild(card);
     return w;
   }
 
-  /* The two buttons every box carries. Both go quiet when their box is empty
-     rather than answering with nothing. */
+  /* The two buttons every box carries. A button with nothing to act on is
+     dimmed rather than taken away: a row of them that comes and goes is a row
+     that moves everything else with it. */
   function sayThis(id, textOf, langOf) {
     var b = el("button", "tr-act");
     b.type = "button";
@@ -2760,7 +2797,7 @@ a.btn[hidden] { display: none; }
     b.title = "Read it out";
     b.setAttribute("aria-label", b.title);
     b.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"'
-      + ' stroke-width="2" stroke-linecap="round" stroke-linejoin="round"'
+      + ' stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"'
       + ' aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>'
       + '<path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>'
       + '<path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>';
@@ -2845,18 +2882,21 @@ a.btn[hidden] { display: none; }
       msg.className = "tr-msg" + (trState === "working" ? " warn" : "");
       msg.textContent = trMsg;
     }
-    var some = !!trText();
-    [["tr-say-out", some], ["tr-copy-out", some],
-     ["tr-say-in", !!trSource.trim()], ["tr-copy-in", !!trSource.trim()]]
-      .forEach(function (pair) {
-        var b = document.getElementById(pair[0]);
-        if (!b) return;
-        if (pair[0] === "tr-say-in" || pair[0] === "tr-say-out") {
-          b.hidden = !canSpeak() || !pair[1];
-        } else {
-          b.hidden = !pair[1];
-        }
-      });
+    paintTrButtons();
+  }
+
+  /* What can be acted on, and how much there is of it. */
+  function paintTrButtons() {
+    var src = (trSource || "").trim(), answer = trText();
+    [["tr-say-in", src], ["tr-copy-in", src], ["tr-clear", src],
+     ["tr-say-out", answer], ["tr-copy-out", answer]].forEach(function (pair) {
+      var b = document.getElementById(pair[0]);
+      if (b) b.disabled = !pair[1];
+    });
+    var count = document.getElementById("tr-count");
+    if (count) {
+      count.textContent = src ? fmt(src.length) + " characters" : "";
+    }
   }
 
   function runTranslate() {
