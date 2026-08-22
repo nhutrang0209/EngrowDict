@@ -112,6 +112,39 @@ const openMenu = g => {
   bar.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
   ok('  and back the other way', widthNow() === '420px', widthNow());
 
+  /* --- reading them together ---------------------------------------------- */
+  ok('the passage keeps its button where it can be reached',
+     read('app.css').indexOf('.read .entry-nav {') > -1 &&
+     /position: sticky/.test(read('app.css').slice(read('app.css').indexOf('.read .entry-nav {'), read('app.css').indexOf('.read .entry-nav {') + 90)),
+     'sticky');
+
+  // jsdom lays nothing out, so both scrollers are given a height to have
+  const detail = doc.querySelector('.detail');
+  const aiBody = doc.getElementById('ai-body');
+  const stub = (node, full, seen) => {
+    Object.defineProperty(node, 'scrollHeight', { value: full, configurable: true });
+    Object.defineProperty(node, 'clientHeight', { value: seen, configurable: true });
+  };
+  stub(detail, 4000, 800);            // 3200 of room
+  stub(aiBody, 2600, 600);            // 2000 of room
+  detail.scrollTop = 800;             // a quarter of the way down the English
+  detail.dispatchEvent(new w.Event('scroll'));
+  ok('scrolling the English brings the Vietnamese with it, by the same fraction',
+     aiBody.scrollTop === 500, aiBody.scrollTop + ' of 2000, against 800 of 3200');
+
+  detail.scrollTop = 3200;
+  detail.dispatchEvent(new w.Event('scroll'));
+  ok('  the end of one is the end of the other', aiBody.scrollTop === 2000,
+     String(aiBody.scrollTop));
+
+  aiBody.scrollTop = 40;
+  aiBody.dispatchEvent(new w.Event('scroll'));
+  ok('  but reading ahead in the translation leaves the English where it was',
+     detail.scrollTop === 3200 && aiBody.scrollTop === 40,
+     detail.scrollTop + ' / ' + aiBody.scrollTop);
+  detail.scrollTop = 0;
+  detail.dispatchEvent(new w.Event('scroll'));
+
   /* --- asking again, and closing ------------------------------------------ */
   posts.length = 0;
   answer = () => ({ ok: true, by: 'Gemini', paras: ['Lần hai.', 'Hai.', 'Ba.'] });

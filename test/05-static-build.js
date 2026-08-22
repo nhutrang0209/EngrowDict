@@ -17,14 +17,15 @@ const mk = () => boot({
 });
 
 (async () => {
-  // 300 KB, not 140: the Books tab and the reader added about seven, putting a
+  // 308 KB, not 140: the Books tab and the reader added about seven, putting a
   // book on the site for every device another three, the Auto Fill box in the
   // word form two more, keeping your place in a passage another four, the key
   // for the Vietnamese column one, the forms on the rail — hidden, dragged and
-  // pulled about — six between them, and the Translate tab twelve. The
-  // importer itself is not in here: bookify.js and pdf.js are fetched only
-  // when someone picks a file.
-  ok('the shell is small', shell.length < 300000, Math.round(shell.length / 1024) + ' KB');
+  // pulled about — six between them, the Translate tab twelve, and writing a
+  // passage and having one translated beside it eight. The importer itself is
+  // not in here: bookify.js and pdf.js are fetched only when someone picks a
+  // file.
+  ok('the shell is small', shell.length < 308000, Math.round(shell.length / 1024) + ' KB');
   ok('the shell embeds no data',
      !shell.includes('<script type="application/json" id="base">'));
   ok('the shell points at data.json', shell.includes('href="data.json"'));

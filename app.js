@@ -1163,6 +1163,21 @@
     }, { passive: true });
   }
 
+  /* The two columns are the same passage twice, so they are read together: the
+     English is what is scrolled and the Vietnamese keeps pace with it, by the
+     same fraction of its own length. Not the other way about — looking ahead in
+     the translation is exactly the sort of thing you want to do without the
+     English being dragged along with it. */
+  function syncAiScroll() {
+    if (!aiPane) return;
+    var box = detailBox(), body = document.getElementById("ai-body");
+    if (!box || !body) return;
+    var room = box.scrollHeight - box.clientHeight;
+    var mine = body.scrollHeight - body.clientHeight;
+    if (room <= 0 || mine <= 0) return;
+    body.scrollTop = Math.round((box.scrollTop / room) * mine);
+  }
+
   function watchPlace(box) {
     box.addEventListener("scroll", function () {
       if (placeTimer) return;               // a scroll is hundreds of events
@@ -1887,6 +1902,7 @@
       aiPane.paras = res.paras || [];
       aiPane.by = res.by || "the model";
       drawDetail();
+      syncAiScroll();          // level with wherever the English is being read
     }, function (err) {
       if (!aiPane || aiPane.id !== want) return;
       aiPane.state = "failed";
@@ -5079,6 +5095,7 @@
     scrollBox.addEventListener("scroll", function () { paint(false); }, { passive: true });
     watchPlace(detail);
     watchTop(detail);
+    detail.addEventListener("scroll", syncAiScroll, { passive: true });
     measureBar();
     // the bar is a different height once its own fonts arrive
     if (document.fonts && document.fonts.ready && document.fonts.ready.then) {

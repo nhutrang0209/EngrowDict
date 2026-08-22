@@ -833,6 +833,15 @@ dialog::backdrop { background: rgba(8, 14, 11, .5); backdrop-filter: blur(2px); 
 .field .hint { font-size: 11.5px; color: var(--faint); line-height: 1.45; }
 /* Tight: the box is a container for two fields, and air between them reads as
    distance between things that belong together. */
+/* The passage's own button stays where it was put: a passage is longer than a
+   screen, and an action that scrolls away is an action you have to scroll back
+   for. It floats over the prose rather than sitting on a bar of its own. */
+.read .entry-nav {
+  position: sticky; top: 8px; z-index: 24;
+  pointer-events: none; margin-bottom: 4px;
+}
+.read .entry-nav > * { pointer-events: auto; }
+
 /* ---- the passage in Vietnamese, beside the English ----------------------
    Two columns of the same passage, and a rule between them that can be
    dragged: which language wants the room is the reader's to decide, and it
@@ -1169,6 +1178,7 @@ a.btn[hidden] { display: none; }
   }
   /* Reading: the passage starts below the bar and carries on underneath it. */
   body[data-view="detail"] .detail-inner { padding-top: calc(26px + var(--bar-h, 132px)); }
+  .read .entry-nav { top: calc(var(--bar-h, 132px) + 8px); }
 }
 
 @media (prefers-reduced-motion: reduce) {
