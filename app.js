@@ -1378,6 +1378,10 @@
       b.addEventListener("click", function () {
         if (view === t[0]) return;
         if (t[0] === "vocab") markPlace(); else cameFrom = null;
+        /* Going somewhere means wanting to see what is there: a list folded
+           away for room while reading is in the way of the place just asked
+           for, so it comes back with it. */
+        if (t[0] !== "translate") setListOpen(true);
         view = t[0];
         selectedRead = null;
         selectedBook = null;

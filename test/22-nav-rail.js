@@ -51,6 +51,18 @@ const mk = (store, width) => boot({
   click(w, doc.getElementById('tab-dictionary'));
   await wait(40);
 
+  /* --- a place asked for is a place shown --------------------------------- */
+  click(w, doc.getElementById('fold'));
+  ok('the list can be folded away for room', doc.body.dataset.list === 'off');
+  click(w, doc.getElementById('tab-books'));
+  await wait(40);
+  ok('  and choosing a place brings it back, since that is what was asked for',
+     doc.body.dataset.list === 'on', doc.body.dataset.list);
+  click(w, doc.getElementById('fold'));
+  click(w, doc.getElementById('tab-dictionary'));
+  await wait(40);
+  ok('  whichever place it is', doc.body.dataset.list === 'on', doc.body.dataset.list);
+
   /* --- open and shut ----------------------------------------------------- */
   const fold = () => doc.getElementById('nav-fold');
   ok('a wide window opens with the names showing', doc.body.dataset.nav === 'on',
