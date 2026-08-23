@@ -88,6 +88,15 @@ const toolBtn = (g, title) => [...g.doc.querySelectorAll('#pass-dlg .markbtn')]
   ok('pressing it opens a form for one', dlg.open &&
      !!dlg.querySelector('[name=ptitle]') && !!dlg.querySelector('#pass-body'));
 
+  ok('  and the form stands above the pinned button on a passage', (() => {
+    const css = read('app.css');
+    const dlg = css.slice(css.indexOf('dialog {'), css.indexOf('dialog {') + 700);
+    const nav = css.slice(css.indexOf('.read .entry-nav {'),
+                          css.indexOf('.read .entry-nav {') + 140);
+    const z = t => Number((t.match(/z-index: (\d+)/) || [])[1] || 0);
+    return z(dlg) > z(nav) && z(nav) > 0;
+  })(), 'dialog over the sticky menu');
+
   /* --- what it will not save --------------------------------------------- */
   fill(a, '', 'A paragraph.');
   click(w, doc.getElementById('pass-save'));
