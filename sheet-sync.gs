@@ -659,7 +659,7 @@ function findEntryRows(sh, tab, was) {
  * stay level with each other. In batches, because a model handed 900 words and
  * asked for 900 back is a model that starts summarising near the end.
  */
-var AI_PARAS_AT_ONCE = 6;
+var AI_PARAS_AT_ONCE = 4;
 
 function passageRules() {
   return 'You translate English passages into Vietnamese for a Vietnamese '
@@ -699,20 +699,37 @@ function askAI(system, user, key, model) {
 
   if (kind === 'gemini') {
     var names = model ? [model] : GEMINI_MODELS;
-    var gopts = {
-      method: 'post', contentType: 'application/json', muteHttpExceptions: true,
-      headers: { 'x-goog-api-key': key },
-      payload: JSON.stringify({
-        system_instruction: { parts: [{ text: system }] },
-        contents: [{ role: 'user', parts: [{ text: user }] }],
-        generationConfig: { temperature: 0.3, responseMimeType: 'application/json' }
-      })
+    /* Translating is not a puzzle: the flash models think first by default and
+       the thinking is most of the wait, so it is turned off. A model that has
+       never heard of the setting answers 400, and that one is asked again
+       without it rather than being given up on. */
+    var body = {
+      system_instruction: { parts: [{ text: system }] },
+      contents: [{ role: 'user', parts: [{ text: user }] }],
+      generationConfig: {
+        temperature: 0.3, responseMimeType: 'application/json',
+        thinkingConfig: { thinkingBudget: 0 }
+      }
     };
+    var plain = {
+      system_instruction: body.system_instruction,
+      contents: body.contents,
+      generationConfig: { temperature: 0.3, responseMimeType: 'application/json' }
+    };
+    var send = function (name, what) {
+      return UrlFetchApp.fetch(
+        'https://generativelanguage.googleapis.com/v1beta/models/' + name
+        + ':generateContent', {
+          method: 'post', contentType: 'application/json',
+          muteHttpExceptions: true, headers: { 'x-goog-api-key': key },
+          payload: JSON.stringify(what)
+        });
+    };
+
     var trouble = '';
     for (var n = 0; n < names.length; n++) {
-      var g = UrlFetchApp.fetch(
-        'https://generativelanguage.googleapis.com/v1beta/models/' + names[n]
-        + ':generateContent', gopts);
+      var g = send(names[n], body);
+      if (g.getResponseCode() === 400) g = send(names[n], plain);
       if (g.getResponseCode() === 200) return geminiText(g.getContentText());
       trouble = 'Gemini answered ' + g.getResponseCode() + ' for ' + names[n] + ': '
         + String(g.getContentText()).replace(/\s+/g, ' ').slice(0, 120);

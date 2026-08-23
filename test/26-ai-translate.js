@@ -99,10 +99,15 @@ const openMenu = g => {
   const firstEnglish = (label
     ? firstNode.textContent.slice(label.textContent.length)
     : firstNode.textContent).trim();
-  ok('  every paragraph of it, in order',
-     !!sent && sent.body.paras.length === paras && sent.body.paras[0] === firstEnglish,
-     sent && sent.body.paras.length + ' of ' + paras + ' — '
-       + (sent ? sent.body.paras[0].slice(0, 40) : ''));
+  ok('  a few paragraphs at a time, so the first of it can be read at once',
+     !!sent && sent.body.paras.length <= 4 && sent.body.paras[0] === firstEnglish,
+     sent && sent.body.paras.length + ' in the first ask');
+  ok('  and every paragraph of it in the end, in order', (() => {
+    const all = posts.filter(p => p.body.action === 'aitranslate')
+      .reduce((list, p) => list.concat(p.body.paras), []);
+    return all.length === paras && all[0] === firstEnglish;
+  })(), posts.filter(p => p.body.action === 'aitranslate').length + ' asks for '
+     + paras + ' paragraphs');
 
   const said = [...doc.querySelectorAll('.ai-para .vi')].map(n => n.textContent);
   ok('what comes back is read down the right', said[0] === 'Đoạn một.' &&
@@ -211,6 +216,48 @@ const openMenu = g => {
      !doc.querySelector('.aipane') && !!doc.querySelector('.read .prose') &&
      doc.getElementById('detail-inner').className === 'detail-inner wide',
      doc.getElementById('detail-inner').className);
+
+  /* --- what it keeps ------------------------------------------------------ */
+  const AI_STORE = 'engrowdict:aitr:v1';
+  ok('the translation is kept, so coming back does not mean asking again',
+     !!JSON.parse(a.store[AI_STORE] || '{}')['r0'],
+     Object.keys(JSON.parse(a.store[AI_STORE] || '{}')).join(', '));
+
+  // the pane was closed a moment ago, which is remembered too; open it again
+  openMenu(a);
+  click(w, doc.getElementById('passage-ai'));
+  await wait(60);
+  posts.length = 0;
+  click(w, doc.getElementById('tab-dictionary'));
+  await wait(40);
+  click(w, doc.getElementById('tab-passages'));
+  await wait(40);
+  click(w, doc.querySelector('.hit'));
+  await wait(80);
+  ok('  a trip to another tab and back puts it straight back up',
+     !!doc.querySelector('.aipane') &&
+     !!doc.querySelector('.ai-para .vi').textContent,
+     doc.querySelector('.ai-para .vi') && doc.querySelector('.ai-para .vi').textContent);
+  ok('    without asking the model a second time',
+     !posts.some(p => p.body.action === 'aitranslate'),
+     posts.map(p => p.body.action).join(', ') || 'nothing asked');
+
+  click(w, doc.getElementById('ai-close'));
+  await wait(40);
+  click(w, doc.getElementById('tab-dictionary'));
+  await wait(40);
+  click(w, doc.getElementById('tab-passages'));
+  await wait(40);
+  click(w, doc.querySelector('.hit'));
+  await wait(80);
+  ok('  but one closed on purpose stays closed', !doc.querySelector('.aipane'));
+  openMenu(a);
+  click(w, doc.getElementById('passage-ai'));
+  await wait(40);
+  ok('    and opens again from what was kept, still without asking',
+     !!doc.querySelector('.aipane') &&
+     !posts.some(p => p.body.action === 'aitranslate'),
+     posts.map(p => p.body.action).join(', ') || 'nothing asked');
 
   /* --- another passage does not keep the last one's translation ------------ */
   click(w, doc.getElementById('passage-ai'));   // gone with the pane

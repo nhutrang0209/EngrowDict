@@ -604,6 +604,7 @@
   function select(id, keepScroll) {
     if (aiPane && aiPane.id !== id) aiPane = null;   // another passage, another one
     selectedId = id;
+    if (view === "read" && !aiPane) restoreAiPane(byId[id]);
     /* One id space for three kinds of thing, so what comes back is checked
        against what the view can draw. A word selected while the passages were
        on screen was handed to the passage renderer, which read a passage's
@@ -1923,38 +1924,132 @@
     } catch (err) { /* private mode */ }
   }
 
+  /* A passage is a thousand words and the model is asked for all of them, so
+     it is asked a few paragraphs at a time and each answer is put up as it
+     lands: the first of it is readable in seconds rather than the whole of it
+     in a minute, and a passage that fails halfway keeps what it has.
+
+     What comes back is kept, too. Pressing a tab and coming back used to mean
+     asking — and paying — for the same translation again. */
+  var AI_BATCH = 4;
+  var AI_KEEP = 6;                        // passages kept, oldest dropped first
+  var AI_STORE_KEY = "engrowdict:aitr:v1";
+
+  function aiStore() {
+    try {
+      var raw = localStorage.getItem(AI_STORE_KEY);
+      var got = raw ? JSON.parse(raw) : {};
+      return (got && typeof got === "object") ? got : {};
+    } catch (err) { return {}; }
+  }
+
+  function aiStoreWrite(all) {
+    var ids = Object.keys(all);
+    if (ids.length > AI_KEEP) {
+      ids.sort(function (a, b) { return (all[a].at || 0) - (all[b].at || 0); });
+      while (ids.length > AI_KEEP) delete all[ids.shift()];
+    }
+    try { localStorage.setItem(AI_STORE_KEY, JSON.stringify(all)); }
+    catch (err) { /* quota: the translation is worth less than the words */ }
+  }
+
+  /* Enough of the English to know it is still the same English: a passage that
+     has been edited since is translated again rather than shown a translation
+     of what it used to say. */
+  function aiStamp(r) {
+    var text = (r.paras || []).map(function (p) { return p.text; }).join("");
+    return r.paras.length + ":" + text.length;
+  }
+
+  function aiKept(r) {
+    var one = aiStore()[r.id];
+    return (one && one.stamp === aiStamp(r)) ? one : null;
+  }
+
+  function aiKeep(r, done) {
+    var all = aiStore();
+    all[r.id] = {
+      stamp: aiStamp(r), at: Date.now(),
+      by: aiPane.by, paras: aiPane.paras, shut: !!(done === "shut")
+    };
+    aiStoreWrite(all);
+  }
+
+  function aiShut(r, yes) {
+    var all = aiStore();
+    if (!all[r.id]) return;
+    all[r.id].shut = !!yes;
+    aiStoreWrite(all);
+  }
+
   function openAiPane(r) {
+    var kept = aiKept(r);
+    if (kept && kept.paras && kept.paras.length) {
+      aiPane = { id: r.id, state: "done", paras: kept.paras, by: kept.by || "", msg: "" };
+      aiShut(r, false);
+      drawDetail();
+      syncAiScroll();
+      return;
+    }
     if (!canWriteSheet()) {
       toast("This goes through the sheet's Web App link — set it in Settings first.");
       return;
     }
     if (aiPane && aiPane.id === r.id) { drawDetail(); return; }
-    aiPane = { id: r.id, state: "working", paras: [], by: "", msg: "" };
+    aiPane = { id: r.id, state: "working", paras: [], by: "", msg: "", done: 0 };
     drawDetail();
     runAiTranslate(r);
   }
 
+  /* Opening a passage that has one already puts it back up, unless it was the
+     reader who closed it. */
+  function restoreAiPane(r) {
+    if (!r) return;
+    var kept = aiKept(r);
+    if (!kept || kept.shut || !kept.paras || !kept.paras.length) return;
+    aiPane = { id: r.id, state: "done", paras: kept.paras, by: kept.by || "", msg: "" };
+  }
+
   function closeAiPane() {
+    var r = selectedRead;
+    if (r) aiShut(r, true);
     aiPane = null;
     drawDetail();
   }
 
   function runAiTranslate(r) {
     var want = r.id;
-    var paras = r.paras.map(function (p) { return stripMarks(p.text); });
-    callSheet({ action: "aitranslate", paras: paras }).then(function (res) {
-      if (!aiPane || aiPane.id !== want) return;      // closed, or another one
-      aiPane.state = "done";
-      aiPane.paras = res.paras || [];
-      aiPane.by = res.by || "the model";
-      drawDetail();
-      syncAiScroll();          // level with wherever the English is being read
-    }, function (err) {
-      if (!aiPane || aiPane.id !== want) return;
-      aiPane.state = "failed";
-      aiPane.msg = (err && err.message) ? err.message : String(err);
-      drawDetail();
-    });
+    var lines = r.paras.map(function (p) { return stripMarks(p.text); });
+    var at = 0;
+
+    function next() {
+      if (!aiPane || aiPane.id !== want) return;          // closed, or another
+      if (at >= lines.length) {
+        aiPane.state = "done";
+        aiKeep(r);
+        drawDetail();
+        syncAiScroll();
+        return;
+      }
+      var from = at, batch = lines.slice(at, at + AI_BATCH);
+      at += batch.length;
+      callSheet({ action: "aitranslate", paras: batch }).then(function (res) {
+        if (!aiPane || aiPane.id !== want) return;
+        (res.paras || []).forEach(function (one, i) { aiPane.paras[from + i] = one; });
+        aiPane.by = res.by || aiPane.by || "the model";
+        aiPane.done = Math.min(lines.length, at);
+        aiKeep(r);                                        // as far as it has got
+        drawDetail();
+        syncAiScroll();
+        next();
+      }, function (err) {
+        if (!aiPane || aiPane.id !== want) return;
+        aiPane.state = aiPane.paras.length ? "part" : "failed";
+        aiPane.msg = (err && err.message) ? err.message : String(err);
+        drawDetail();
+      });
+    }
+    next();
   }
 
   function aiPaneView(r) {
@@ -1963,8 +2058,10 @@
 
     var head = el("div", "ai-head");
     head.appendChild(el("span", "ai-title", "Vietnamese"));
+    var howFar = aiPane.done && r.paras.length
+      ? "translating… " + aiPane.done + " of " + r.paras.length : "translating…";
     var by = el("span", "ai-by",
-      aiPane.state === "working" ? "translating…"
+      aiPane.state === "working" ? howFar
         : aiPane.by ? "by " + aiPane.by : "");
     by.id = "ai-by";
     head.appendChild(by);
@@ -1974,10 +2071,10 @@
     again.id = "ai-again";
     again.title = "Ask again";
     again.disabled = aiPane.state === "working";
+    again.disabled = aiPane.state === "working";
     again.addEventListener("click", function () {
-      aiPane.state = "working";
-      aiPane.paras = [];
-      aiPane.msg = "";
+      aiPane = { id: r.id, state: "working", paras: [], by: "", msg: "", done: 0 };
+      aiShut(r, false);
       drawDetail();
       runAiTranslate(r);
     });
@@ -1996,6 +2093,10 @@
     if (aiPane.state === "failed") {
       body.appendChild(el("p", "ai-none", aiPane.msg || "It would not answer."));
     } else {
+      if (aiPane.state === "part") {
+        body.appendChild(el("p", "ai-none",
+          "It stopped partway: " + aiPane.msg + " Press ↻ to ask for the rest."));
+      }
       r.paras.forEach(function (p, i) {
         var b = el("div", "ai-para");
         if (p.mark) {
