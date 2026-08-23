@@ -686,10 +686,50 @@ function passageRules() {
 }
 
 /** Whatever came back, pulled out of the wrapper, one string a paragraph. */
-function paraList(text, howMany) {
+/* ---- reading a list out of a model ---------------------------------------
+
+   Models put a stray backslash in now and then — a "\\u" with nothing behind
+   it, or an escape JSON has no word for — and JSON.parse says "Bad Unicode
+   escape in JSON at position 6412", which is what a reader saw where a
+   translated passage should have been.
+
+   So the obvious damage is mended before parsing, and an answer that still
+   will not parse is read as lines. A translation with one paragraph out of
+   shape beats an error message where the passage was. */
+function looseJson(text) {
+  return String(text)
+    .replace(/\\u(?![0-9a-fA-F]{4})/g, "u")      // an escape that escapes nothing
+    .replace(/\\(?![\\"\/bfnrtu])/g, "");      // and any other JSON has no word for
+}
+
+/** The lines of an answer that was meant to be a list and was not quite. */
+function listLines(text) {
+  var raw = String(text).split(/\n+/), out = [], i;
+  for (i = 0; i < raw.length; i++) {
+    var one = String(raw[i])
+      .replace(/^\s*[\[\],"]+\s*$/, "")          // a bracket or a quote on its own
+      .replace(/^\s*\d+[.)]\s*/, "")             // 1. or 1)
+      .replace(/^\s*[-*\u2022]\s*/, "")           // a bullet
+      .replace(/^"|",?$/g, "")
+      .trim();
+    if (one) out.push(one);
+  }
+  return out;
+}
+
+/** Whatever the model said, as a list of strings. */
+function listFrom(text) {
   var m = String(text).match(/\[[\s\S]*\]/);
-  if (!m) throw new Error('The model did not answer with a list');
-  var list = JSON.parse(m[0]);
+  if (m) {
+    try { return JSON.parse(m[0]); } catch (err) { /* mended below */ }
+    try { return JSON.parse(looseJson(m[0])); } catch (err2) { /* read as lines */ }
+  }
+  return listLines(text);
+}
+
+function paraList(text, howMany) {
+  var list = listFrom(text);
+  if (!list.length) throw new Error('The model did not answer with a list');
   var out = [];
   for (var i = 0; i < list.length && i < howMany; i++) out.push(flat(list[i]));
   while (out.length < howMany) out.push('');
@@ -1387,9 +1427,8 @@ function glossAsk(word, pos, defs) {
 
 /** Whatever came back, pulled out of the wrapper and cut to a gloss. */
 function glossList(text, howMany) {
-  var m = String(text).match(/\[[\s\S]*\]/);
-  if (!m) throw new Error('The model did not answer with a list');
-  var list = JSON.parse(m[0]);
+  var list = listFrom(text);
+  if (!list.length) throw new Error('The model did not answer with a list');
   var out = [];
   for (var i = 0; i < list.length && i < howMany; i++) out.push(shortVi(String(list[i])));
   return out;

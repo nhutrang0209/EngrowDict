@@ -336,6 +336,38 @@ const openMenu = g => {
      /Natural written Vietnamese/.test(asks[0].body.system_instruction.parts[0].text),
      asks[0].body.system_instruction.parts[0].text.slice(0, 80));
 
+  /* --- an answer with a stray backslash in it ------------------------------
+     "SyntaxError: Bad Unicode escape in JSON at position 6412" is what a
+     reader got where a passage should have been: the model had written a
+     backslash-u with nothing behind it, and JSON.parse took the whole passage
+     down with it. */
+  const BS = String.fromCharCode(92);
+  sandbox.net.reply = () => ({ code: 200, body: JSON.stringify({ candidates: [{
+    content: { parts: [{ text: '["Câu một.", "Câu ' + BS + 'uZZZZ hai."]' }] } }] }) });
+  const mended = JSON.parse(sandbox.__doPost({
+    postData: { contents: JSON.stringify({
+      key: CFG.key, action: 'aitranslate',
+      paras: ['The first paragraph.', 'The second one.'],
+    }) },
+  }));
+  ok('an escape that escapes nothing is mended rather than thrown',
+     mended.ok === true && mended.paras.length === 2 &&
+     mended.paras[1] === 'Câu uZZZZ hai.', JSON.stringify(mended.paras));
+
+  sandbox.net.reply = () => ({ code: 200, body: JSON.stringify({ candidates: [{
+    content: { parts: [{ text: '1. Câu một.' + String.fromCharCode(10)
+      + '2. Câu hai.' }] } }] }) });
+  const lined = JSON.parse(sandbox.__doPost({
+    postData: { contents: JSON.stringify({
+      key: CFG.key, action: 'aitranslate',
+      paras: ['The first paragraph.', 'The second one.'],
+    }) },
+  }));
+  ok('  and an answer that is a numbered list rather than a JSON one is read too',
+     lined.ok === true && lined.paras.length === 2 &&
+     lined.paras[0] === 'Câu một.' && lined.paras[1] === 'Câu hai.',
+     JSON.stringify(lined.paras));
+
   const noKey = appsScriptSandbox(grids, { SOTRATU_KEY: CFG.key });
   vm.createContext(noKey);
   vm.runInContext(read('sheet-sync.gs') + '\nthis.__doPost = doPost;', noKey);
