@@ -71,9 +71,12 @@ ok('the shell itself stays light', shell.length < 308000,
 
   ok('  and says selections can be looked up',
      (doc.querySelector('.read .hint')?.textContent || '').includes('Select any word'));
-  ok('  the prose is justified, with hyphenation to keep the spacing even',
+  /* A book chapter is drawn by the same readingView, so one rule covers both. */
+  ok('  the prose is justified, and no word is broken across two lines',
      /\.read \.prose p \{[^}]*text-align: justify/.test(read('app.css')) &&
-     /\.read \.prose p \{[^}]*hyphens: auto/.test(read('app.css')));
+     /\.read \.prose p \{[^}]*hyphens: none/.test(read('app.css')) &&
+     !/hyphens: auto/.test(read('app.css')),
+     (read('app.css').match(/hyphens: [a-z]+/g) || []).join(', '));
 
   // a lettered passage shows its letters in the margin
   const q2 = doc.getElementById('q');

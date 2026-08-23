@@ -623,9 +623,11 @@ body.resizing { cursor: col-resize; user-select: none; }
 .read .prose p {
   position: relative;
   font-size: 17px; line-height: 1.78; color: var(--ink-2);
-  /* justified, with hyphenation so the word spacing does not gape */
+  /* Justified, and never hyphenated: a word broken across two lines is a word
+     you have to put back together to read, and this is a page for reading
+     words. The spacing pays for it. */
   text-align: justify; text-justify: inter-word;
-  hyphens: auto; -webkit-hyphens: auto;
+  hyphens: none; -webkit-hyphens: none;
 }
 .read .prose p::selection, .read .prose ::selection { background: var(--accent-soft); }
 /* lettered paragraphs, as the IELTS-style passages are written */
