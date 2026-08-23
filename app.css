@@ -849,6 +849,21 @@ dialog::backdrop { background: rgba(8, 14, 11, .5); backdrop-filter: blur(2px); 
 }
 .read .entry-nav > * { pointer-events: auto; }
 
+/* Beside the translation it becomes a header rather than a floating button:
+   the twin of the one over the Vietnamese, so both columns begin at the same
+   height and their first lines are level. */
+.read-head.entry-nav {
+  position: sticky; top: 0; z-index: 24; pointer-events: auto;
+  display: flex; align-items: center; gap: 8px;
+  /* the same height as the header over the Vietnamese, with or without the
+     button in it: an unlocked notebook must not sit a row lower than a
+     locked one */
+  min-height: 30px; margin-bottom: 0; padding: 0 0 10px;
+  background: var(--ground); border-bottom: 1px solid var(--rule);
+}
+.read-head .grow { flex: 1; }
+.readsplit .read .prose, .readsplit .read h1 { margin-top: 18px; }
+
 /* ---- the passage in Vietnamese, beside the English ----------------------
    Two columns of the same passage, and a rule between them that can be
    dragged: which language wants the room is the reader's to decide, and it
@@ -878,7 +893,7 @@ dialog::backdrop { background: rgba(8, 14, 11, .5); backdrop-filter: blur(2px); 
 }
 .ai-head {
   display: flex; align-items: center; gap: 8px;
-  padding-bottom: 10px; border-bottom: 1px solid var(--rule);
+  min-height: 30px; padding-bottom: 10px; border-bottom: 1px solid var(--rule);
 }
 .ai-head .grow { flex: 1; }
 .ai-title {

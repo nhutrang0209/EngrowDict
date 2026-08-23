@@ -69,6 +69,21 @@ const openMenu = g => {
      doc.getElementById('detail-inner').className === 'detail-inner wide split' &&
      /\.detail-inner\.split \{ max-width: none/.test(read('app.css')),
      doc.getElementById('detail-inner').className);
+  ok('  the English is given a header of its own, the twin of the Vietnamese one',
+     !!doc.querySelector('.readsplit .read .read-head') &&
+     doc.querySelector('.readsplit .read .read-head .ai-title').textContent === 'English' &&
+     !!doc.querySelector('.readsplit .read .read-head .menu-wrap'),
+     doc.querySelector('.readsplit .read .read-head')
+       && doc.querySelector('.readsplit .read .read-head').textContent);
+  ok('    so both columns begin at the same height', (() => {
+    const css = read('app.css');
+    const head = css.slice(css.indexOf('.read-head.entry-nav {'),
+                           css.indexOf('.read-head.entry-nav {') + 420);
+    const ai = css.slice(css.indexOf('.ai-head {'), css.indexOf('.ai-head {') + 200);
+    const pad = t => (t.match(/padding[^;]*10px/) || [])[0];
+    return !!pad(head) && !!pad(ai) && /min-height: 30px/.test(head) &&
+      /min-height: 30px/.test(ai) && /position: sticky/.test(head);
+  })(), 'headers matched');
   ok('  and says it is working on it',
      /translating/.test(doc.getElementById('ai-by').textContent),
      doc.getElementById('ai-by').textContent);

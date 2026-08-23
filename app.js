@@ -1184,7 +1184,9 @@
        across with it. */
     var ens = document.querySelectorAll(".readsplit .read .prose > *");
     var vis = body.querySelectorAll(".ai-para");
-    var at = anchorIndex(ens, box.getBoundingClientRect().top);
+    var head = document.querySelector(".readsplit .read-head");
+    var from = head ? head.getBoundingClientRect().bottom : 0;
+    var at = anchorIndex(ens, from || box.getBoundingClientRect().top);
     if (at && vis[at.i]) {
       var here = vis[at.i].getBoundingClientRect();
       var from = body.getBoundingClientRect().top;
@@ -1540,11 +1542,17 @@
 
   function readingView(r, lead) {
     var w = el("div", "read");
-    // a chapter of a book is read the same way but is not the sheet's to edit
-    if (view === "read" && mayAdd()) {
-      var nav = el("div", "entry-nav");
+    /* Beside a translation the button sits in a header of its own, the twin of
+       the one over the Vietnamese: two columns that start at the same height
+       are two columns whose first lines are level, which is the whole reason
+       for reading them side by side. On its own the passage keeps the button
+       floating over the prose, where it costs no room. */
+    var beside = view === "read" && aiPane && aiPane.id === r.id;
+    if (view === "read" && (mayAdd() || beside)) {
+      var nav = el("div", "entry-nav" + (beside ? " read-head" : ""));
+      if (beside) nav.appendChild(el("span", "ai-title", "English"));
       nav.appendChild(el("span", "grow"));
-      nav.appendChild(passageMenu(r));
+      if (mayAdd()) nav.appendChild(passageMenu(r));
       w.appendChild(nav);
     }
     w.appendChild(el("h1", null, r.title));
