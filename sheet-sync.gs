@@ -489,9 +489,12 @@ function formatInserted(sh, at, n, entry, w) {
     var cw = txt(entry.word);
     sh.getRange(at, 2).setRichTextValue(headRichText(cw, cw, cambridgeUrl(cw)));
   } else if (entry.type === 'phrasal') {
+    /* No link on a phrasal verb: the verb sits in one cell and the particle in
+       the next, so a link on the verb alone points at something the cell does
+       not say — and Cambridge's page for the pair is a guess at the slug more
+       often than it is a page. The styling stays; only the link goes. */
     var verb = txt(entry.verb || entry.word);
-    var whole = (verb + ' ' + txt(entry.particle)).trim();
-    sh.getRange(at, 1).setRichTextValue(headRichText(verb, verb, cambridgeUrl(whole)));
+    sh.getRange(at, 1).setRichTextValue(headRichText(verb, verb, ''));
   } else {
     var text = headCell(entry);
     sh.getRange(at, 1).setRichTextValue(

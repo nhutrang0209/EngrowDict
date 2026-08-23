@@ -125,8 +125,12 @@ res = call({
 ok('a phrasal verb is inserted', res.ok && res.sheet === 'Phrasal Verb', JSON.stringify(res));
 const pvLog = sandbox.sheets['Phrasal Verb'].log;
 const pvRich = pvLog.rich[pvBefore].value;
-ok('the verb links to the whole phrasal verb on Cambridge',
-   pvRich.links[0].url.endsWith('/muddle-sideways'), pvRich.links[0].url);
+ok('a phrasal verb carries no link at all',
+   pvRich.links.length === 0, JSON.stringify(pvRich.links));
+ok('  and still reads as a headword: bold, and the verb on its own',
+   pvRich.text === 'muddle' &&
+   pvRich.styles.some(x => x.from === 0 && x.style.bold === true),
+   pvRich.text + ' — ' + JSON.stringify(pvRich.styles.map(x => x.style.bold)));
 ok('both the verb and the particle columns are merged',
    pvLog.merges.slice(-2).every(x => x.nRows === 2) &&
    pvLog.merges.slice(-2).map(x => x.col).join() === '1,2',
