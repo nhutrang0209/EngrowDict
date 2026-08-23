@@ -191,6 +191,40 @@ const openMenu = g => {
   ens.forEach(n => { delete n.getBoundingClientRect; });
   vis.forEach(n => { delete n.getBoundingClientRect; });
   delete detail.getBoundingClientRect;
+
+  /* --- paragraph against paragraph ---------------------------------------- */
+  /* jsdom lays nothing out, so the two columns are told where their paragraphs
+     stand: the English ones 200px apart, the Vietnamese ones 120px apart, which
+     is the drift that had However level with the middle of Tuy nhiên. */
+  const stack = (nodes, step) => nodes.forEach((n, i) => {
+    Object.defineProperty(n, 'offsetTop', { value: i * step, configurable: true });
+  });
+  const enParas = [...doc.querySelectorAll('.readsplit .read .prose > *')];
+  const viParas = [...doc.querySelectorAll('#ai-body .ai-para')];
+  ok('there is a paragraph on each side to line up',
+     enParas.length > 2 && enParas.length === viParas.length,
+     enParas.length + ' English, ' + viParas.length + ' Vietnamese');
+
+  stack(enParas, 200);
+  stack(viParas, 120);
+  a.window.dispatchEvent(new a.window.Event('resize'));
+  await wait(120);
+  ok('the shorter of each pair is given the difference underneath it',
+     viParas[0].style.marginBottom === '80px' && viParas[1].style.marginBottom === '80px',
+     viParas.slice(0, 3).map(n => n.style.marginBottom || '0').join(', '));
+  ok('  and nothing is added to the taller one',
+     enParas[0].style.marginBottom === '' && enParas[1].style.marginBottom === '',
+     enParas.slice(0, 3).map(n => n.style.marginBottom || '0').join(', '));
+
+  stack(enParas, 100);
+  stack(viParas, 260);
+  a.window.dispatchEvent(new a.window.Event('resize'));
+  await wait(120);
+  ok('the other way round when the Vietnamese runs longer',
+     enParas[0].style.marginBottom === '160px' && viParas[0].style.marginBottom === '',
+     'English ' + enParas[0].style.marginBottom + ', Vietnamese ' +
+       (viParas[0].style.marginBottom || '0'));
+
   delete aiBody.getBoundingClientRect;
 
   const englishAt = detail.scrollTop;
