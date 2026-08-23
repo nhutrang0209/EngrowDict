@@ -137,10 +137,47 @@ const openMenu = g => {
   ok('  the end of one is the end of the other', aiBody.scrollTop === 2000,
      String(aiBody.scrollTop));
 
+  /* --- and by the paragraph, where there is a layout to measure ----------- */
+  // the same paragraphs, set at different heights in the two columns: the
+  // Vietnamese runs longer, which is why the same fraction down lands in the
+  // wrong place and the paragraph itself has to be found
+  const rect = (node, top, height) => {
+    node.getBoundingClientRect = () => ({ top, bottom: top + height, height, left: 0, right: 0 });
+  };
+  const ens = [...doc.querySelectorAll('.readsplit .read .prose > *')];
+  const vis = [...aiBody.querySelectorAll('.ai-para')];
+  detail.getBoundingClientRect = () => ({ top: 100, bottom: 900, height: 800, left: 0, right: 0 });
+  aiBody.getBoundingClientRect = () => ({ top: 100, bottom: 700, height: 600, left: 0, right: 0 });
+  aiBody.scrollTop = 0;
+  // English: paragraph 0 well above, paragraph 1 straddling the top edge
+  ens.forEach((n, i) => rect(n, i === 0 ? -400 : 60 + (i - 1) * 300, i === 0 ? 460 : 300));
+  // Vietnamese, taller: paragraph 1 starts 700 below the top of its box
+  vis.forEach((n, i) => rect(n, 100 + (i === 0 ? 0 : 700 + (i - 1) * 420),
+                            i === 0 ? 700 : 420));
+  detail.scrollTop = 900;
+  detail.dispatchEvent(new w.Event('scroll'));
+  // paragraph 1 stands 40px above the top edge of a 300px paragraph, so the
+  // reader is an eighth into it: 700 + 0.1333 * 420
+  ok('the paragraph at the top of the English is put at the top of the Vietnamese',
+     aiBody.scrollTop === 756, aiBody.scrollTop + ', wanted 756');
+  ok('  carrying how far into that paragraph the reader is', (() => {
+    // a fifth of the way through the English paragraph: 700 + 0.2 * 420 = 784
+    aiBody.scrollTop = 0;
+    ens.forEach((n, i) => rect(n, i === 0 ? -400 : 40 + (i - 1) * 300, i === 0 ? 460 : 300));
+    detail.dispatchEvent(new w.Event('scroll'));
+    return aiBody.scrollTop === 784;
+  })(), aiBody.scrollTop + ', wanted 784');
+
+  ens.forEach(n => { delete n.getBoundingClientRect; });
+  vis.forEach(n => { delete n.getBoundingClientRect; });
+  delete detail.getBoundingClientRect;
+  delete aiBody.getBoundingClientRect;
+
+  const englishAt = detail.scrollTop;
   aiBody.scrollTop = 40;
   aiBody.dispatchEvent(new w.Event('scroll'));
   ok('  but reading ahead in the translation leaves the English where it was',
-     detail.scrollTop === 3200 && aiBody.scrollTop === 40,
+     detail.scrollTop === englishAt && aiBody.scrollTop === 40,
      detail.scrollTop + ' / ' + aiBody.scrollTop);
   detail.scrollTop = 0;
   detail.dispatchEvent(new w.Event('scroll'));

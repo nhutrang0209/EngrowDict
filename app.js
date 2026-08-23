@@ -1172,10 +1172,44 @@
     if (!aiPane) return;
     var box = detailBox(), body = document.getElementById("ai-body");
     if (!box || !body) return;
-    var room = box.scrollHeight - box.clientHeight;
     var mine = body.scrollHeight - body.clientHeight;
-    if (room <= 0 || mine <= 0) return;
+    if (mine <= 0) return;
+
+    /* By the paragraph, not by the fraction. The same paragraph is a different
+       height in the two languages and in two columns of different widths, so
+       the same fraction down is a different paragraph — which is how the
+       translation of C came to be at the top while C itself was halfway down.
+       What is level with the top of the English is put level with the top of
+       the Vietnamese, and how far into that paragraph the reader is carries
+       across with it. */
+    var ens = document.querySelectorAll(".readsplit .read .prose > *");
+    var vis = body.querySelectorAll(".ai-para");
+    var at = anchorIndex(ens, box.getBoundingClientRect().top);
+    if (at && vis[at.i]) {
+      var here = vis[at.i].getBoundingClientRect();
+      var from = body.getBoundingClientRect().top;
+      var want = body.scrollTop + (here.top - from) + at.into * here.height;
+      body.scrollTop = Math.max(0, Math.min(mine, Math.round(want)));
+      return;
+    }
+
+    // nothing has been laid out to measure: the same fraction is all there is
+    var room = box.scrollHeight - box.clientHeight;
+    if (room <= 0) return;
     body.scrollTop = Math.round((box.scrollTop / room) * mine);
+  }
+
+  /* Which paragraph the top of the reading area is standing in, and how far
+     through it. */
+  function anchorIndex(nodes, top) {
+    for (var i = 0; i < nodes.length; i++) {
+      var r = nodes[i].getBoundingClientRect();
+      if (!r.height) continue;
+      if (r.bottom > top) {
+        return { i: i, into: Math.min(1, Math.max(0, (top - r.top) / r.height)) };
+      }
+    }
+    return null;
   }
 
   function watchPlace(box) {
