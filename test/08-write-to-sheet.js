@@ -866,8 +866,11 @@ function page(store, posts, reply) {
   ok('Fill asks the sheet for a draft of the word typed in',
      postsFill.length === 1 && postsFill[0].body.action === 'draft' &&
      postsFill[0].body.word === 'susurrus', JSON.stringify(postsFill[0] && postsFill[0].body));
-  ok('  and says it wants the Vietnamese but not the examples',
-     postsFill[0].body.eg === false && postsFill[0].body.vi === true,
+  /* The examples are asked for either way — Cambridge has already parsed them
+     and a sense can want one later — while the Vietnamese, which is a model
+     request, is asked for only when the box says so. */
+  ok('  and asks for the examples whatever the box says, the Vietnamese only when it says so',
+     postsFill[0].body.eg === true && postsFill[0].body.vi === true,
      JSON.stringify(postsFill[0].body));
   ok('  the head fields come back filled in',
      fdlg.querySelector('[name=pos]').value === 'n' &&
@@ -880,13 +883,29 @@ function page(store, posts, reply) {
      f.doc.querySelector('#sense-list [name=vi]').value === 'tiếng xào xạc',
      JSON.stringify(f.doc.querySelector('#sense-list [name=vi]').value));
 
+  /* One press of the button beside Remove puts them in, without the lookup
+     happening again. */
+  const egBtn = () => f.doc.querySelector('#sense-list .sense-eg');
+  ok('  unticked, the sense offers its examples rather than carrying them',
+     !!egBtn() && !egBtn().hidden && egBtn().textContent === '+ example',
+     egBtn() ? egBtn().textContent : 'no button');
+  const asked = postsFill.length;
+  click(f.window, egBtn());
+  ok('  pressing it puts the example under the definition, and asks nobody',
+     f.doc.querySelector('#sense-list [name=def]').value ===
+       'a soft murmuring sound\n- the susurrus of the leaves' &&
+     postsFill.length === asked,
+     JSON.stringify(f.doc.querySelector('#sense-list [name=def]').value));
+  ok('    and goes away once there is nothing left to put in',
+     egBtn().hidden, 'hidden: ' + egBtn().hidden);
+
   // ticked, the same draft brings the examples along as well
   f.doc.getElementById('fill-eg').checked = true;
   click(f.window, f.doc.getElementById('form-fill'));
   await wait(300);
   click(f.window, f.doc.querySelector('#card-list .card-open'));
   await wait(60);
-  ok('  ticking the examples box asks for those too',
+  ok('  ticking the examples box brings them in without pressing anything',
      postsFill[1].body.eg === true && postsFill[1].body.vi === true,
      JSON.stringify(postsFill[1].body));
   ok('  the example then sits under its definition, the way the sheet writes it',

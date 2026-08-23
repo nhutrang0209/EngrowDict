@@ -181,7 +181,11 @@ way: the rail says *writing to the sheet…* while it goes, the card leaves the
 rail when the sheet answers, and the line at the bottom says which word went
 in. The Vietnamese box is ticked
 to begin with, being the column the notebook is kept for; the examples box is
-not. Nothing survives a reload: the rail is a few minutes of impatience, not
+not. The examples are fetched either way, since Cambridge has already parsed
+them and they cost nothing to carry, so a sense that wants one later says
+**+ example** in the space beside Remove and has it without the lookup
+happening again. The Vietnamese is asked for only when its box is ticked: that
+one is a model request. Nothing survives a reload: the rail is a few minutes of impatience, not
 state.
 
 **Every part of speech, in one entry.** *rough* is an adjective, a verb, a noun

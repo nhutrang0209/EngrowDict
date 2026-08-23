@@ -109,8 +109,10 @@ function ask(g, word) {
   ok('Auto Fill sends the word off and the form with it',
      dlg(g).open === false && rail(g).join(' | ') === 'abaft:looking up…',
      rail(g).join(' | '));
-  ok('  and it asks for the Vietnamese, since that box is ticked',
-     net.asked()[0].vi === true && net.asked()[0].eg === false);
+  ok('  asking for the Vietnamese because the box says so, and for the examples '
+     + 'either way — a sense can want one later without a second lookup',
+     net.asked()[0].vi === true && net.asked()[0].eg === true,
+     JSON.stringify(net.asked()[0]));
 
   /* --- and another, and another ------------------------------------------- */
   ask(g, 'susurrus');

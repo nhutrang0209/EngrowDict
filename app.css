@@ -685,6 +685,11 @@ dialog {
   border: 1px solid var(--rule); border-radius: var(--r-l);
   background: var(--surface); color: var(--ink);
   padding: 0; width: min(660px, 94vw); box-shadow: var(--lift-3);
+  /* A form is shown without a backdrop so the page stays live behind it,
+     which also means it takes its turn in the stacking like anything else:
+     above the passage's pinned button, above the rail, above the card that
+     opens over a selection. */
+  z-index: 75;
 }
 dialog::backdrop { background: rgba(8, 14, 11, .5); backdrop-filter: blur(2px); }
 .dlg-head { padding: 20px 24px 16px; border-bottom: 1px solid var(--rule); display: flex; align-items: baseline; gap: 10px; }
@@ -998,6 +1003,14 @@ dialog::backdrop { background: rgba(8, 14, 11, .5); backdrop-filter: blur(2px); 
 .sense-edit .row { display: flex; align-items: center; gap: 8px; margin-bottom: -1px; }
 .sense-edit .row .lab { font-family: var(--mono); font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--accent-hi); }
 .sense-edit .row .drop { margin-left: auto; padding: 4px 9px; font-size: 12.5px; }
+/* Beside Remove, in the space the head already has: a sense does not grow a
+   line for a button that is only sometimes there. */
+.sense-edit .row .sense-eg {
+  margin-left: auto; padding: 4px 9px; font-size: 12px; color: var(--accent-hi);
+}
+.sense-edit .row .sense-eg:hover { background: var(--accent-soft); color: var(--accent-hi); }
+.sense-edit .row .sense-eg[hidden] { display: none; }
+.sense-edit .row .sense-eg + .drop { margin-left: 6px; }
 /* The number doubles as the handle: senses come back in the dictionary's order
    of importance, which is not the order they matter to the person learning. */
 .sense-grip {

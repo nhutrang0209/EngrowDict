@@ -3564,6 +3564,15 @@
     grip.appendChild(el("span", "lab", "Sense " + n));
     dragSense(box, grip);
     row.appendChild(grip);
+    /* In the empty middle of the head, where nothing else is: the sense does
+       not grow a line for it. */
+    var eg = el("button", "btn btn-quiet sense-eg", "+ example");
+    eg.type = "button";
+    eg.hidden = true;
+    eg.title = "Put the dictionary's examples under this definition";
+    eg.addEventListener("click", function () { addExamples(box); });
+    row.appendChild(eg);
+
     var drop = el("button", "btn btn-quiet drop", "Remove");
     drop.type = "button";
     drop.addEventListener("click", function () { box.remove(); renumberSenses(); });
@@ -3606,6 +3615,44 @@
     fresh.querySelector("[name=def]").focus();
     return fresh;
   }
+  /* The examples the draft brought for whichever sense is in this box. The
+     senses can be reordered, added to and taken out, so they are matched on
+     the definition they carry rather than on where they sit. */
+  function egFor(def) {
+    var res = current && current.fill && current.fill.res;
+    var senses = res && res.entry && res.entry.senses;
+    if (!senses || !def) return [];
+    var want = norm(def);
+    for (var i = 0; i < senses.length; i++) {
+      if (norm(senses[i].def || "") === want) return senses[i].eg || [];
+    }
+    return [];
+  }
+
+  /* The head of the definition is the definition; the lines under it are the
+     examples already put there. */
+  function defHead(text) {
+    return String(text || "").split("\n")[0].trim();
+  }
+
+  function egMissing(box) {
+    var ta = box.querySelector("[name=def]");
+    if (!ta) return [];
+    var text = ta.value;
+    return egFor(defHead(text)).filter(function (x) {
+      return text.indexOf(x) < 0;
+    });
+  }
+
+  function addExamples(box) {
+    var ta = box.querySelector("[name=def]");
+    var more = egMissing(box);
+    if (!ta || !more.length) return;
+    more.forEach(function (x) { ta.value += "\n- " + x; });
+    renumberSenses();
+    ta.focus();
+  }
+
   /* Reordering is moving the box in the list and renumbering: the form is read
      off the DOM when it is saved and when it is put on the rail, so there is
      nothing else to keep in step. */
@@ -3662,6 +3709,8 @@
       boxes[i].querySelector(".drop").hidden = boxes.length === 1;
       var add = boxes[i].querySelector(".sense-add");
       if (add) add.hidden = i === boxes.length - 1;   // the wide button is there
+      var eg = boxes[i].querySelector(".sense-eg");
+      if (eg) eg.hidden = !egMissing(boxes[i]).length;
     }
   }
 
@@ -4096,7 +4145,13 @@
     /* A card thrown away while its lookup is in the air tells the browser to
        stop; where it cannot, the answer is ignored when it arrives. */
     if (typeof AbortController === "function") f.stop = new AbortController();
-    callSheet({ action: "draft", word: card.word, eg: card.want.eg, vi: card.want.vi },
+    /* The examples are asked for whether or not the box is ticked: Cambridge
+       has already parsed them, they cost nothing to carry, and a sense that
+       wants one later can have it without the whole lookup happening again.
+       The box decides what lands in the form, not what is fetched. The
+       Vietnamese is different — that one is a model request, so it is asked
+       for only when it is wanted. */
+    callSheet({ action: "draft", word: card.word, eg: true, vi: card.want.vi },
       f.stop && f.stop.signal).then(function (res) {
       if (f.state === "dropped") return;
       f.state = "ready";
