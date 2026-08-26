@@ -1215,6 +1215,56 @@
     return null;
   }
 
+  /* ---- the Vietnamese of what has just been selected -----------------------
+
+     The two columns are the same passage twice, paragraph for paragraph, so
+     picking out a sentence on the English side is also picking out the
+     paragraph it belongs to — and the reader who does that is asking, more
+     often than not, what it says. Whichever paragraphs the selection touches
+     are lit on the other side, and brought into view if they were below the
+     fold. Only whole paragraphs: the model was given a paragraph at a time and
+     never said which of its clauses answers which of the English ones, so
+     lighting a sentence would be guessing at a line it never drew. */
+  function proseIndex(node, paras) {
+    while (node && node.parentNode) {
+      for (var i = 0; i < paras.length; i++) if (paras[i] === node) return i;
+      node = node.parentNode;
+    }
+    return -1;
+  }
+
+  function litAiParas(range) {
+    var body = document.getElementById("ai-body");
+    if (!body || !aiPane) return;
+    var vis = body.querySelectorAll(".ai-para");
+    var prose = document.querySelector(".readsplit .read .prose");
+    var paras = prose ? prose.children : [];
+    var from = range ? proseIndex(range.startContainer, paras) : -1;
+    var to = range ? proseIndex(range.endContainer, paras) : -1;
+    if (to < from) to = from;
+
+    var first = null;
+    for (var i = 0; i < vis.length; i++) {
+      var on = from > -1 && i >= from && i <= to;
+      vis[i].classList.toggle("lit", on);
+      if (on && !first) first = vis[i];
+    }
+    if (first) showAiPara(body, first);
+  }
+
+  function dimAiParas() { litAiParas(null); }
+
+  /* Nudged into view, not scrolled to: what the reader is looking at should
+     stay where it is if it is already on the screen. */
+  function showAiPara(body, para) {
+    var box = body.getBoundingClientRect(), at = para.getBoundingClientRect();
+    if (at.top >= box.top && at.bottom <= box.bottom) return;
+    var want = body.scrollTop + (at.top - box.top)
+      - Math.max(12, (box.height - at.height) / 3);
+    var room = body.scrollHeight - body.clientHeight;
+    body.scrollTop = Math.max(0, Math.min(room, Math.round(want)));
+  }
+
   function watchPlace(box) {
     box.addEventListener("scroll", function () {
       if (placeTimer) return;               // a scroll is hundreds of events
@@ -3457,11 +3507,15 @@
     // let the browser settle the selection first
     setTimeout(function () {
       var sel = window.getSelection && window.getSelection();
-      if (!sel || sel.isCollapsed) { hideLookup(); return; }
+      if (!sel || sel.isCollapsed) { hideLookup(); dimAiParas(); return; }
+      var range = null;
+      try { range = sel.getRangeAt(0); } catch (err) { range = null; }
+      litAiParas(range);
       var text = String(sel).trim();
       if (!text || text.length > 120) { hideLookup(); return; }
       var rect = null;
-      try { rect = sel.getRangeAt(0).getBoundingClientRect(); } catch (err) { rect = null; }
+      try { rect = range ? range.getBoundingClientRect() : null; }
+      catch (err) { rect = null; }
       if (popOpen()) {
         var inp = document.getElementById("pd-q");
         inp.value = text;
@@ -3483,7 +3537,7 @@
       lookupCard.id = "lookup";
       document.getElementById("app").appendChild(lookupCard);
       document.addEventListener("keydown", function (ev) {
-        if (ev.key === "Escape") hideLookup();
+        if (ev.key === "Escape") { hideLookup(); dimAiParas(); }
       });
       window.addEventListener("scroll", hideLookup, true);
     }

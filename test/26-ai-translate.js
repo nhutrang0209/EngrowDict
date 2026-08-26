@@ -202,6 +202,61 @@ const openMenu = g => {
   detail.scrollTop = 0;
   detail.dispatchEvent(new w.Event('scroll'));
 
+  /* --- picking a paragraph out on one side, and finding it on the other ----
+     Paragraph for paragraph is the only pairing there is: the model was given
+     a paragraph at a time and never said which of its clauses answers which of
+     the English ones, so a sentence lights the paragraph it belongs to. */
+  const pick = (from, to) => {
+    const range = doc.createRange();
+    range.setStart(from.firstChild || from, 0);
+    const end = to || from;
+    range.setEnd(end.lastChild || end, (end.lastChild || end).length || 0);
+    w.getSelection().removeAllRanges();
+    w.getSelection().addRange(range);
+    from.dispatchEvent(new w.Event('mouseup', { bubbles: true }));
+  };
+  const lit = () => [...aiBody.querySelectorAll('.ai-para')]
+    .map((n, i) => (n.classList.contains('lit') ? i : -1)).filter(i => i > -1);
+
+  pick(ens[1]);
+  await wait(40);
+  ok('selecting a paragraph of the English lights its Vietnamese',
+     lit().join() === '1', lit().join() || 'none');
+
+  pick(ens[0]);
+  await wait(40);
+  ok('  and only the one, so moving on takes the last one off again',
+     lit().join() === '0', lit().join() || 'none');
+
+  pick(ens[0], ens[2]);
+  await wait(40);
+  ok('  a selection across three paragraphs lights all three',
+     lit().join() === '0,1,2', lit().join() || 'none');
+
+  const inside = doc.createRange();
+  const words = ens[1].lastChild;
+  inside.setStart(words, 0);
+  inside.setEnd(words, Math.min(12, words.length));
+  w.getSelection().removeAllRanges();
+  w.getSelection().addRange(inside);
+  ens[1].dispatchEvent(new w.Event('mouseup', { bubbles: true }));
+  await wait(40);
+  ok('  a few words inside one light the paragraph they belong to',
+     lit().join() === '1', lit().join() || 'none');
+
+  w.getSelection().removeAllRanges();
+  ens[1].dispatchEvent(new w.Event('mouseup', { bubbles: true }));
+  await wait(40);
+  ok('  and letting the selection go puts the Vietnamese back as it was',
+     lit().length === 0, lit().join());
+
+  ok('what is lit is washed behind the words, not dressed up as a selection',
+     /\.ai-para\.lit::before \{ opacity: 1/.test(read('app.css')) &&
+     /pointer-events: none/.test(read('app.css').slice(
+       read('app.css').indexOf('.ai-para::before {'),
+       read('app.css').indexOf('.ai-para::before {') + 260)),
+     'washed');
+
   /* --- asking again, and closing ------------------------------------------ */
   posts.length = 0;
   answer = () => ({ ok: true, by: 'Gemini', paras: ['Lần hai.', 'Hai.', 'Ba.'] });

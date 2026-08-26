@@ -916,6 +916,23 @@ dialog::backdrop { background: rgba(8, 14, 11, .5); backdrop-filter: blur(2px); 
 }
 .ai-para .vi { font-size: 15.5px; line-height: 1.7; color: var(--ink-2); }
 .ai-para .vi.waiting { color: var(--faint); }
+
+/* What has been picked out on the English side, picked out here too. A wash
+   behind the words rather than a selection colour: the reader has not selected
+   this text, and offering it as though they had would be a lie about what
+   Copy would take. It is behind them in the painting order as well, so the
+   Vietnamese stays as selectable as it was. */
+.ai-para::before {
+  content: ""; position: absolute; inset: -7px -11px;
+  border-radius: var(--r-s); background: var(--accent-soft);
+  opacity: 0; pointer-events: none; transition: opacity .16s ease;
+}
+.ai-para > * { position: relative; }
+.ai-para.lit::before { opacity: 1; }
+.ai-para.lit .vi { color: var(--ink); }
+@media (prefers-reduced-motion: reduce) {
+  .ai-para::before { transition: none; }
+}
 .ai-none { font-size: 13.5px; color: var(--flag); line-height: 1.6; }
 
 @media (max-width: 900px) {
