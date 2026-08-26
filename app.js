@@ -1217,20 +1217,116 @@
 
   /* ---- the Vietnamese of what has just been selected -----------------------
 
-     The two columns are the same passage twice, paragraph for paragraph, so
-     picking out a sentence on the English side is also picking out the
-     paragraph it belongs to — and the reader who does that is asking, more
-     often than not, what it says. Whichever paragraphs the selection touches
-     are lit on the other side, and brought into view if they were below the
-     fold. Only whole paragraphs: the model was given a paragraph at a time and
-     never said which of its clauses answers which of the English ones, so
-     lighting a sentence would be guessing at a line it never drew. */
+     The two columns are the same passage twice, so picking a sentence out of
+     the English is asking what that sentence says. Whichever sentences the
+     selection touches are washed on the other side, and brought into view if
+     they were below the fold.
+
+     Sentence for sentence is a guess, and it is worth being plain about which
+     one. The model was given a paragraph at a time and never said which of its
+     clauses answers which of the English ones. What it does do, translating
+     prose rather than summarising it, is keep the sentences: a paragraph of
+     four goes over as a paragraph of four. So where both sides count the same
+     they are paired off in order, which is nearly always. Where they do not —
+     one sentence split in two, or two run together — the count is spread
+     across the difference, which lands beside the right words often enough to
+     be worth having and never lights fewer than the sentences involved. */
   function proseIndex(node, paras) {
     while (node && node.parentNode) {
       for (var i = 0; i < paras.length; i++) if (paras[i] === node) return i;
       node = node.parentNode;
     }
     return -1;
+  }
+
+  /* A full stop is the end of a sentence when something follows it; these are
+     the words where it is not. Getting "Mr. Drucker" wrong would move the wash
+     a whole sentence off, which is worth four lines of list. */
+  var NOT_END = /(^|[\s("'])(mr|mrs|ms|dr|prof|st|jr|sr|vs|etc|no|fig|approx|e\.g|i\.e|u\.s|u\.k)$/i;
+
+  /* A letter with a capital of its own that it is not. Written this way it
+     asks nothing of the alphabet, which matters: one column is Vietnamese. */
+  function lower(ch) {
+    return !!ch && ch.toLowerCase() === ch && ch.toUpperCase() !== ch;
+  }
+
+  /* Where each sentence starts and ends. `to` stops before the space that
+     follows it, so a wash ends with the words rather than trailing off. */
+  function sentences(text) {
+    var out = [], at = 0, i = 0;
+    while (i < text.length) {
+      if (".!?…".indexOf(text.charAt(i)) > -1) {
+        while (i + 1 < text.length && ".!?…\"')]”’".indexOf(text.charAt(i + 1)) > -1) i++;
+        var stop = i + 1, next = stop;
+        while (next < text.length && /\s/.test(text.charAt(next))) next++;
+        var runs = next > stop || next >= text.length;
+        /* What follows settles it. A sentence starts with a capital, or a
+           quotation mark, or nothing at all; a small letter after the stop
+           means the stop was an ellipsis — "institutions ... the organ" — or
+           the tail of an abbreviation, and the sentence carries on. */
+        if (runs && lower(text.charAt(next))) runs = false;
+        if (runs && !NOT_END.test(text.slice(at, stop - 1))) {
+          if (stop > at) out.push({ from: at, to: stop });
+          at = next;
+          i = next;
+          continue;
+        }
+      }
+      i++;
+    }
+    if (at < text.length) out.push({ from: at, to: text.length });
+    return out;
+  }
+
+  /* The Vietnamese goes in a sentence at a time, each in a span of its own, so
+     one of them can be washed without the rest of the paragraph coming too. */
+  function viInto(host, text) {
+    var cuts = sentences(text), at = 0;
+    cuts.forEach(function (c) {
+      if (c.from > at) host.appendChild(document.createTextNode(text.slice(at, c.from)));
+      host.appendChild(el("span", "vs", text.slice(c.from, c.to)));
+      at = c.to;
+    });
+    if (at < text.length) host.appendChild(document.createTextNode(text.slice(at)));
+  }
+
+  /* A paragraph's own text. The A/B/C label is not part of it — it was never
+     sent to be translated — so it is not counted. */
+  function paraText(node) {
+    var mark = node.querySelector && node.querySelector(".pmark");
+    var text = node.textContent || "";
+    return mark ? text.slice((mark.textContent || "").length) : text;
+  }
+
+  function offsetIn(para, node, at) {
+    var range;
+    try {
+      range = document.createRange();
+      range.selectNodeContents(para);
+      range.setEnd(node, at);
+    } catch (err) { return -1; }
+    var mark = para.querySelector(".pmark");
+    return range.toString().length - (mark ? (mark.textContent || "").length : 0);
+  }
+
+  /* Which sentence a point in the text falls in — the one it opens, or, for
+     the far end of a selection, the last one it actually reaches into. */
+  function sentenceAt(list, at, end) {
+    var i;
+    if (at < 0) return end ? list.length - 1 : 0;
+    if (end) {
+      for (i = list.length - 1; i > 0; i--) if (list[i].from < at) return i;
+      return 0;
+    }
+    for (i = 0; i < list.length; i++) if (at < list[i].to) return i;
+    return Math.max(0, list.length - 1);
+  }
+
+  function pairSpan(from, to, ens, vis) {
+    if (!ens || !vis) return null;
+    if (ens === vis) return { from: from, to: to };
+    return { from: Math.min(vis - 1, Math.floor(from * vis / ens)),
+             to: Math.min(vis - 1, Math.ceil((to + 1) * vis / ens) - 1) };
   }
 
   function litAiParas(range) {
@@ -1246,10 +1342,33 @@
     var first = null;
     for (var i = 0; i < vis.length; i++) {
       var on = from > -1 && i >= from && i <= to;
+      var spans = vis[i].querySelectorAll(".vs");
       vis[i].classList.toggle("lit", on);
-      if (on && !first) first = vis[i];
+      if (!on) { litSpans(spans, -1, -1); continue; }
+
+      /* The whole paragraph, narrowed at each end by where the selection
+         actually starts and stops. A paragraph in the middle of a long
+         selection is not narrowed at either. */
+      var ens = sentences(paraText(paras[i]));
+      var a = 0, b = ens.length - 1;
+      if (i === from) a = sentenceAt(ens, offsetIn(paras[i], range.startContainer, range.startOffset), false);
+      if (i === to) b = sentenceAt(ens, offsetIn(paras[i], range.endContainer, range.endOffset), true);
+      if (b < a) b = a;
+      var pair = pairSpan(a, b, ens.length, spans.length);
+      var got = pair ? litSpans(spans, pair.from, pair.to) : litSpans(spans, 0, spans.length - 1);
+      if (!first) first = got || vis[i];
     }
     if (first) showAiPara(body, first);
+  }
+
+  function litSpans(spans, from, to) {
+    var first = null;
+    for (var k = 0; k < spans.length; k++) {
+      var on = from > -1 && k >= from && k <= to;
+      spans[k].classList.toggle("lit", on);
+      if (on && !first) first = spans[k];
+    }
+    return first;
   }
 
   function dimAiParas() { litAiParas(null); }
@@ -2155,8 +2274,10 @@
           b.appendChild(m);
         }
         var said = aiPane.paras[i];
-        b.appendChild(el("p", said ? "vi" : "vi waiting",
-          said || (aiPane.state === "working" ? "…" : "")));
+        var line = el("p", said ? "vi" : "vi waiting");
+        if (said) viInto(line, said);
+        else line.textContent = aiPane.state === "working" ? "…" : "";
+        b.appendChild(line);
         body.appendChild(b);
       });
     }

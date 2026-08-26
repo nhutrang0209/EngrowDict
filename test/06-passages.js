@@ -16,7 +16,9 @@ ok('the public data carries the passages', data.readings.length > 30,
 ok('every passage keeps its title and paragraphs',
    data.readings.every(r => r.title && r.paras && r.paras.length > 0));
 ok('the artifact copy has them too', art.includes('Methuselah'));
-ok('the shell itself stays light', shell.length < 314000,
+// as it ships: a build on Windows carries carriage returns that git
+// normalises away before anyone downloads it — see 05-static-build.js
+ok('the shell itself stays light', shell.replace(/\r\n/g, '\n').length < 314000,
    Math.round(shell.length / 1024) + ' KB');
 
 /* --- and they work in the page ------------------------------------------ */

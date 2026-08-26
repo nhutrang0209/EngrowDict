@@ -21,11 +21,18 @@ const mk = () => boot({
   // book on the site for every device another three, the Auto Fill box in the
   // word form two more, keeping your place in a passage another four, the key
   // for the Vietnamese column one, the forms on the rail — hidden, dragged and
-  // pulled about — six between them, the Translate tab twelve, and writing a
-  // passage and having one translated beside it eight. The importer itself is
-  // not in here: bookify.js and pdf.js are fetched only when someone picks a
-  // file.
-  ok('the shell is small', shell.length < 314000, Math.round(shell.length / 1024) + ' KB');
+  // pulled about — six between them, the Translate tab twelve, writing a
+  // passage and having one translated beside it eight, and pairing the two
+  // columns sentence by sentence five. The importer itself is not in here:
+  // bookify.js and pdf.js are fetched only when someone picks a file.
+  //
+  // Measured as it ships. build.py writes whatever newline the machine it ran
+  // on prefers, and git puts them all back to one byte on the way in, so a
+  // build on Windows is some eight KB of carriage returns that nobody ever
+  // downloads — count those and the budget is a platform away from meaning
+  // anything.
+  const shipped = shell.replace(/\r\n/g, '\n').length;
+  ok('the shell is small', shipped < 314000, Math.round(shipped / 1024) + ' KB');
   ok('the shell embeds no data',
      !shell.includes('<script type="application/json" id="base">'));
   ok('the shell points at data.json', shell.includes('href="data.json"'));

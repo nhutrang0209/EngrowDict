@@ -202,10 +202,73 @@ const openMenu = g => {
   detail.scrollTop = 0;
   detail.dispatchEvent(new w.Event('scroll'));
 
-  /* --- picking a paragraph out on one side, and finding it on the other ----
-     Paragraph for paragraph is the only pairing there is: the model was given
-     a paragraph at a time and never said which of its clauses answers which of
-     the English ones, so a sentence lights the paragraph it belongs to. */
+  /* --- picking a sentence out on one side, and finding it on the other ----
+     Sentence for sentence where both sides count the same, and spread across
+     the difference where they do not. What must never happen is the thing a
+     reader complained of: half a line selected, the whole paragraph lit. */
+  posts.length = 0;
+  const FOUR = 'Câu một. Câu hai. Câu ba. Câu bốn.';
+  answer = () => ({ ok: true, by: 'Gemini', paras: [FOUR, FOUR, FOUR, FOUR] });
+  click(w, doc.getElementById('ai-again'));
+  await wait(1200);
+
+  /* every batch that lands redraws the pane, so nothing here is held on to */
+  const viParas = () => [...doc.querySelectorAll('#ai-body .ai-para')];
+  const eng = () => [...doc.querySelectorAll('.readsplit .read .prose > *')];
+
+  ok('the Vietnamese is laid down a sentence at a time',
+     viParas()[0].querySelectorAll('.vs').length === 4 &&
+     viParas()[0].querySelector('.vi').textContent === FOUR,
+     viParas()[0].querySelectorAll('.vs').length + ' spans');
+
+  // the paragraph's own text, without the A/B/C label in front of it
+  const ownText = (node) => {
+    const mark = node.querySelector('.pmark');
+    const t = node.textContent;
+    return mark ? t.slice(mark.textContent.length) : t;
+  };
+  // a range over characters [a, b) of that text, walking past the label
+  const pickChars = (node, a, b) => {
+    const mark = node.querySelector('.pmark');
+    const walk = doc.createTreeWalker(node, 4 /* NodeFilter.SHOW_TEXT */);
+    const range = doc.createRange();
+    let seen = 0, set = false, t;
+    while ((t = walk.nextNode())) {
+      if (mark && mark.contains(t)) continue;
+      const len = t.textContent.length;
+      if (!set && seen + len >= a) { range.setStart(t, a - seen); set = true; }
+      if (seen + len >= b) { range.setEnd(t, b - seen); break; }
+      seen += len;
+    }
+    w.getSelection().removeAllRanges();
+    w.getSelection().addRange(range);
+    node.dispatchEvent(new w.Event('mouseup', { bubbles: true }));
+  };
+  const litIn = (i) => [...viParas()[i].querySelectorAll('.vs')]
+    .map((n, k) => (n.classList.contains('lit') ? k : -1)).filter(k => k > -1);
+  const anyLit = () => viParas().reduce((n, _, i) => n + litIn(i).length, 0);
+
+  const first = ownText(eng()[0]);
+  const stop = first.indexOf('. ') + 1;
+  ok('  the passage opens with more than one sentence, so there is something to tell apart',
+     stop > 0 && stop < first.length - 1, 'first stop at ' + stop + ' of ' + first.length);
+
+  pickChars(eng()[0], 0, Math.max(4, Math.floor(stop / 2)));
+  await wait(40);
+  ok('half of the opening sentence lights the opening sentence, not the paragraph',
+     litIn(0).join() === '0', litIn(0).join() || 'none');
+
+  pickChars(eng()[0], 0, first.length);
+  await wait(40);
+  ok('  and the whole paragraph does light the whole paragraph',
+     litIn(0).join() === '0,1,2,3', litIn(0).join() || 'none');
+
+  pickChars(eng()[0], first.length - 20, first.length);
+  await wait(40);
+  ok('  a few words at the end light the end, and leave the opening alone',
+     litIn(0).length > 0 && litIn(0).indexOf(0) === -1,
+     litIn(0).join() || 'none');
+
   const pick = (from, to) => {
     const range = doc.createRange();
     range.setStart(from.firstChild || from, 0);
@@ -215,47 +278,33 @@ const openMenu = g => {
     w.getSelection().addRange(range);
     from.dispatchEvent(new w.Event('mouseup', { bubbles: true }));
   };
-  const lit = () => [...aiBody.querySelectorAll('.ai-para')]
+  const litParas = () => viParas()
     .map((n, i) => (n.classList.contains('lit') ? i : -1)).filter(i => i > -1);
 
-  pick(ens[1]);
+  pick(eng()[1]);
   await wait(40);
-  ok('selecting a paragraph of the English lights its Vietnamese',
-     lit().join() === '1', lit().join() || 'none');
+  ok('a selection is followed from one paragraph to the next',
+     litParas().join() === '1', litParas().join() || 'none');
 
-  pick(ens[0]);
+  pick(eng()[0], eng()[2]);
   await wait(40);
-  ok('  and only the one, so moving on takes the last one off again',
-     lit().join() === '0', lit().join() || 'none');
-
-  pick(ens[0], ens[2]);
-  await wait(40);
-  ok('  a selection across three paragraphs lights all three',
-     lit().join() === '0,1,2', lit().join() || 'none');
-
-  const inside = doc.createRange();
-  const words = ens[1].lastChild;
-  inside.setStart(words, 0);
-  inside.setEnd(words, Math.min(12, words.length));
-  w.getSelection().removeAllRanges();
-  w.getSelection().addRange(inside);
-  ens[1].dispatchEvent(new w.Event('mouseup', { bubbles: true }));
-  await wait(40);
-  ok('  a few words inside one light the paragraph they belong to',
-     lit().join() === '1', lit().join() || 'none');
+  ok('  one across three paragraphs lights all three, whole',
+     litParas().join() === '0,1,2' && litIn(1).join() === '0,1,2,3',
+     litParas().join() + ' / middle ' + litIn(1).join());
 
   w.getSelection().removeAllRanges();
-  ens[1].dispatchEvent(new w.Event('mouseup', { bubbles: true }));
+  eng()[1].dispatchEvent(new w.Event('mouseup', { bubbles: true }));
   await wait(40);
   ok('  and letting the selection go puts the Vietnamese back as it was',
-     lit().length === 0, lit().join());
+     anyLit() === 0 && litParas().length === 0, anyLit() + ' still lit');
 
-  ok('what is lit is washed behind the words, not dressed up as a selection',
-     /\.ai-para\.lit::before \{ opacity: 1/.test(read('app.css')) &&
-     /pointer-events: none/.test(read('app.css').slice(
-       read('app.css').indexOf('.ai-para::before {'),
-       read('app.css').indexOf('.ai-para::before {') + 260)),
-     'washed');
+  ok('what is lit is washed behind the words, not dressed up as a selection', (() => {
+    const css = read('app.css');
+    const rule = css.slice(css.indexOf('.ai-para .vs {'), css.indexOf('.ai-para .vs {') + 300);
+    return /box-decoration-break: clone/.test(rule) &&
+      /\.ai-para \.vs\.lit \{ background: var\(--lit\)/.test(css) &&
+      /^\s*--lit:/m.test(css) && css.match(/^\s*--lit:/gm).length === 3;
+  })(), 'washed, and a colour of its own in every theme');
 
   /* --- asking again, and closing ------------------------------------------ */
   posts.length = 0;
