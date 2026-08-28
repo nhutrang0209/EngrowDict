@@ -658,11 +658,33 @@ body.resizing { cursor: col-resize; user-select: none; }
   padding-right: 22px; word-break: break-word;
   display: flex; align-items: center; gap: 8px;
 }
+/* A line is not a headword. Selected whole, a sentence is set to be read at
+   the size of running text rather than blown up as though it were one word. */
+.lookup .picked.line {
+  font-family: var(--sans); font-size: 14.5px; font-weight: 500;
+  line-height: 1.5; letter-spacing: 0; align-items: flex-start;
+}
+.lookup .picked.line .say { margin-top: 1px; flex: none; }
 /* The speaker is the same button in three places, at the size of the word it
    sits beside. */
 .lookup .picked .say, .pd-head-word .say { width: 24px; height: 24px; }
 .lookup .picked .say svg, .pd-head-word .say svg { width: 13px; height: 13px; }
 .pd-head-word .say { align-self: center; }
+/* Under a translated line, what the notebook happens to hold for part of it.
+   A rule above it, because it answers a different question from the one the
+   reader asked and should not read as more of the same answer. */
+.lookup .also {
+  display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap;
+  margin-top: 13px; padding-top: 11px; border-top: 1px solid var(--hair);
+}
+.lookup .also-lab {
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: .09em;
+  text-transform: uppercase; color: var(--faint);
+}
+.lookup .also-word {
+  font-family: var(--serif); font-size: 16px; font-weight: 600; color: var(--ink);
+}
+.lookup .also + .sub { margin-top: 1px; }
 .lookup .sub { margin-top: 2px; font-family: var(--mono); font-size: 10.5px; color: var(--faint); }
 .lookup .sub .ipa-inline { color: var(--accent-hi); }
 .lookup .glosses { margin-top: 11px; display: flex; flex-direction: column; gap: 8px; }

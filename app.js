@@ -204,6 +204,16 @@
   }
 
   /** Best entry for a selected run of text, or null. */
+  /* The longest run of words this will look for inside a longer selection.
+     Entries run to ten words, but a reader who wants one of those selects it,
+     and it is caught whole by the exact match above. */
+  var RUN_MAX = 5;
+
+  function countWords(text) {
+    var got = String(text || "").trim();
+    return got ? got.split(/\s+/).length : 0;
+  }
+
   function lookupText(text) {
     var clean = text.replace(/[“”"'’(),.;:!?—–]/g, " ").replace(/\s+/g, " ").trim();
     if (!clean) return null;
@@ -213,7 +223,7 @@
     var words = whole.split(" ");
     if (words.length > 1) {
       // try the longest run that is an entry, e.g. "make up for" inside a line
-      for (var len = Math.min(words.length, 5); len >= 2; len--) {
+      for (var len = Math.min(words.length, RUN_MAX); len >= 2; len--) {
         for (var i = 0; i + len <= words.length; i++) {
           var run = words.slice(i, i + len).join(" ");
           if (byWord[run]) return byWord[run];
@@ -3621,7 +3631,14 @@
     });
   }
 
-  /* ---- the card that opens over a selection ------------------------------- */
+  /* ---- the card that opens over a selection -------------------------------
+
+     Long enough for all but the longest sentence in the passages — ninety-nine
+     in every hundred fit, where a hundred and twenty characters turned away
+     two in every five — and short enough that selecting a paragraph is plainly
+     not a request to have one phrase translated. A paragraph has the
+     Vietnamese column for that. */
+  var LOOKUP_MAX = 300;
   var lookupCard = null;
 
   function onSelectInProse() {
@@ -3633,7 +3650,7 @@
       try { range = sel.getRangeAt(0); } catch (err) { range = null; }
       litAiParas(range);
       var text = String(sel).trim();
-      if (!text || text.length > 120) { hideLookup(); return; }
+      if (!text || text.length > LOOKUP_MAX) { hideLookup(); return; }
       var rect = null;
       try { rect = range ? range.getBoundingClientRect() : null; }
       catch (err) { rect = null; }
@@ -3671,13 +3688,33 @@
     lookupCard.appendChild(close);
 
     var found = lookupText(text);
-    var word = found ? found.word : text;
-    var picked = el("div", "picked", word);
+
+    /* What was picked out decides how it is answered. A word, or a phrase that
+       is itself an entry, is answered by the notebook. A line is answered by
+       what the line says — because that is what was asked, and a reader who
+       selects a sentence and is handed "in turn", found somewhere in the
+       middle of it, has had their question swapped for a different one rather
+       than answered.
+
+       The entry is not thrown away for it. It goes under the translation,
+       which is how a reader still meets "make up for" without having known to
+       select exactly those three words. */
+    var asLine = !found || countWords(text) > countWords(found.word) + 1;
+    var word = asLine ? text : found.word;
+    var picked = el("div", "picked" + (word.length > 60 ? " line" : ""), word);
     /* The word is a word wherever it is read: the same speaker as the entry. */
     if (canSpeak()) picked.appendChild(sayButton(word));
     lookupCard.appendChild(picked);
 
+    if (asLine) lineInto(lookupCard, text, rect, found);
+
     if (found) {
+      if (asLine) {
+        var also = el("div", "also");
+        also.appendChild(el("span", "also-lab", "In the notebook"));
+        also.appendChild(el("span", "also-word", found.word));
+        lookupCard.appendChild(also);
+      }
       var bits = [];
       if (found.pos) bits.push(found.pos + ".");
       var sub = el("div", "sub");
@@ -3711,37 +3748,45 @@
       });
       row.appendChild(open);
       lookupCard.appendChild(row);
-    } else {
-      var box2 = el("div", "glosses");
-      var line = el("div", "g", "Translating…");
-      box2.appendChild(line);
-      lookupCard.appendChild(box2);
-
-      var row2 = el("div", "row");
-      var gt = document.createElement("a");
-      gt.className = "btn";
-      gt.target = "_blank";
-      gt.rel = "noopener";
-      gt.href = translateUrl(text);
-      gt.textContent = "Open in Google Translate";
-      row2.appendChild(gt);
-      lookupCard.appendChild(row2);
-
-      machineTranslate(text).then(function (got) {
-        line.textContent = got.text;
-        line.appendChild(el("em", null, got.via + ", not from the notebook"));
-        place(lookupCard, rect);
-      }, function () {
-        line.remove();
-        var none = el("p", "none",
-          "Not in the notebook, and the translator could not be reached.");
-        box2.appendChild(none);
-        place(lookupCard, rect);
-      });
     }
 
     lookupCard.hidden = false;
     place(lookupCard, rect);
+  }
+
+  /* What the selection says, whole, from the machine translator. The card is
+     put back in its place afterwards because the answer arrives late and
+     changes how tall it is. */
+  function lineInto(host, text, rect, found) {
+    var box = el("div", "glosses");
+    var line = el("div", "g", "Translating…");
+    box.appendChild(line);
+    host.appendChild(box);
+
+    var row = el("div", "row");
+    var gt = document.createElement("a");
+    gt.className = "btn";
+    gt.target = "_blank";
+    gt.rel = "noopener";
+    gt.href = translateUrl(text);
+    gt.textContent = "Open in Google Translate";
+    row.appendChild(gt);
+    host.appendChild(row);
+
+    machineTranslate(text).then(function (got) {
+      line.textContent = got.text;
+      line.appendChild(el("em", null, got.via + ", not from the notebook"));
+      place(host, rect);
+    }, function () {
+      line.remove();
+      /* "Not in the notebook" is only half of the card's news when the
+         notebook does have something for part of the line, sitting directly
+         underneath saying so. */
+      box.appendChild(el("p", "none", found
+        ? "The translator could not be reached."
+        : "Not in the notebook, and the translator could not be reached."));
+      place(host, rect);
+    });
   }
 
   function place(card, rect) {

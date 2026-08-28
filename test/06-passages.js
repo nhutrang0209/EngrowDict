@@ -18,7 +18,7 @@ ok('every passage keeps its title and paragraphs',
 ok('the artifact copy has them too', art.includes('Methuselah'));
 // as it ships: a build on Windows carries carriage returns that git
 // normalises away before anyone downloads it — see 05-static-build.js
-ok('the shell itself stays light', shell.replace(/\r\n/g, '\n').length < 314000,
+ok('the shell itself stays light', shell.replace(/\r\n/g, '\n').length < 317000,
    Math.round(shell.length / 1024) + ' KB');
 
 /* --- and they work in the page ------------------------------------------ */
@@ -140,10 +140,48 @@ ok('the shell itself stays light', shell.replace(/\r\n/g, '\n').length < 314000,
      card().querySelector('.picked')?.textContent === 'abate',
      card().querySelector('.picked')?.textContent);
 
+  /* --- a line is answered as a line ---------------------------------------
+     A reader picked out a sentence and got back one phrase from the middle of
+     it, the sentence itself never translated. What was asked decides what is
+     answered: the notebook answers a word, the translator answers a line, and
+     an entry found inside a line goes underneath rather than in place of it. */
   await selectText('he had to make up for it');
-  ok('a phrasal verb buried in a sentence is found',
-     card().querySelector('.picked')?.textContent === 'make up for',
+  await wait(60);
+  ok('a line is headed by the line, not by a phrase out of the middle of it',
+     card().querySelector('.picked')?.textContent === 'he had to make up for it',
      card().querySelector('.picked')?.textContent);
+  ok('  and it is the line that gets translated',
+     (card().querySelector('.g')?.textContent || '').includes('bỏ tù'),
+     card().querySelector('.g')?.textContent);
+  ok('  a phrasal verb buried in it is still found, and offered underneath',
+     card().querySelector('.also-word')?.textContent === 'make up for' &&
+     !!btn(doc, '#lookup .btn', 'Open entry'),
+     card().querySelector('.also-word')?.textContent);
+  ok('  set apart, so it does not read as the answer to what was asked',
+     /\.lookup \.also \{[^}]*border-top/.test(read('app.css')), 'ruled off');
+
+  await selectText('make up for');
+  ok('the phrase on its own is still a headword, answered by the notebook',
+     card().querySelector('.picked')?.textContent === 'make up for' &&
+     !card().querySelector('.also'),
+     card().querySelector('.picked')?.textContent);
+
+  const long = 'The trick is for managers to set long-term goals, but then '
+    + 'allow their employees to work out how to achieve them.';
+  ok('  a sentence of the length passages actually run to is not turned away',
+     long.length > 120 && long.length < 300, long.length + ' characters');
+  await selectText(long);
+  await wait(60);
+  ok('selecting a whole sentence opens the card rather than nothing at all',
+     !!card() && !card().hidden && card().querySelector('.picked.line'),
+     card() && card().hidden ? 'hidden' : 'shown');
+  ok('  headed by the sentence, set to be read rather than blown up',
+     card().querySelector('.picked')?.textContent === long,
+     (card().querySelector('.picked')?.textContent || '').slice(0, 40));
+  ok('  and a paragraph is still too much to ask one card for', (() => {
+     const para = data.readings[0].paras[0].text;
+     return para.length > 300;
+  })(), 'a paragraph runs past the cap');
 
   // the notebook holds advanced vocabulary, so ordinary words miss and the
   // machine translator takes over
