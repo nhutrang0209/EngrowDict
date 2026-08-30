@@ -182,6 +182,24 @@
     }
   }
 
+  /* The entry a new word would be a second copy of, if there is one.
+
+     By the kind as well as the word: the notebook holds "cast" as a word and
+     again as an idiom, and twenty-two more are two things at once, so those
+     are two entries and not a mistake. Two of the same kind is a mistake —
+     "fad" and "mankind" are each in the sheet twice, added again by somebody
+     who had forgotten, and each copy has its own Vietnamese, so there is no
+     mending them now without reading both. */
+  function twinOf(word, type, exceptId) {
+    var want = norm(word);
+    if (!want || type === "compare") return null;   // a group, not a headword
+    for (var i = 0; i < entries.length; i++) {
+      if (entries[i].type === type && entries[i]._w === want
+        && entries[i].id !== exceptId) return entries[i];
+    }
+    return null;
+  }
+
   /* ---- looking a selection up -------------------------------------------- */
   var byWord = {};
 
@@ -362,7 +380,13 @@
     }).then(function (r) {
       return r.json();
     }).then(function (res) {
-      if (!res || !res.ok) throw new Error((res && res.error) || "The sheet rejected the request");
+      if (!res || !res.ok) {
+        var err = new Error((res && res.error) || "The sheet rejected the request");
+        /* A word the sheet already holds is not a write that failed: it is a
+           write that was not needed. The callers tell the two apart. */
+        if (res && res.duplicate) err.duplicate = true;
+        throw err;
+      }
       return res;
     });
   }
@@ -4666,6 +4690,19 @@
     if (got.err) { formMsg(got.err, ""); return; }
     var card = current;
     if (card && card.editing) { saveEdit(card, got.entry); return; }
+
+    /* Checked here rather than after the write, because the write is the
+       thing being prevented: a second copy in the sheet is a row somebody has
+       to read both halves of before they can delete either. Another sense of
+       a word already held belongs on the entry that holds it, so the message
+       says where to put it. */
+    var twin = twinOf(got.entry.word, got.entry.type);
+    if (twin) {
+      formMsg("“" + twin.word + "” is already in the notebook. Open it and add "
+        + "the sense there rather than the word again.", "warn");
+      return;
+    }
+
     var box = document.getElementById("to-sheet");
     var wantSheet = canWriteSheet() && box && box.checked;
     if (card) {
@@ -4680,11 +4717,16 @@
        line at the bottom says when it is done. */
     hideCurrent();
 
-    var sheetErr = null;
+    var sheetErr = null, sheetHad = false;
     var toSheet = wantSheet
       ? callSheet({ action: "add", entry: got.entry }).then(function () {
         got.entry.inSheet = true;
       }, function (err) {
+        /* Another device put it there since this one last published, so the
+           check upstairs had nothing to go on. The word is in the sheet, which
+           is all that was being asked for; nothing failed, and nothing is left
+           queued to be tried again. */
+        if (err && err.duplicate) { got.entry.inSheet = true; sheetHad = true; return; }
         sheetErr = err && err.message ? err.message : String(err);
       })
       : Promise.resolve();
@@ -4721,6 +4763,10 @@
           refreshChrome();
         }
         if (!res.ok) { banner(res.msg, "Sync", syncPending); return; }
+        if (sheetHad) {
+          toast("“" + got.entry.word + "” was already in the sheet", true);
+          return;
+        }
         if (got.entry.inSheet) {
           toast("Wrote “" + got.entry.word + "” into the sheet", true);
           return;
@@ -4752,6 +4798,13 @@
       pos: made.pos, ipa: made.ipa, note: made.note, senses: made.senses,
       mine: was.mine, at: (had && had.at) || made.at, inSheet: was.inSheet
     };
+    /* Renaming one word into another that is already there makes the same
+       pair of copies as adding it twice. */
+    var twin = twinOf(next.word, next.type, was.id);
+    if (twin) {
+      formMsg("“" + twin.word + "” is already in the notebook.", "warn");
+      return;
+    }
     var inSheet = was.mine ? was.inSheet : true;
     if (inSheet && !canWriteSheet()) {
       formMsg("This word lives in the sheet, and correcting it there needs the "
@@ -4817,25 +4870,36 @@
     var todo = unsynced();
     if (!todo.length) { toast("Nothing is waiting to be written."); return; }
     banner("Writing " + plural(todo.length, "word", "words") + " into the sheet…", null, null);
-    var okN = 0, lastErr = null;
+    var okN = 0, hadN = 0, lastErr = null;
     var chain = Promise.resolve();
     todo.forEach(function (e) {
       chain = chain.then(function () {
         return callSheet({ action: "add", entry: e }).then(function () {
           e.inSheet = true;
           okN++;
-        }, function (err) { lastErr = err && err.message ? err.message : String(err); });
+        }, function (err) {
+          /* Already in the sheet is not a write that failed. Counted as one it
+             would stay in the queue, and every press of Sync would ask the
+             sheet again for a word it already has. */
+          if (err && err.duplicate) { e.inSheet = true; hadN++; return; }
+          lastErr = err && err.message ? err.message : String(err);
+        });
       });
     });
     chain.then(function () {
       writeBackup(ADDED);
       rebuild();
       refresh();
-      if (okN && !lastErr) {
+      if ((okN || hadN) && !lastErr) {
         document.getElementById("banner").hidden = true;
-        toast("Wrote " + plural(okN, "word", "words") + " into the sheet");
-      } else if (okN) {
-        banner("Wrote " + okN + ", then hit an error: " + lastErr, "Try again", pushToSheet);
+        var said = okN ? "Wrote " + plural(okN, "word", "words") + " into the sheet"
+          : "Nothing to write";
+        if (hadN) said += okN ? ", and " + hadN + " were already there"
+          : " — " + plural(hadN, "word", "words") + " already in the sheet";
+        toast(said);
+      } else if (okN || hadN) {
+        banner("Wrote " + (okN + hadN) + ", then hit an error: " + lastErr,
+          "Try again", pushToSheet);
       } else {
         banner("Could not write to the sheet: " + lastErr, "Try again", pushToSheet);
       }

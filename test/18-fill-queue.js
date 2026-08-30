@@ -392,18 +392,27 @@ function ask(g, word) {
   };
   g.window.fetch = (url, opts) => net.fetch(url, opts) || realFetch(url, opts);
 
+  /* The word must be one the notebook does not already hold, or the form
+     refuses it as a duplicate and nothing is sent — which is the right answer
+     to the wrong question. "gangland" sat here until it turned out to be a
+     real entry. */
+  ok('the sample word is new to the notebook',
+     !JSON.parse(read('docs/data.json')).entries
+       .some(e => String(e.word).toLowerCase() === 'snollygoster'),
+     'snollygoster');
+
   press(g, 'add-word');
-  type(g, '#form-dlg [name=word]', 'gangland');
+  type(g, '#form-dlg [name=word]', 'snollygoster');
   type(g, '#sense-list [name=def]', 'the people and places of violent crime');
   press(g, 'form-save');
   await wait(30);
   ok('Save word sends it off and puts the form down at once',
-     dlg(g).open === false && savedTo.join(',') === 'gangland',
+     dlg(g).open === false && savedTo.join(',') === 'snollygoster',
      'open ' + dlg(g).open + ', sent ' + savedTo.join(','));
   ok('  the rail says what is happening to it',
-     rail(g).some(r => r === 'gangland:writing to the sheet…'), rail(g).join(' | '));
+     rail(g).some(r => r === 'snollygoster:writing to the sheet…'), rail(g).join(' | '));
 
-  click(w, cardNamed(g, 'gangland'));
+  click(w, cardNamed(g, 'snollygoster'));
   await wait(40);
   ok('  brought back mid-write it still says so, and cannot be sent twice',
      doc.getElementById('form-save').disabled === true &&
@@ -415,9 +424,9 @@ function ask(g, word) {
   letSheetFinish();
   await wait(200);
   ok('when the sheet answers, the card leaves the rail',
-     !rail(g).some(r => r.startsWith('gangland')), rail(g).join(' | '));
+     !rail(g).some(r => r.startsWith('snollygoster')), rail(g).join(' | '));
   ok('  and the word said so in green',
-     /Wrote “gangland” into the sheet/.test(toastOf(g).textContent) &&
+     /Wrote “snollygoster” into the sheet/.test(toastOf(g).textContent) &&
      toastOf(g).className === 'toast good',
      toastOf(g).textContent + ' / ' + toastOf(g).className);
   ok('  with no form dragged open behind it', dlg(g).open === false);
@@ -446,7 +455,7 @@ function ask(g, word) {
   press(g, 'add-word-here');
   ok('  and the word one opens the word form, not the passage form',
      dlg(g).open && !!doc.querySelector('#form-dlg [name=word]'));
-  type(g, '#form-dlg [name=word]', 'parole officer');
+  type(g, '#form-dlg [name=word]', 'probation warden');
   type(g, '#sense-list [name=def]', 'the officer who supervises a released prisoner');
   type(g, '#sense-list [name=vi]', 'cán bộ quản chế');
   press(g, 'form-save');
@@ -457,7 +466,7 @@ function ask(g, word) {
   ok('  and leaves the reader where they were in it',
      box.scrollTop === 300, 'scrolled to ' + box.scrollTop);
   ok('  and says so rather than saying something went wrong',
-     /parole officer/.test(toastOf(g).textContent) &&
+     /probation warden/.test(toastOf(g).textContent) &&
      !/went wrong/.test(toastOf(g).textContent),
      toastOf(g).textContent);
   ok('  with nothing thrown along the way', g.errs.length === 0, JSON.stringify(g.errs));

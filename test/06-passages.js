@@ -18,7 +18,7 @@ ok('every passage keeps its title and paragraphs',
 ok('the artifact copy has them too', art.includes('Methuselah'));
 // as it ships: a build on Windows carries carriage returns that git
 // normalises away before anyone downloads it — see 05-static-build.js
-ok('the shell itself stays light', shell.replace(/\r\n/g, '\n').length < 317000,
+ok('the shell itself stays light', shell.replace(/\r\n/g, '\n').length < 320000,
    Math.round(shell.length / 1024) + ' KB');
 
 /* --- and they work in the page ------------------------------------------ */

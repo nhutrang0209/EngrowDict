@@ -522,9 +522,20 @@ function headCell(entry) {
 }
 
 /** The first row to insert before, so the tab stays in a→z order. */
-function insertRowFor(sh, sortKey, headCols, cols) {
+/**
+ * Where a new head row goes, and whether the word is already on the tab.
+ *
+ * One pass does both. Reading a tab is the slow part of a write, and the scan
+ * that finds the alphabetical place has already reduced every head cell to the
+ * key an insert sorts by — which is exactly what a duplicate is.
+ *
+ * It reads to the bottom rather than stopping at the place, because stopping
+ * would trust the tab to be sorted. It very nearly is, and a word that slipped
+ * in out of order is the one most likely to be added a second time.
+ */
+function placeFor(sh, sortKey, headCols, cols) {
   var last = sh.getLastRow();
-  if (last < 2) return last + 1;
+  if (last < 2) return { at: last + 1, dup: 0 };
   var vals = sh.getRange(1, 1, last, cols).getDisplayValues();
   var target = 0;
   for (var i = 1; i < vals.length; i++) {
@@ -534,9 +545,10 @@ function insertRowFor(sh, sortKey, headCols, cols) {
     if (isDivider) continue;                            // letter divider
     var k = a.split('\n')[0].replace(/\s*\([^()]*\)\s*$/, '').toLowerCase().trim();
     if (headCols > 1) k = (k + ' ' + txt(vals[i][1])).trim().toLowerCase();
-    if (k > sortKey) { target = i + 1; break; }          // getRange is 1-based
+    if (k === sortKey) return { at: i + 1, dup: i + 1 };  // getRange is 1-based
+    if (!target && k > sortKey) target = i + 1;
   }
-  return target || last + 1;
+  return { at: target || last + 1, dup: 0 };
 }
 
 function insertEntry(entry) {
@@ -567,9 +579,26 @@ function insertEntry(entry) {
   var sortKey = entry.type === 'phrasal'
     ? (txt(entry.verb) + ' ' + txt(entry.particle)).trim().toLowerCase()
     : txt(entry.word).toLowerCase();
-  var at = entry.type === 'compare'
-    ? sh.getLastRow() + 1                       // grouped, not alphabetical
-    : insertRowFor(sh, sortKey, tab.headCols, w);
+  var place = entry.type === 'compare'
+    ? { at: sh.getLastRow() + 1, dup: 0 }       // grouped, not alphabetical
+    : placeFor(sh, sortKey, tab.headCols, w);
+
+  /* The same word twice on the same tab is somebody adding it again without
+     knowing it was there. Eight pairs were in the sheet before this was
+     checked — "fad" twice, "mankind" twice — each copy with its own
+     Vietnamese, so neither was the wrong one to have kept and both had to be
+     read to find that out.
+
+     The tab is what is checked, not the notebook: "cast" is a word and an
+     idiom, and twenty-two more are two things at once. A comparison group is
+     exempt altogether, being about a pairing — the same word can be weighed
+     against two different ones. */
+  if (place.dup) {
+    return { ok: false, duplicate: true, sheet: tab.sheet, row: place.dup,
+             error: '"' + txt(entry.word) + '" is already in ' + tab.sheet
+                    + ', at row ' + place.dup + '.' };
+  }
+  var at = place.at;
 
 
   if (at <= sh.getLastRow()) sh.insertRowsBefore(at, rowsOut.length);

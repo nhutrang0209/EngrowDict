@@ -153,6 +153,37 @@ function page(store, posts, reply) {
      doc.querySelector('.kind-sheet')?.textContent);
   ok('nothing is left waiting', doc.getElementById('push-sheet').hidden);
 
+  /* --- a word the notebook already holds -----------------------------------
+     Eight pairs of duplicates were in the sheet before this was checked, each
+     copy with its own Vietnamese, so neither is the wrong one to keep and both
+     have to be read before either can go. Cheaper to not make the ninth. */
+  const postsBefore = posts0.length;
+  const dlg2 = addWord(a, { word: 'susurrus', vi: 'lại tiếng xào xạc' });
+  await wait(250);
+  ok('adding a word the notebook already holds is refused',
+     posts0.length === postsBefore, posts0.length - postsBefore + ' posts sent');
+  ok('  saying so, and where the new sense belongs instead',
+     /already in the notebook/.test(a.doc.getElementById('form-msg').textContent) &&
+     /Open it/.test(a.doc.getElementById('form-msg').textContent),
+     a.doc.getElementById('form-msg').textContent);
+  ok('  with the form still open, so the typing is not thrown away',
+     dlg2.open && dlg2.querySelector('[name=word]').value === 'susurrus',
+     dlg2.open ? 'open' : 'closed');
+  ok('  and nothing kept on the device either',
+     (a.store[BACKUP_KEY] || '').split('susurrus').length === 2,
+     (a.store[BACKUP_KEY] || '').split('susurrus').length - 1 + ' copies');
+  dlg2.close();
+
+  /* The same word under another kind is a different entry: the notebook holds
+     "cast" as a word and again as an idiom, and twenty-two more like it. */
+  const postsKind = posts0.length;
+  const dlg3 = addWord(a, { word: 'susurrus', type: 'idiom', vi: 'thành ngữ' });
+  await wait(250);
+  ok('the same word of another kind is still allowed through',
+     posts0.length === postsKind + 1 &&
+     posts0[posts0.length - 1].body.entry.type === 'idiom',
+     posts0.length - postsKind + ' posts sent');
+
   // a locked visitor sends nothing at all
   const postsLocked = [];
   const locked = page({ 'engrowdict:settings:v1': JSON.stringify(
@@ -268,6 +299,39 @@ function page(store, posts, reply) {
     type: 'phrasal', word: 'muddle sideways', verb: 'muddle', particle: 'sideways',
     senses: [{ def: 'to manage without a plan', eg: [], vi: 'xoay xở cho qua' }],
   } }).ok);
+
+  /* --- and the sheet is the one that finally says no -----------------------
+     The page checks against the words it was published with, which is a
+     device that has not synced today and another device that added something
+     this morning. The tab itself is the only thing that knows. */
+  const wasN = sandbox.__buildData().entries.length;
+  const again = call({ key: CFG.key, action: 'add', entry: {
+    type: 'word', word: 'susurrus', pos: 'n',
+    senses: [{ def: 'another go at the same word', eg: [], vi: 'lại tiếng xào xạc' }],
+  } });
+  ok('a word already on the tab is refused', again.ok === false && again.duplicate === true,
+     JSON.stringify(again));
+  ok('  naming the tab and the row it is already on',
+     /susurrus/.test(again.error) && /Vocabulary/.test(again.error) &&
+     again.row > 1 && /row \d+/.test(again.error), again.error);
+  ok('  and nothing is written', sandbox.__buildData().entries.length === wasN,
+     wasN + ' → ' + sandbox.__buildData().entries.length);
+
+  ok('a phrasal verb already on its tab is refused too',
+     call({ key: CFG.key, action: 'add', entry: {
+       type: 'phrasal', word: 'muddle sideways', verb: 'muddle', particle: 'sideways',
+       senses: [{ def: 'again', eg: [], vi: 'lại' }],
+     } }).duplicate === true);
+  ok('  but the same verb with another particle is a different entry',
+     call({ key: CFG.key, action: 'add', entry: {
+       type: 'phrasal', word: 'muddle upwards', verb: 'muddle', particle: 'upwards',
+       senses: [{ def: 'to manage upwards without a plan', eg: [], vi: 'xoay xở lên' }],
+     } }).ok === true);
+  ok('  and the same word on another tab is a different entry',
+     call({ key: CFG.key, action: 'add', entry: {
+       type: 'idiom', word: 'susurrus',
+       senses: [{ def: 'not the same thing at all', eg: [], vi: 'thành ngữ' }],
+     } }).ok === true);
   const pv = sandbox.__buildData().entries.find(e => e.word === 'muddle sideways');
   ok('the phrasal verb reads back correctly',
      !!pv && pv.verb === 'muddle' && pv.particle === 'sideways' &&
