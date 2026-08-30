@@ -253,10 +253,15 @@ const openMenu = g => {
   ok('  the passage opens with more than one sentence, so there is something to tell apart',
      stop > 0 && stop < first.length - 1, 'first stop at ' + stop + ' of ' + first.length);
 
+  /* Which spans exactly depends on how the two sides divide up: four
+     Vietnamese sentences against three English ones means the first English
+     one covers more than one of them. What must hold whatever the passage is:
+     the opening is lit, the end is not, and it is not the whole paragraph. */
   pickChars(eng()[0], 0, Math.max(4, Math.floor(stop / 2)));
   await wait(40);
-  ok('half of the opening sentence lights the opening sentence, not the paragraph',
-     litIn(0).join() === '0', litIn(0).join() || 'none');
+  ok('half of the opening sentence lights the opening, not the whole paragraph',
+     litIn(0)[0] === 0 && litIn(0).indexOf(3) === -1 && litIn(0).length < 4,
+     litIn(0).join() || 'none');
 
   pickChars(eng()[0], 0, first.length);
   await wait(40);
