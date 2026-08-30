@@ -5595,7 +5595,20 @@
       if (formPos && dlg) { clampForm(dlg.getBoundingClientRect()); placeForm(); }
     });
 
-    qInput.addEventListener("input", function () { query = qInput.value; refresh(); });
+    /* On a phone the open word covers the list, so a search typed while one is
+       open ranked matches onto a pane nobody could see. The first letter hands
+       the screen back to the list, where the matches are; Back is no longer
+       needed before looking something else up. Translate has no list behind
+       it, so there it changes nothing. */
+    qInput.addEventListener("input", function () {
+      query = qInput.value;
+      if (query.trim() && narrowScreen() && view !== "translate"
+        && document.body.dataset.view === "detail") {
+        document.body.dataset.view = "list";
+        showTop();
+      }
+      refresh();
+    });
     qInput.addEventListener("keydown", function (ev) {
       if (ev.key === "Escape") { qInput.value = ""; query = ""; refresh(); }
       else if (ev.key === "ArrowDown") { ev.preventDefault(); step(1); }

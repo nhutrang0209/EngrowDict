@@ -501,6 +501,16 @@ measured by the script and handed to the stylesheet, since the height of a
 wrapped bar is not something CSS can know. Wide enough for one line, none of
 this happens.
 
+### Looking a second word up on a phone
+
+One column means the word you opened covers the list, so a search typed while
+it is open was being ranked onto a pane nobody could see: the box took the
+letters and the screen never changed. The first letter now hands the screen
+back to the list, where the matches are, with the word still open behind it —
+Back is no longer something to remember before looking the next thing up.
+Emptying the box is not a search for anything and leaves the screen alone. On a
+window wide enough to hold both, nothing moves: the list is already there.
+
 ## Installing it on a phone
 
 The static copy is a PWA: `docs/manifest.webmanifest`, `docs/sw.js` and three
