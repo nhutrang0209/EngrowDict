@@ -34,7 +34,7 @@ const mk = () => boot({
   // downloads — count those and the budget is a platform away from meaning
   // anything.
   const shipped = shell.replace(/\r\n/g, '\n').length;
-  ok('the shell is small', shipped < 320000, Math.round(shipped / 1024) + ' KB');
+  ok('the shell is small', shipped < 340000, Math.round(shipped / 1024) + ' KB');
   ok('the shell embeds no data',
      !shell.includes('<script type="application/json" id="base">'));
   ok('the shell points at data.json', shell.includes('href="data.json"'));

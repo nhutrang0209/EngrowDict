@@ -440,7 +440,6 @@ body.resizing { cursor: col-resize; user-select: none; }
 .back-row .btn { max-width: 100%; overflow: hidden; text-overflow: ellipsis; display: block; white-space: nowrap; }
 
 .entry-nav { display: flex; align-items: center; gap: 7px; margin-bottom: 28px; font-family: var(--mono); font-size: 10.5px; color: var(--faint); }
-.entry-nav .pos-in-list { font-variant-numeric: tabular-nums; }
 .entry-nav .grow { flex: 1; }
 
 .entry-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 9px 13px; }
@@ -694,13 +693,34 @@ body.resizing { cursor: col-resize; user-select: none; }
    nine, and the passage behind it does not take over the scroll at the end. */
 .lookup .glosses.senses {
   max-height: min(272px, 46vh); overflow-y: auto;
-  overscroll-behavior: contain; scrollbar-width: thin;
-  padding-right: 8px; margin-right: -6px;
+  overscroll-behavior: contain;
+  padding: 1px 10px 2px 0; margin-right: -8px;
+  scrollbar-width: thin; scrollbar-color: var(--rule) transparent;
 }
+/* A box that scrolls is a box the browser lets you focus, so the page's focus
+   ring — which is for things you act on — was drawn round the meanings the
+   moment a finger touched them, framing the text it sat on. This is text. */
+.lookup .glosses.senses:focus-visible { outline: none; }
+/* Drawn always, not only while the finger is moving. It is the one thing on
+   the card that says a meaning is cut off at the edge because there is more
+   under it, rather than because something went wrong. */
+.lookup .glosses.senses::-webkit-scrollbar { width: 9px; }
+.lookup .glosses.senses::-webkit-scrollbar-track { background: transparent; }
+.lookup .glosses.senses::-webkit-scrollbar-thumb {
+  background: var(--rule); background-clip: content-box;
+  border: 2px solid transparent; border-radius: 999px;
+}
+.lookup .glosses.senses::-webkit-scrollbar-thumb:hover { background: var(--faint); background-clip: content-box; }
 .lookup .g { font-size: 14px; color: var(--ink); line-height: 1.5; }
 .lookup .g em { color: var(--muted); font-style: normal; font-size: 12.5px; display: block; margin-top: 2px; }
 .lookup .none { margin-top: 9px; font-size: 13px; color: var(--muted); line-height: 1.55; }
 .lookup .row { margin-top: 13px; display: flex; gap: 7px; flex-wrap: wrap; }
+/* A rule between the list and the way out of the card. The meaning at the
+   bottom of a scroll is cut wherever the scrolling left it, and cut against
+   nothing it reads as a fault; cut against an edge it reads as an edge. */
+.lookup .glosses.senses + .row {
+  margin-top: 0; padding-top: 12px; border-top: 1px solid var(--hair);
+}
 .lookup .row .btn { padding: 6px 11px; font-size: 12.5px; }
 .lookup .x {
   position: absolute; top: 9px; right: 9px;
