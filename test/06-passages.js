@@ -175,6 +175,16 @@ ok('the shell itself stays light', shell.replace(/\r\n/g, '\n').length < 340000,
      glosses().pop().textContent);
   ok('  in a box that scrolls rather than a card that grows',
      !!card().querySelector('.glosses.senses'));
+  /* Down only. A box told to scroll down computes its across-ness to auto as
+     well, and the meanings went sideways under their own left edge — the first
+     letter of a line came out with its stem shaved off. */
+  const css = read('app.css');
+  ok('    down and not sideways, whatever the length of a word',
+     /\.lookup \.glosses\.senses \{[^}]*overflow-x: hidden/.test(css) &&
+     /\.lookup \.glosses\.senses \.g \{[^}]*overflow-wrap: anywhere/.test(css));
+  ok('    with the padding given back as margin, so no word moves to make room',
+     /\.lookup \.glosses\.senses \{[^}]*padding: 2px 10px 2px 4px; margin: 0 -8px 0 -4px/
+       .test(css));
   ok('  with Open entry still under it',
      !!btn(doc, '#lookup .btn', 'Open entry'));
   ok('  and a count, since a scrollbar on a phone is drawn only while scrolling',

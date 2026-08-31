@@ -692,11 +692,22 @@ body.resizing { cursor: col-resize; user-select: none; }
    it scrolls, so the card is the same size whether the word has two senses or
    nine, and the passage behind it does not take over the scroll at the end. */
 .lookup .glosses.senses {
-  max-height: min(272px, 46vh); overflow-y: auto;
+  max-height: min(272px, 46vh);
+  /* Asking for one scrollbar gets two: a box told to scroll down computes its
+     across-ness to auto as well, so a long word could carry the meanings
+     sideways under their own left edge — where the first letter of a line came
+     out with its stem shaved off. Nothing here is meant to be read sideways. */
+  overflow-y: auto; overflow-x: hidden;
   overscroll-behavior: contain;
-  padding: 1px 10px 2px 0; margin-right: -8px;
+  /* The padding is given back as margin, so the box grows outwards and the
+     text stays exactly where it was set: room at the edges for a scrollbar, a
+     focus ring, a rounded corner, without moving a word to make it. */
+  padding: 2px 10px 2px 4px; margin: 0 -8px 0 -4px;
   scrollbar-width: thin; scrollbar-color: var(--rule) transparent;
 }
+/* A word longer than the card breaks rather than widening it. Vietnamese
+   without spaces and a chemical name in a definition both do this. */
+.lookup .glosses.senses .g { overflow-wrap: anywhere; }
 /* A box that scrolls is a box the browser lets you focus, so the page's focus
    ring — which is for things you act on — was drawn round the meanings the
    moment a finger touched them, framing the text it sat on. This is text. */
