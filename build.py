@@ -100,7 +100,28 @@ if not os.path.isdir(site):
 open(os.path.join(site, '.nojekyll'), 'w').write('')
 
 dat = os.path.join(site, 'data.json')
-open(dat, 'w', encoding='utf-8').write(dumps(public))
+# docs/data.json belongs to the Apps Script: Publish to the web writes it
+# straight into the repo, so it runs ahead of dataset.json for as long as
+# nobody has downloaded the sheet again. Writing it from here then quietly put
+# the site back to the last download — three times in one afternoon, once for
+# every rebuild. It is written only when there is nothing there yet or what is
+# there is behind — and never merely to say the same thing again, because the
+# rewrite drops the stamp the script puts in it, which is what the Sync button
+# reads to know the site is serving the new copy rather than the old one.
+served = None
+if os.path.exists(dat):
+    try:
+        served = json.load(open(dat, encoding='utf-8'))
+    except ValueError:
+        served = None
+if served and len(served.get('entries', [])) >= len(entries):
+    n = len(served['entries'])
+    print('docs/data.json  left alone, %s entries%s'
+          % (n, '' if n == len(entries) else
+             ' — the sheet is ahead of this build, which has %s. Download the '
+             'sheet again and run parse_sheet.py.' % len(entries)))
+else:
+    open(dat, 'w', encoding='utf-8').write(dumps(public))
 
 index = os.path.join(site, 'index.html')
 open(index, 'w', encoding='utf-8').write(
