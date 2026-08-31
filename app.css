@@ -687,7 +687,16 @@ body.resizing { cursor: col-resize; user-select: none; }
 .lookup .also + .sub { margin-top: 1px; }
 .lookup .sub { margin-top: 2px; font-family: var(--mono); font-size: 10.5px; color: var(--faint); }
 .lookup .sub .ipa-inline { color: var(--accent-hi); }
+.lookup .sub .n-senses { color: var(--muted); }
 .lookup .glosses { margin-top: 11px; display: flex; flex-direction: column; gap: 8px; }
+/* Every sense the entry has, in the room four of them used to take. Past that
+   it scrolls, so the card is the same size whether the word has two senses or
+   nine, and the passage behind it does not take over the scroll at the end. */
+.lookup .glosses.senses {
+  max-height: min(272px, 46vh); overflow-y: auto;
+  overscroll-behavior: contain; scrollbar-width: thin;
+  padding-right: 8px; margin-right: -6px;
+}
 .lookup .g { font-size: 14px; color: var(--ink); line-height: 1.5; }
 .lookup .g em { color: var(--muted); font-style: normal; font-size: 12.5px; display: block; margin-top: 2px; }
 .lookup .none { margin-top: 9px; font-size: 13px; color: var(--muted); line-height: 1.55; }

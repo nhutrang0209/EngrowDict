@@ -142,6 +142,38 @@ ok('the shell itself stays light', shell.replace(/\r\n/g, '\n').length < 320000,
      card().querySelector('.picked .say')
        ? card().querySelector('.picked .say').getAttribute('aria-label') : 'no button');
 
+  /* --- every sense, not the first few ------------------------------------ */
+  const host = data.entries.find(e => e.word === 'host' && e.type === 'word');
+  ok('the notebook holds more senses for a word than a card used to show',
+     host && host.senses.length > 4, host && host.senses.length + ' senses');
+
+  await selectText('host');
+  const glosses = () => [...card().querySelectorAll('.glosses.senses .g')];
+  ok('a word with many senses shows all of them',
+     glosses().length === host.senses.length,
+     glosses().length + ' of ' + host.senses.length);
+  ok('  the last one included, which used to fall off the end',
+     glosses().pop().textContent.includes(host.senses[host.senses.length - 1].vi),
+     glosses().pop().textContent);
+  ok('  in a box that scrolls rather than a card that grows',
+     !!card().querySelector('.glosses.senses'));
+  ok('  with Open entry still under it',
+     !!btn(doc, '#lookup .btn', 'Open entry'));
+  ok('  and a count, since a scrollbar on a phone is drawn only while scrolling',
+     (card().querySelector('.sub')?.textContent || '')
+       .includes(host.senses.length + ' senses'),
+     card().querySelector('.sub')?.textContent);
+
+  /* The card closes when the passage moves out from under it. Scrolling the
+     senses is not that: closing there would make the list unreadable by
+     reading it. */
+  card().querySelector('.glosses.senses').dispatchEvent(new w.Event('scroll'));
+  await wait(10);
+  ok('scrolling the senses leaves the card open', !card().hidden);
+  doc.querySelector('.detail').dispatchEvent(new w.Event('scroll'));
+  await wait(10);
+  ok('  scrolling the passage still closes it', card().hidden);
+
   await selectText('Abated.');
   ok('a stray capital and full stop are ignored',
      card().querySelector('.picked')?.textContent === 'abate',

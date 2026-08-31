@@ -3701,7 +3701,14 @@
       document.addEventListener("keydown", function (ev) {
         if (ev.key === "Escape") { hideLookup(); dimAiParas(); }
       });
-      window.addEventListener("scroll", hideLookup, true);
+      /* The passage moving out from under the card takes the card with it.
+         The senses scrolling inside it are the card being read, and closing
+         it there would make the list unreadable by touching it. */
+      window.addEventListener("scroll", function (ev) {
+        var t = ev.target;
+        if (t && t.nodeType === 1 && lookupCard.contains(t)) return;
+        hideLookup();
+      }, true);
     }
     lookupCard.textContent = "";
 
@@ -3744,10 +3751,19 @@
       var sub = el("div", "sub");
       if (bits.length) sub.appendChild(document.createTextNode(bits.join(" ") + " "));
       if (found.ipa) sub.appendChild(el("span", "ipa-inline", found.ipa));
+      /* How many there are: on a phone the scrollbar is drawn only while the
+         finger moves, so the count is what says the rest are there. */
+      if (found.senses.length > 1) {
+        sub.appendChild(el("span", "n-senses",
+          (sub.textContent ? " · " : "") + found.senses.length + " senses"));
+      }
       if (sub.textContent) lookupCard.appendChild(sub);
 
-      var box = el("div", "glosses");
-      found.senses.slice(0, 4).forEach(function (s) {
+      /* All of them. Four was as many as fitted, and a word is not four
+         senses long. The card keeps its size and the senses scroll inside it,
+         so the headword and Open entry stay where they are. */
+      var box = el("div", "glosses senses");
+      found.senses.forEach(function (s) {
         var g = el("div", "g", s.vi || s.def);
         if (s.vi && s.def) g.appendChild(el("em", null, s.def));
         box.appendChild(g);

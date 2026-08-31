@@ -48,6 +48,14 @@ and select any word or phrase in it: a card opens with what the notebook holds
 on it — headword, part of speech, phonetics, the Vietnamese meanings — and a
 button through to the full entry.
 
+Every meaning, not the first few. *host* has eight and the card used to show
+four, with nothing to say the rest were there. The card is the same size over
+the passage whatever the word turns out to hold: the meanings scroll inside it
+and the headword and **Open entry** keep their places. The line under the
+headword counts them, because a scrollbar on a phone is drawn only while the
+finger is moving, and a reader who cannot see the ninth meaning cannot know to
+look for it.
+
 **Look up** in the top bar (or the `d` key) floats a dictionary window over the
 passage: type to look a word up — headwords only, ranked and marked the way the
 Dictionary tab does it, so what starts with what you typed comes first — pick a
