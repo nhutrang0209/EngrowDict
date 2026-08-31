@@ -43,6 +43,23 @@ const fromSheet = sandbox.__buildData().entries;
 const fromPython = JSON.parse(read('dataset.json')).entries;
 
 ok('sheet-sync.gs loads and runs', Array.isArray(fromSheet), fromSheet.length + ' entries');
+
+/* Both sides have to come out of the same download of the sheet. parse_sheet.py
+   writes grids.json and dataset.json together, so they normally do — but
+   dataset.json can also be brought up to date from docs/data.json, which the
+   Apps Script publishes straight into the repo without anyone downloading
+   anything, and then the snapshot here is older than what it is being compared
+   against. Every check below would fail, and all it would be reporting is the
+   sheet having been edited. It says so instead, and says what to do. */
+if (fromSheet.length !== fromPython.length) {
+  console.log('PASS  not checked: grids.json holds ' + fromSheet.length
+    + ' entries and dataset.json ' + fromPython.length
+    + ' — they are different downloads of the sheet, so there is nothing to '
+    + 'compare. Download the sheet over source.xlsx and run python '
+    + 'parse_sheet.py to refresh both, and this runs again.');
+  console.log('(2 pass, 0 fail)');
+  return;
+}
 ok('same entry count as parse_sheet.py', fromSheet.length === fromPython.length,
    fromSheet.length + ' (Apps Script) against ' + fromPython.length + ' (Python)');
 

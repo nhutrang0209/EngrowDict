@@ -15,7 +15,19 @@ ok('the public data carries the passages', data.readings.length > 30,
    data.readings.length + ' passages');
 ok('every passage keeps its title and paragraphs',
    data.readings.every(r => r.title && r.paras && r.paras.length > 0));
-ok('the artifact copy has them too', art.includes('Methuselah'));
+/* The artifact carries its data inside it. Naming a word out of one passage
+   checked that until the day that passage left the sheet — and then it checked
+   that the artifact still had a passage nobody has any more. Read what is
+   actually embedded and compare it with the data. */
+const embedded = JSON.parse(
+  art.match(/id="base">([\s\S]*?)<\/script>/)[1].replace(/\u003c/g, '<'));
+ok('the artifact copy has them too',
+   embedded.readings.map(r => r.title).join('|') ===
+   data.readings.map(r => r.title).join('|'),
+   embedded.readings.length + ' passages embedded');
+ok('  and the same entries as the published data',
+   embedded.entries.length === data.entries.length,
+   embedded.entries.length + ' embedded against ' + data.entries.length + ' published');
 /* As it ships: a build on Windows carries carriage returns that git normalises
    away before anyone downloads it — see 05-static-build.js.
 

@@ -1,7 +1,7 @@
 # EngrowDict
 
 An English–Vietnamese vocabulary notebook built from a personal Google Sheet:
-**11,401 entries · 21,050 senses · 2,340 examples · 33 reading passages**.
+**11,558 entries · 21,364 senses · 2,350 examples · 33 reading passages**.
 
 Type English or Vietnamese — the search covers the word, its phonetics, the
 English definition and the Vietnamese meaning, and Vietnamese without tone marks
@@ -20,7 +20,7 @@ the 11k-entry list is virtualised, so only a few dozen rows are ever in the DOM.
 | | `docs/` (GitHub Pages) | `engrowdict.html` (claude.ai Artifact) |
 | --- | --- | --- |
 | Who can see it | anyone with the link | whoever you share it with |
-| Lookup | all 11,401 entries | all 11,401 entries |
+| Lookup | all 11,558 entries | all 11,558 entries |
 | 33 reading passages | included | included |
 | Adding / removing words | yes, kept in the visitor's browser | yes, stored on the server |
 | Data | `data.json`, fetched separately | embedded in the file |
@@ -294,8 +294,8 @@ app.css          the interface
 app.js           the whole application
 sheet-sync.gs    Apps Script: sheet -> docs/data.json, and web -> sheet
 docs/            what GitHub Pages serves
-  index.html       the shell, ~78 KB
-  data.json        the public data, ~3.9 MB
+  index.html       the shell, ~322 KB
+  data.json        the public data, ~4.1 MB
 ```
 
 ## Rebuilding
@@ -304,6 +304,17 @@ docs/            what GitHub Pages serves
 python build.py          # after editing app.css or app.js
 python parse_sheet.py    # when source.xlsx changes (download the sheet as .xlsx)
 ```
+
+Two things write the data, and only one of them is on this machine.
+**Publish to the web** in the sheet writes `docs/data.json` straight into the
+repo, so the site can be days ahead of `source.xlsx`, which is only as fresh as
+the last time somebody downloaded the sheet. `build.py` therefore leaves
+`docs/data.json` alone unless it is missing or behind `dataset.json` — it used
+to overwrite it every time, quietly putting the public site back to the last
+download, and it says on the line what it did either way. The artifact carries
+its data inside it and has no such protection: `engrowdict.html` is only ever as
+current as `dataset.json`, so download the sheet and run `parse_sheet.py` before
+publishing it.
 
 ## Tests
 
@@ -341,7 +352,12 @@ cd test && npm install && npm test
     dragging, and it belonging to the reading tab
 
 Checks 7 and 8 need `test/grids.json`, which `parse_sheet.py` writes; without it
-check 7 skips itself.
+check 7 skips itself. It also skips, and says so, when `grids.json` and
+`dataset.json` have come from different downloads of the sheet — `dataset.json`
+can be refreshed from the published `docs/data.json` without anyone downloading
+anything, and then there are two snapshots a fortnight apart with nothing to
+compare. Downloading the sheet over `source.xlsx` and running `parse_sheet.py`
+writes both from the same reading and turns the check back on.
 
 A file that throws is counted as a failure and the throw is printed. It used
 not to be: the runner counted the PASS and FAIL lines a file managed to print,

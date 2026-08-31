@@ -121,8 +121,14 @@ const { read, boot, ok, done, wait, click, type, btn } = require('./helpers');
   await wait(20);
   click(w, [...doc.querySelectorAll('.chip')].find(c => c.textContent.startsWith('Idioms')));
   await wait(20);
-  ok('filtering to idioms', doc.getElementById('count').textContent.startsWith('352'),
-     doc.getElementById('count').textContent);
+  /* How many idioms there are is a fact about the sheet, which grows. Counted
+     from the data rather than written down here, where it went stale the week
+     after it was written. */
+  const idioms = JSON.parse(read('dataset.json')).entries
+    .filter(e => e.type === 'idiom').length;
+  ok('filtering to idioms',
+     doc.getElementById('count').textContent.startsWith(String(idioms)),
+     doc.getElementById('count').textContent + ' for ' + idioms + ' in the data');
   click(w, [...doc.querySelectorAll('.chip')].find(c => c.textContent.startsWith('All')));
   await wait(20);
 
