@@ -80,18 +80,30 @@ ok('the shell itself stays light', shell.replace(/\r\n/g, '\n').length < 320000,
      !/hyphens: auto/.test(read('app.css')),
      (read('app.css').match(/hyphens: [a-z]+/g) || []).join(', '));
 
-  // a lettered passage shows its letters in the margin
+  /* A lettered passage shows its letters in the margin. Which passage that is
+     comes from the data rather than from memory: the sheet is edited, and a
+     test that names one passage stops testing anything the day it is renamed
+     — it stops running instead, on a click at nothing. */
+  const lettered = data.readings.find(r => r.paras.filter(p => p.mark).length > 4);
+  ok('some passage numbers its paragraphs in the margin',
+     !!lettered, lettered && lettered.title);
   const q2 = doc.getElementById('q');
-  q2.value = 'Animal Minds';
+  q2.value = lettered.title;
   q2.dispatchEvent(new w.Event('input'));
   await wait(30);
+  ok('  and searching its title finds it',
+     doc.querySelector('.hit .hw')?.textContent === lettered.title,
+     doc.querySelector('.hit .hw')?.textContent);
   click(w, doc.querySelector('.hit'));
   await wait(30);
   ok('a lettered passage marks its paragraphs',
      doc.querySelectorAll('.read .prose p.labelled .pmark').length > 4,
      [...doc.querySelectorAll('.read .prose .pmark')].slice(0, 6).map(n => n.textContent).join(''));
+  const firstMarked = lettered.paras.find(p => p.mark);
   ok('  and the letter is no longer part of the sentence',
-     doc.querySelector('.read .prose p.labelled')?.textContent.startsWith('AIn 1977'),
+     !firstMarked.text.startsWith(firstMarked.mark) &&
+     doc.querySelector('.read .prose p.labelled')?.textContent
+       .startsWith(firstMarked.mark + firstMarked.text.slice(0, 12)),
      doc.querySelector('.read .prose p.labelled')?.textContent.slice(0, 26));
   q2.value = '';
   q2.dispatchEvent(new w.Event('input'));
@@ -166,10 +178,22 @@ ok('the shell itself stays light', shell.replace(/\r\n/g, '\n').length < 320000,
      !card().querySelector('.also'),
      card().querySelector('.picked')?.textContent);
 
-  const long = 'The trick is for managers to set long-term goals, but then '
-    + 'allow their employees to work out how to achieve them.';
-  ok('  a sentence of the length passages actually run to is not turned away',
-     long.length > 120 && long.length < 300, long.length + ' characters');
+  /* A sentence out of the passages themselves, not one written here to make
+     the point — the cap is about what the passages actually run to, and a
+     sentence invented for the test can be any length its author guesses.
+     The one written here was 113 characters, and the check that it ran past
+     the old cap of 120 had been failing ever since. */
+  const sentences = data.readings
+    .flatMap(r => r.paras.map(p => p.text))
+    .flatMap(t => t.split(/(?<=[.!?])\s+/))
+    .map(t => t.trim())
+    .filter(Boolean);
+  const over = sentences.filter(t => t.length > 120).length;
+  ok('  a sentence past the old 120-character cap is an ordinary sentence here',
+     over / sentences.length > 0.2,
+     Math.round(100 * over / sentences.length) + '% of ' + sentences.length
+       + ' sentences run past 120 characters');
+  const long = sentences.find(t => t.length > 120 && t.length < 300);
   await selectText(long);
   await wait(60);
   ok('selecting a whole sentence opens the card rather than nothing at all',
