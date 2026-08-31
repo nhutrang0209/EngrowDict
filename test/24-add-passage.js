@@ -7,7 +7,7 @@
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { read, boot, ok, done, wait, click, unlockedStore,
+const { read, boot, ok, done, wait, click, type, unlockedStore,
         appsScriptSandbox } = require('./helpers');
 
 const shell = read('docs/index.html');
@@ -332,9 +332,16 @@ const toolBtn = (g, title) => [...g.doc.querySelectorAll('#pass-dlg .markbtn')]
   await wait(900);
   click(b.window, b.doc.getElementById('tab-passages'));
   await wait(40);
+  /* The list is virtual: only the rows on screen are in the DOM, and jsdom
+     gives every box a height of zero, so barely four of them are. A passage
+     added at the end of thirty-three was never going to be among those four —
+     the check was reading the top of the list and calling it the list. Search
+     for it, which is what a reader with thirty-four passages does anyway. */
+  type(b.window, b.doc.getElementById('q'), 'Hemp Revival');
+  await wait(40);
   const titles = [...b.doc.querySelectorAll('.hit .hw')].map(n => n.textContent);
   ok('a later visit still has it', titles.includes('The Hemp Revival'),
-     titles.slice(0, 4).join(', '));
+     titles.slice(0, 4).join(', ') || 'nothing found');
 
   /* --- once the sheet publishes it, the local copy steps aside ------------ */
   const withIt = JSON.parse(read('docs/data.json'));
@@ -350,6 +357,8 @@ const toolBtn = (g, title) => [...g.doc.querySelectorAll('#pass-dlg .markbtn')]
   });
   await wait(900);
   click(c.window, c.doc.getElementById('tab-passages'));
+  await wait(40);
+  type(c.window, c.doc.getElementById('q'), 'Hemp Revival');
   await wait(40);
   const again = [...c.doc.querySelectorAll('.hit .hw')]
     .filter(n => n.textContent === 'The Hemp Revival');

@@ -343,6 +343,14 @@ cd test && npm install && npm test
 Checks 7 and 8 need `test/grids.json`, which `parse_sheet.py` writes; without it
 check 7 skips itself.
 
+A file that throws is counted as a failure and the throw is printed. It used
+not to be: the runner counted the PASS and FAIL lines a file managed to print,
+so one that died halfway read as a short file that passed. Four of them had
+been dying that way — on a passage renamed in the sheet, on a word somebody
+added to the sheet that a test still added as new, on two buttons removed from
+the entry a year ago — and none of it showed anywhere except in a total that
+was smaller than it should have been.
+
 Google is never touched while testing: `SpreadsheetApp` and `fetch` are both
 stand-ins. Deploying the Web App, and CORS, can only be confirmed on the real
 thing — that is what the **Test connection** button is for.

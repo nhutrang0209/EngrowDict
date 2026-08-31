@@ -89,18 +89,33 @@ const { read, boot, ok, done, wait, click, type, btn } = require('./helpers');
      doc.querySelector('.related h2')?.textContent + ': ' +
      [...doc.querySelectorAll('.related button')].slice(0, 4).map(b => b.textContent).join(', '));
 
+  /* Stepping is the arrow keys. It used to be a pair of buttons over the
+     entry as well, and they were taken away on purpose — they said what the
+     keys already say on every entry forever, and the space belongs to what
+     can be done to this entry. The test went on pressing them, which meant
+     clicking undefined, which meant this file stopped running here rather
+     than saying so. */
+  const arrow = key =>
+    doc.body.dispatchEvent(new w.KeyboardEvent('keydown', { key: key, bubbles: true }));
+
   type(w, q, 'abs');
   await wait(20);
   click(w, doc.querySelector('.hit'));
   const firstWord = doc.querySelector('.headword').textContent;
-  click(w, [...doc.querySelectorAll('.entry-nav .iconbtn')][1]);   // →
+  arrow('ArrowRight');
   const secondWord = doc.querySelector('.headword').textContent;
   ok('→ moves to the next entry', firstWord !== secondWord, firstWord + ' → ' + secondWord);
-  click(w, [...doc.querySelectorAll('.entry-nav .iconbtn')][0]);   // ←
+  arrow('ArrowLeft');
   ok('← moves back', doc.querySelector('.headword').textContent === firstWord,
      doc.querySelector('.headword').textContent);
-  ok('position in the result set is shown', !!doc.querySelector('.pos-in-list'),
-     doc.querySelector('.pos-in-list')?.textContent);
+  /* What used to stand over the entry: the two arrows, and "3 of 40" beside
+     them. Both were taken away for saying what the keys say on every entry
+     forever, so the check that they are there is now a check that they are
+     not — the entry carries what can be done to it, and nothing else. */
+  ok('the entry does not restate the keys back at the reader',
+     !doc.querySelector('.pos-in-list') &&
+     doc.querySelectorAll('.entry .entry-nav .iconbtn').length <= 1,
+     doc.querySelectorAll('.entry .entry-nav .iconbtn').length + ' buttons over the entry');
 
   type(w, q, '');
   await wait(20);

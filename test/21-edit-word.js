@@ -12,6 +12,15 @@ const { read, boot, ok, done, wait, click, unlockedStore, BACKUP_KEY,
         appsScriptSandbox } = require('./helpers');
 
 const shell = read('docs/index.html');
+/* A word of one's own has to be a word the notebook does not already hold:
+   adding one it holds is refused now, on purpose, and a fixture named in the
+   source goes stale the day somebody puts that word in the sheet. "quokka"
+   was that word, and this file had been stopping dead at it. */
+const data = JSON.parse(read('docs/data.json'));
+const held = new Set(data.entries.map(e => (e.word || '').toLowerCase()));
+const NEW_WORD = ['quokka', 'numbat', 'potoroo', 'bilby', 'quoll', 'kowari']
+  .find(w => !held.has(w));
+ok('there is a marsupial the notebook has not got', !!NEW_WORD, NEW_WORD);
 const CFG = {
   sheetUrl: 'https://docs.google.com/spreadsheets/d/ABC/edit',
   webApp: 'https://script.google.com/macros/s/XYZ/exec',
@@ -124,13 +133,13 @@ const editItem = g => g.doc.getElementById('entry-edit');
   await wait(900);
   click(mine.window, mine.doc.getElementById('add-word'));
   const mdlg = mine.doc.getElementById('form-dlg');
-  mdlg.querySelector('[name=word]').value = 'quokka';
+  mdlg.querySelector('[name=word]').value = NEW_WORD;
   mine.doc.querySelector('#sense-list [name=def]').value = 'a small marsupial';
   mine.doc.querySelector('#sense-list [name=vi]').value = 'chuột túi nhỏ';
   click(mine.window, mine.doc.getElementById('form-save'));
   await wait(300);
   ok('a word added here is on screen',
-     mine.doc.querySelector('.headword').textContent === 'quokka',
+     mine.doc.querySelector('.headword').textContent === NEW_WORD,
      mine.doc.querySelector('.headword').textContent);
   const firstId = JSON.parse(mine.store[BACKUP_KEY])[0].id;
 
