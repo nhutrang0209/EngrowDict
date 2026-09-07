@@ -206,6 +206,46 @@ const openMenu = g => {
     return aiBody.scrollTop === 784;
   })(), aiBody.scrollTop + ', wanted 784');
 
+  /* --- and the two titles stand at the top together ------------------------
+     The passage opens with its name over the English and its name in
+     Vietnamese over the translation. Pairing paragraph for paragraph put A at
+     the top of the Vietnamese while A was still below the fold in the English,
+     which pushed the Vietnamese title off the top of its own column — and a
+     reader who scrolled nowhere saw no translated title at all and reported
+     the feature missing. */
+  const viTitle = doc.querySelector('.ai-h1');
+  ok('the Vietnamese column is headed by the name of the passage', !!viTitle,
+     viTitle && viTitle.textContent);
+  rect(viTitle, 100, 90);                  // 90px of heading above paragraph A
+  // English at its very top: its own heading fills 260px before paragraph A
+  ens.forEach((n, i) => rect(n, 100 + 260 + i * 300, 300));
+  vis.forEach((n, i) => rect(n, 100 + 90 + i * 420, 420));
+  detail.scrollTop = 0;
+  aiBody.scrollTop = 0;
+  detail.dispatchEvent(new w.Event('scroll'));
+  ok('  at the top of the English, the Vietnamese is at the top of its own',
+     aiBody.scrollTop === 0, aiBody.scrollTop + ', wanted 0 — the title in view');
+
+  /* Half way through the English heading is half way through the Vietnamese
+     one. The rectangles here are fixed rather than moving with the scroll the
+     way a browser's do, so the Vietnamese is wound back to nothing before each
+     measurement — the same thing the paragraph cases above do. */
+  aiBody.scrollTop = 0;
+  ens.forEach((n, i) => rect(n, 100 + 130 + i * 300, 300));
+  detail.scrollTop = 130;
+  detail.dispatchEvent(new w.Event('scroll'));
+  ok('  and through the headings together, neither one jumping',
+     aiBody.scrollTop === 45, aiBody.scrollTop + ', wanted 45 — half of 90');
+
+  // paragraph A reaches the top of one column as it reaches the top of the other
+  aiBody.scrollTop = 0;
+  ens.forEach((n, i) => rect(n, 100 + i * 300, 300));
+  detail.scrollTop = 260;
+  detail.dispatchEvent(new w.Event('scroll'));
+  ok('  and A tops both columns at the same moment',
+     aiBody.scrollTop === 90, aiBody.scrollTop + ', wanted 90');
+  delete viTitle.getBoundingClientRect;
+
   ens.forEach(n => { delete n.getBoundingClientRect; });
   vis.forEach(n => { delete n.getBoundingClientRect; });
   delete detail.getBoundingClientRect;

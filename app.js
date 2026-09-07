@@ -1320,11 +1320,34 @@
     var vis = body.querySelectorAll(".ai-para");
     var head = document.querySelector(".readsplit .read-head");
     var from = head ? head.getBoundingClientRect().bottom : 0;
-    var at = anchorIndex(ens, from || box.getBoundingClientRect().top);
+    var line = from || box.getBoundingClientRect().top;
+    var at = anchorIndex(ens, line);
     if (at && vis[at.i]) {
+      var bodyTop = body.getBoundingClientRect().top;
+
+      /* Above the first paragraph neither column is in the prose yet: the
+         passage's name stands over there, the same name in Vietnamese over
+         here, and the paragraph pairing has nothing to say about either. It
+         used to say something anyway — it put paragraph A at the top of the
+         Vietnamese while A was still below the fold in the English, which
+         pushed the Vietnamese title off the top of its own column and made it
+         look as though the title had never been translated at all.
+
+         The two headings are not the same height, so the reader is carried
+         through the shorter at the same proportion as the taller: the two
+         titles stand at the top together, and A reaches the top of one column
+         as it reaches the top of the other. */
+      var lead = ens[0].getBoundingClientRect().top - line;
+      if (at.i === 0 && lead > 0) {
+        var enLead = box.scrollTop + lead;                  // where A begins
+        var viLead = body.scrollTop + (vis[0].getBoundingClientRect().top - bodyTop);
+        var through = enLead > 0 ? box.scrollTop / enLead : 0;
+        body.scrollTop = Math.max(0, Math.min(mine, Math.round(through * viLead)));
+        return;
+      }
+
       var here = vis[at.i].getBoundingClientRect();
-      var from = body.getBoundingClientRect().top;
-      var want = body.scrollTop + (here.top - from) + at.into * here.height;
+      var want = body.scrollTop + (here.top - bodyTop) + at.into * here.height;
       body.scrollTop = Math.max(0, Math.min(mine, Math.round(want)));
       return;
     }
