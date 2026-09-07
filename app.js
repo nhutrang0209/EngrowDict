@@ -879,6 +879,24 @@
 
   function popOpen() { return !!popEl && !popEl.hidden; }
 
+  /* Whether the bar is carrying the lookup box. It does so on the Passages tab
+     on a window wide enough to hold the list beside the passage — which is
+     where the tab's own search box has moved into the list, leaving the middle
+     of the bar free for the thing the Dictionary tab keeps there: a box to
+     look a word up in. Narrower than that, the passage search is still in the
+     bar and there is no room for a second one, so the button stands instead. */
+  function lookupBarOn() {
+    return !!(lookupBox && lookupBox.parentNode);
+  }
+
+  /* The box the reader is typing a lookup into. The window keeps one of its
+     own for when the bar has none, and only ever one of the two is on screen,
+     so there is nothing to keep in step. */
+  function popQ() {
+    return lookupBarOn() ? document.getElementById("lk-q")
+      : document.getElementById("pd-q");
+  }
+
   function buildPopDict() {
     var w = el("div", "popdict");
     w.id = "popdict";
@@ -894,6 +912,7 @@
     w.appendChild(head);
 
     var sbox = el("div", "pd-search");
+    sbox.id = "pd-search";
     var inp = el("input");
     inp.id = "pd-q";
     inp.type = "search";
@@ -977,7 +996,9 @@
 
   function drawPopDict() {
     var body = document.getElementById("pd-body");
-    var inp = document.getElementById("pd-q");
+    var inp = popQ();
+    var sbox = document.getElementById("pd-search");
+    if (sbox) sbox.hidden = lookupBarOn();
     body.textContent = "";
 
     /* Ranked before the branch, not inside it. A word selected in the passage
@@ -1084,7 +1105,7 @@
       } catch (err) { /* ignore */ }
     }
     popEl.hidden = false;
-    var inp = document.getElementById("pd-q");
+    var inp = popQ();
     if (prefill != null) { inp.value = prefill; popPicked = null; popAt = -1; }
     drawPopDict();
     inp.focus();
@@ -1100,7 +1121,7 @@
   function syncPopButton() {
     var b = document.getElementById("popdict-btn");
     if (!b) return;
-    b.hidden = view !== "read";
+    b.hidden = view !== "read" || lookupBarOn();
     b.setAttribute("aria-pressed", String(popOpen()));
     b.className = popOpen() ? "btn btn-primary" : "btn";
   }
@@ -1863,8 +1884,58 @@
         : "Search a word, a meaning, or Vietnamese…";
     }
     placeSearch();
+    placeLookup();
     if (view !== "read" && view !== "book") closePopDict();
     syncPopButton();
+  }
+
+  /* The lookup box the bar carries on the Passages tab, in the place the
+     Dictionary tab keeps its own search: same place, same look, same job. The
+     difference is only where the answers come out. On the Dictionary tab a
+     word takes over the page, which is what you want when the word is what you
+     came for. Here you came for the passage, so the answers arrive in the
+     window that floats over it and the passage stays where it was — which is
+     what the button used to open, one click before you could start typing. */
+  function buildLookupBox() {
+    var box = el("div", "search lookup-bar");
+    box.id = "lookup-bar";
+    box.innerHTML = '<svg class="glass" viewBox="0 0 16 16" fill="none" '
+      + 'stroke="currentColor" stroke-width="1.7" aria-hidden="true">'
+      + '<circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg>';
+    var inp = el("input");
+    inp.id = "lk-q";
+    inp.type = "search";
+    inp.autocomplete = "off";
+    inp.spellcheck = false;
+    inp.placeholder = "Look a word up…";
+    inp.setAttribute("aria-label", "Look a word up in the notebook");
+    inp.addEventListener("input", function () {
+      popPicked = null;
+      popAt = -1;
+      /* Typing is the whole of the gesture: nothing to press first, and
+         nothing left floating over the passage once the box is empty again. */
+      if (!inp.value.trim()) { closePopDict(); return; }
+      if (!popOpen()) openPopDict(null);
+      drawPopDict();
+    });
+    inp.addEventListener("keydown", function (ev) {
+      if (ev.key === "Escape") { inp.value = ""; closePopDict(); return; }
+      /* The same two keys that walk the list on the Dictionary tab, and the
+         same Enter. The window takes these for itself when the focus is
+         inside it; out here the focus is not, so they are taken again. */
+      var d = ev.key === "ArrowDown" ? 1 : ev.key === "ArrowUp" ? -1 : 0;
+      if (d && popOpen()) { ev.preventDefault(); popStep(d); return; }
+      if (ev.key === "Enter" && popOpen() && !popPicked && popHits.length) {
+        ev.preventDefault();
+        popPicked = popHits[popAt < 0 ? 0 : popAt];
+        drawPopDict();
+      }
+    });
+    box.appendChild(inp);
+    var hk = el("div", "hintkeys");
+    hk.appendChild(el("kbd", null, "d"));
+    box.appendChild(hk);
+    return box;
   }
 
   /* Searching the passages searches their names and what is written in them,
@@ -1898,6 +1969,23 @@
       qInput.focus();
       try { qInput.setSelectionRange(at, to); } catch (err) { /* not a text box */ }
     }
+  }
+
+  /* The lookup box takes the room the passage search leaves when it moves into
+     the list, and gives it back when it comes out. One rule places both, so
+     the bar never carries two search boxes at once, nor none. */
+  function placeLookup() {
+    if (!lookupBox || !topRow || !actsBox) return;
+    var want = view === "read" && !narrowScreen();
+    if (want === lookupBarOn()) return;
+    if (want) topRow.insertBefore(lookupBox, actsBox);
+    else {
+      lookupBox.parentNode.removeChild(lookupBox);
+      var inp = document.getElementById("lk-q");
+      if (inp) inp.value = "";
+      closePopDict();
+    }
+    syncPopButton();
   }
 
   /* Many definitions lead with the exact form being defined — "be better off:
@@ -3939,7 +4027,7 @@
       try { rect = range ? range.getBoundingClientRect() : null; }
       catch (err) { rect = null; }
       if (popOpen()) {
-        var inp = document.getElementById("pd-q");
+        var inp = popQ();
         inp.value = text;
         popPicked = lookupText(text);
         popAt = -1;             // a new selection, so the walk starts over
@@ -5683,7 +5771,7 @@
 
   /* ---- page chrome ---------------------------------------------------------- */
   var qInput;
-  var searchBox, topRow, actsBox, listPane;
+  var searchBox, topRow, actsBox, listPane, lookupBox;
 
   function build() {
     var app = document.getElementById("app");
@@ -5734,6 +5822,8 @@
       if (popOpen()) closePopDict(); else openPopDict("");
     });
     acts.appendChild(pop);
+
+    lookupBox = buildLookupBox();
 
     /* A passage is where words are met, so the notebook's own button belongs
        there as well: Add passage is what that tab makes, Add word is what the
@@ -5872,6 +5962,7 @@
     window.addEventListener("resize", function () {
       paint(true);
       placeSearch();               // the breakpoint decides which home it has
+      placeLookup();
       measureBar();
       if (!narrowScreen()) showTop();
       var dlg = document.getElementById("form-dlg");

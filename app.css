@@ -187,6 +187,11 @@ body[data-nav="off"] .tab .lab { display: none; }
 }
 .search input:not(:placeholder-shown) ~ .hintkeys { display: none; }
 
+/* The lookup box stands where the Dictionary tab keeps its search, and is the
+   same box to look at. Narrower, because it answers into a window rather than
+   onto the page, and because the bar it shares is also carrying a passage. */
+.search.lookup-bar { max-width: 380px; }
+
 /* In the passages the box sits over the list it filters rather than in the
    bar. Same box, same height — only the room around it changes, so nothing
    that is positioned inside it has to be measured again. */

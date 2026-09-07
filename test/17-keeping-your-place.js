@@ -98,10 +98,11 @@ const scrollTo = (w, box, top) => {
      String(bBox.scrollTop));
 
   /* --- the way back ------------------------------------------------------ */
-  click(b.window, b.doc.getElementById('popdict-btn'));
-  const q = b.doc.getElementById('pd-q');
+  // the bar carries the lookup box on this tab; typing in it is the whole gesture
+  const q = b.doc.getElementById('lk-q');
   q.value = 'zenith';
   q.dispatchEvent(new b.window.Event('input'));
+  await wait(20);
   click(b.window, b.doc.querySelector('.pd-hit'));
   click(b.window, b.doc.querySelector('.pd-entry .btn'));
   await wait(40);

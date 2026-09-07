@@ -36,7 +36,7 @@ ok('  and the same entries as the published data',
    close enough that the next comment written would have tripped it — and a
    budget met by writing fewer comments buys nobody a faster page. What it is
    for is noticing the day something large gets pasted in. */
-ok('the shell itself stays light', shell.replace(/\r\n/g, '\n').length < 340000,
+ok('the shell itself stays light', shell.replace(/\r\n/g, '\n').length < 345000,
    Math.round(shell.length / 1024) + ' KB');
 
 /* --- and they work in the page ------------------------------------------ */
@@ -90,8 +90,15 @@ ok('the shell itself stays light', shell.replace(/\r\n/g, '\n').length < 340000,
      doc.getElementById('q').placeholder);
   ok('  moved rather than built twice, so it is still the one "/" focuses',
      doc.querySelectorAll('#q').length === 1 &&
-     doc.querySelectorAll('.search').length === 1,
-     doc.querySelectorAll('.search').length + ' boxes on the page');
+     doc.querySelectorAll('#search').length === 1,
+     doc.querySelectorAll('#search').length + ' of it on the page');
+  /* The bar it left is not empty: the lookup box takes that room, which is the
+     Dictionary tab's search doing the Dictionary tab's job from here. */
+  ok('  and the bar it left carries the lookup box instead',
+     !!doc.getElementById('lookup-bar') &&
+     doc.getElementById('lookup-bar').parentNode.classList.contains('top') &&
+     doc.getElementById('popdict-btn').hidden,
+     doc.getElementById('lookup-bar') ? 'in the bar' : 'missing');
 
   const q = doc.getElementById('q');
   const typeIn = (v) => {

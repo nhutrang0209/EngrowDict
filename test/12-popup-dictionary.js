@@ -20,29 +20,50 @@ const mk = store => boot({
   // the headword span also carries the part of speech in an <i>
   const wordOf = node => [...node.childNodes]
     .filter(n => n.nodeName !== 'I').map(n => n.textContent).join('').trim();
+  /* The bar carries the box on the Passages tab and the window carries its
+     own everywhere else, and only ever one of the two is on screen. */
+  const qbox = () => doc.getElementById('lk-q') || doc.getElementById('pd-q');
+  const bar = () => doc.getElementById('lookup-bar');
   const typeIn = v => {
-    const i = doc.getElementById('pd-q');
+    const i = qbox();
     i.value = v;
     i.dispatchEvent(new w.Event('input'));
   };
+  const pageKey = (g, key) => g.doc.dispatchEvent(
+    new g.window.KeyboardEvent('keydown', { key, bubbles: true }));
 
   /* --- it belongs to the reading tab ------------------------------------ */
-  ok('the dictionary tab does not offer it', btn().hidden);
+  ok('the dictionary tab offers no lookup box: its own search is the lookup',
+     !bar() && btn().hidden);
   click(w, doc.getElementById('tab-passages'));
   await wait(30);
-  ok('the passages tab does', !btn().hidden);
-  ok('  and it starts closed', !pop() || pop().hidden);
+  ok('the passages tab carries one, in the bar where the dictionary keeps its own',
+     !!bar() && bar().parentNode.classList.contains('top'),
+     bar() ? bar().parentNode.className : 'no box');
+  ok('  and the button it replaces is gone with it', btn().hidden);
+  ok('  it starts closed', !pop() || pop().hidden);
 
   click(w, doc.getElementById('tab-passages'));   // open a passage to read
   click(w, doc.querySelector('.hit'));
   await wait(40);
 
   /* --- opening and searching -------------------------------------------- */
-  click(w, btn());
-  ok('the button opens the window', !!pop() && !pop().hidden);
-  ok('  and the button shows it is on', btn().getAttribute('aria-pressed') === 'true');
-  ok('  with a prompt until something is typed',
-     (doc.querySelector('.pd-note')?.textContent || '').includes('Type a word'));
+  typeIn('zen');
+  await wait(20);
+  ok('typing in it opens the window, with nothing to press first',
+     !!pop() && !pop().hidden);
+  ok('  and the window does not put up a second box beside the one in the bar',
+     doc.getElementById('pd-search').hidden,
+     doc.getElementById('pd-search').hidden ? 'one box' : 'two boxes');
+
+  typeIn('');                       // empty, so the window is put away
+  await wait(20);
+  pageKey(a, 'd');
+  await wait(20);
+  ok('  the d key still opens it empty, with a prompt until something is typed',
+     !pop().hidden &&
+     (doc.querySelector('.pd-note')?.textContent || '').includes('Type a word'),
+     doc.querySelector('.pd-note')?.textContent);
 
   typeIn('zen');
   const hits = doc.querySelectorAll('.pd-hit');
@@ -202,7 +223,7 @@ const mk = store => boot({
   doc.querySelector('.read .prose').dispatchEvent(new w.Event('mouseup'));
   await wait(30);
   ok('selecting text while it is open feeds it instead of the small card',
-     doc.getElementById('pd-q').value === 'abating' &&
+     qbox().value === 'abating' &&
      doc.querySelector('.pd-hw')?.textContent === 'abate',
      doc.querySelector('.pd-hw')?.textContent);
   ok('  and the small card stays out of the way',
@@ -220,22 +241,29 @@ const mk = store => boot({
   /* --- closing ------------------------------------------------------------ */
   click(w, doc.querySelector('.pd-x'));
   ok('the × closes it', pop().hidden);
-  click(w, btn());
-  ok('the button reopens it', !pop().hidden);
+  typeIn('zenith');
+  await wait(20);
+  ok('typing again reopens it', !pop().hidden);
+  typeIn('');
+  await wait(20);
+  ok('  and emptying the box puts it away, leaving nothing over the passage',
+     pop().hidden);
+  typeIn('zenith');
+  await wait(20);
 
   // leaving the reading tab puts it away
   click(w, doc.getElementById('tab-dictionary'));
   await wait(30);
   ok('going back to the dictionary closes it', pop().hidden);
-  ok('  and takes its button away', btn().hidden);
+  ok('  and takes the box out of the bar with it', !bar() && btn().hidden);
 
   /* --- opening one from the window --------------------------------------- */
   click(w, doc.getElementById('tab-passages'));
   await wait(30);
   click(w, doc.querySelector('.hit'));
   await wait(30);
-  click(w, btn());
   typeIn('zenith');
+  await wait(20);
   click(w, doc.querySelector('.pd-hit'));
   click(w, doc.querySelector('.pd-entry .btn'));
   await wait(40);
@@ -250,7 +278,10 @@ const mk = store => boot({
   await wait(900);
   click(b.window, b.doc.getElementById('tab-passages'));
   await wait(30);
-  click(b.window, b.doc.getElementById('popdict-btn'));
+  const bq = b.doc.getElementById('lk-q');
+  bq.value = 'zenith';
+  bq.dispatchEvent(new b.window.Event('input'));
+  await wait(20);
   ok('a later visit opens it where you left it',
      b.doc.getElementById('popdict').style.left === JSON.parse(store[POP_KEY]).left,
      b.doc.getElementById('popdict').style.left);
