@@ -2604,7 +2604,7 @@ a.btn[hidden] { display: none; }
     return box;
   }
 
-  function openPopDict(prefill) {
+  function openPopDict(prefill, typing) {
     if (!popEl) {
       popEl = buildPopDict();
       document.getElementById("app").appendChild(popEl);
@@ -2617,8 +2617,18 @@ a.btn[hidden] { display: none; }
     var inp = popQ();
     if (prefill != null) { inp.value = prefill; popPicked = null; popAt = -1; }
     drawPopDict();
-    inp.focus();
-    inp.select();
+    /* Pressing the button, or d, is asking to be taken to the box, and taking
+       the old contents with the caret is how you type over them without having
+       to clear them first.
+
+       Typing in the box is also what opens the window now, and there the
+       reader is already in it, mid-word. Reaching back to select what they
+       have just typed makes the next letter replace it: type "i", watch it
+       highlight, type "n", and all you have is "n". */
+    if (!typing) {
+      inp.focus();
+      inp.select();
+    }
     syncPopButton();
   }
 
@@ -3424,7 +3434,7 @@ a.btn[hidden] { display: none; }
       /* Typing is the whole of the gesture: nothing to press first, and
          nothing left floating over the passage once the box is empty again. */
       if (!inp.value.trim()) { closePopDict(); return; }
-      if (!popOpen()) openPopDict(null);
+      if (!popOpen()) openPopDict(null, true);
       drawPopDict();
     });
     inp.addEventListener("keydown", function (ev) {

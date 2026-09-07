@@ -24,9 +24,13 @@ const mk = store => boot({
      own everywhere else, and only ever one of the two is on screen. */
   const qbox = () => doc.getElementById('lk-q') || doc.getElementById('pd-q');
   const bar = () => doc.getElementById('lookup-bar');
+  /* Focused first, the way a reader who is typing has it: what the box does
+     with the caret while they type is the thing being watched here. */
   const typeIn = v => {
     const i = qbox();
+    i.focus();
     i.value = v;
+    i.setSelectionRange(v.length, v.length);
     i.dispatchEvent(new w.Event('input'));
   };
   const pageKey = (g, key) => g.doc.dispatchEvent(
@@ -52,6 +56,14 @@ const mk = store => boot({
   await wait(20);
   ok('typing in it opens the window, with nothing to press first',
      !!pop() && !pop().hidden);
+  /* Typing is what opens the window, so opening it must not reach back into
+     the box and select what has just been typed — the next letter would
+     replace it. One letter in, and the letter was gone. */
+  ok('  and the letter that opened it is still there, and not selected',
+     qbox().value === 'zen' && qbox().selectionStart === 3 &&
+     qbox().selectionEnd === 3,
+     JSON.stringify(qbox().value) + ', caret ' + qbox().selectionStart
+       + '-' + qbox().selectionEnd);
   ok('  and the window does not put up a second box beside the one in the bar',
      doc.getElementById('pd-search').hidden,
      doc.getElementById('pd-search').hidden ? 'one box' : 'two boxes');
