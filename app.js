@@ -672,6 +672,7 @@
     var box = detailBox();
     if (box) box.scrollTop = 0;
     restorePlace();
+    keepOpen();      // this is the moment something becomes what is open
   }
 
   /* ---- A–Z rail ----------------------------------------------------------- */
@@ -874,7 +875,7 @@
      word up used to mean leaving what you were reading. This floats over it
      instead: type, pick, read, drag it out of the way. */
   var POP_KEY = "engrowdict:pop:v1";
-  var popEl = null, popPicked = null;
+  var popEl = null, popPicked = null, popHits = [], popAt = -1;
 
   function popOpen() { return !!popEl && !popEl.hidden; }
 
@@ -900,9 +901,30 @@
     inp.spellcheck = false;
     inp.placeholder = "Look a word up…";
     inp.setAttribute("aria-label", "Search the dictionary");
-    inp.addEventListener("input", function () { popPicked = null; drawPopDict(); });
+    inp.addEventListener("input", function () {
+      popPicked = null; popAt = -1; drawPopDict();
+    });
     inp.addEventListener("keydown", function (ev) {
       if (ev.key === "Escape") { ev.stopPropagation(); closePopDict(); }
+    });
+    /* The window is a list of words and the keys that walk a list of words are
+       the arrow keys — the same two that walk the list on the Dictionary tab,
+       so nothing new has to be learnt to stay off the mouse. Taken on the
+       window rather than on the box you type in, because after picking a word
+       the focus is on a button in here somewhere, and the keys should still
+       work. Stopped here rather than left to the page's own handler to notice
+       it was already dealt with: that one asks whether the default was
+       prevented, and a window over a passage saying "these are mine" is the
+       plainer thing to say than a note left for somebody else to read. */
+    w.addEventListener("keydown", function (ev) {
+      var d = ev.key === "ArrowDown" ? 1 : ev.key === "ArrowUp" ? -1 : 0;
+      if (d) { ev.preventDefault(); ev.stopPropagation(); popStep(d); return; }
+      if (ev.key === "Enter" && !popPicked && popHits.length) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        popPicked = popHits[popAt < 0 ? 0 : popAt];
+        drawPopDict();
+      }
     });
     sbox.appendChild(inp);
     w.appendChild(sbox);
@@ -937,10 +959,39 @@
     return w;
   }
 
+  /* One walk, whichever half of the window is showing. On the results it moves
+     the mark down the list; on an entry it turns the page to the word before
+     or after it, which is what the arrows do on the Dictionary tab and what a
+     reader flipping through the results of one search expects. */
+  function popStep(d) {
+    if (!popHits.length) return;
+    var next = popAt < 0 ? (d > 0 ? 0 : popHits.length - 1) : popAt + d;
+    if (next < 0 || next >= popHits.length) return;
+    popAt = next;
+    if (popPicked) popPicked = popHits[popAt];
+    drawPopDict();
+    var on = document.querySelector("#pd-body .pd-hit[aria-current='true']");
+    // jsdom has no scrollIntoView, and the tests are what say this works
+    if (on && on.scrollIntoView) on.scrollIntoView({ block: "nearest" });
+  }
+
   function drawPopDict() {
     var body = document.getElementById("pd-body");
     var inp = document.getElementById("pd-q");
     body.textContent = "";
+
+    /* Ranked before the branch, not inside it. A word selected in the passage
+       opens this straight on its entry, and the results it came out of are
+       what the arrows walk from there — worked out here, once, so both halves
+       of the window are looking at the same list. */
+    var q = norm(inp.value.trim());
+    popHits = q ? rankEntries(q, entries, 40, true) : [];
+    if (popAt >= popHits.length) popAt = popHits.length - 1;
+    if (popPicked && popAt < 0) {
+      for (var k = 0; k < popHits.length; k++) {
+        if (popHits[k].id === popPicked.id) { popAt = k; break; }
+      }
+    }
 
     if (popPicked) {
       var back = el("button", "pd-back", "‹ results");
@@ -951,23 +1002,24 @@
       return;
     }
 
-    var q = norm(inp.value.trim());
     if (!q) {
       body.appendChild(el("p", "pd-note",
         "Type a word, or select one in the passage behind. This searches "
         + "headwords; the Dictionary tab searches the meanings too."));
       return;
     }
-    var found = rankEntries(q, entries, 40, true);
+    var found = popHits;
     if (!found.length) {
       body.appendChild(el("p", "pd-note", "Nothing in the notebook matches that."));
       return;
     }
     var list = el("ul", "pd-hits");
-    found.forEach(function (e) {
+    found.forEach(function (e, i) {
       var li = el("li");
       var b = el("button", "pd-hit");
       b.type = "button";
+      // the same mark the list on the Dictionary tab puts on the row it is on
+      if (i === popAt) b.setAttribute("aria-current", "true");
       // same marking as the list on the dictionary tab
       var line = el("span", "pd-w");
       markUp(line, e.word, q);
@@ -976,7 +1028,9 @@
       var vi = el("span", "pd-vi");
       markUp(vi, glossOf(e), q);
       b.appendChild(vi);
-      b.addEventListener("click", function () { popPicked = e; drawPopDict(); });
+      b.addEventListener("click", function () {
+        popPicked = e; popAt = i; drawPopDict();
+      });
       li.appendChild(b);
       list.appendChild(li);
     });
@@ -1031,7 +1085,7 @@
     }
     popEl.hidden = false;
     var inp = document.getElementById("pd-q");
-    if (prefill != null) { inp.value = prefill; popPicked = null; }
+    if (prefill != null) { inp.value = prefill; popPicked = null; popAt = -1; }
     drawPopDict();
     inp.focus();
     inp.select();
@@ -1084,16 +1138,45 @@
     return "";
   }
 
+  /* The paragraphs of whatever is being read, passage or chapter — both are
+     drawn by the same readingView, so one selector finds either. */
+  function proseNodes() {
+    return document.querySelectorAll(".detail .prose > *");
+  }
+
+  /* Where the top of the reading area is standing, as a paragraph and how far
+     through it — the same measure the Vietnamese column is kept in step by.
+
+     A fraction of the scroll height was what this used to keep, and a fraction
+     only means anything while the height does not change. It changes: the
+     translation column opens beside the passage and the text narrows, the
+     divider is dragged, the fonts arrive, the window is resized. Every one of
+     those moved the line the reader was put back to. A paragraph is the same
+     paragraph at any width. */
+  function topMark(box) {
+    var ns = proseNodes();
+    if (!ns.length) return null;
+    var head = document.querySelector(".detail .read-head");
+    var from = head ? head.getBoundingClientRect().bottom
+      : box.getBoundingClientRect().top;
+    var got = anchorIndex(ns, from);
+    if (!got) return null;
+    return { p: got.i, into: Math.round(got.into * 1000) / 1000 };
+  }
+
   function savePlace() {
     var key = placeKey(), box = detailBox();
     if (!key || !box) return;
     var room = box.scrollHeight - box.clientHeight;
     if (room <= 0) return;                  // nothing to scroll, nothing to keep
-    var at = box.scrollTop / room;
     var all = readPlaces();
-    // the top is where it starts anyway, and the end is read: both open fresh
-    if (at < 0.02 || at > 0.98) delete all[key];
-    else all[key] = Math.round(at * 1000) / 1000;
+    /* Kept wherever the reader is, the top and the bottom included. Those two
+       used to be dropped — the top is where it opens anyway, and the end has
+       been read — but "put me back where I was" is the whole of what this is
+       for, and a reader who went to the end to check something and came back
+       to find the passage rewound was not helped by the cleverness. */
+    var mark = topMark(box);
+    all[key] = mark || { at: Math.round((box.scrollTop / room) * 1000) / 1000 };
     try { localStorage.setItem(PLACE_KEY, JSON.stringify(all)); } catch (err) { /* quota */ }
   }
 
@@ -1117,9 +1200,25 @@
     }
   }
 
-  function down(box, at) {
+  /* A place put back. Anything written by an older copy of the page is a bare
+     fraction, and is still read. */
+  function down(box, mark) {
     var room = box.scrollHeight - box.clientHeight;
-    return (at && room > 0) ? at * room : 0;
+    if (room <= 0) return 0;
+    var at = mark;
+    if (mark && typeof mark === "object") {
+      var node = proseNodes()[mark.p];
+      if (node) {
+        var r = node.getBoundingClientRect();
+        var head = document.querySelector(".detail .read-head");
+        var from = head ? head.getBoundingClientRect().bottom
+          : box.getBoundingClientRect().top;
+        var want = box.scrollTop + (r.top - from) + (mark.into || 0) * r.height;
+        return Math.max(0, Math.min(room, Math.round(want)));
+      }
+      at = mark.at;                  // that paragraph is gone; the fraction will do
+    }
+    return at ? Math.max(0, Math.min(room, Math.round(at * room))) : 0;
   }
 
   /* ---- the top bar, out of the way while reading -------------------------
@@ -1425,6 +1524,50 @@
     }, { passive: true });
   }
 
+  /* What each view was left showing, so that leaving one and coming back to it
+     comes back to the passage rather than to the list of them. The companion of
+     the place store above: that one knows how far down a passage you were, this
+     one knows which passage it was. Neither is any use without the other —
+     keeping your place in something you have to go and find again is not
+     keeping your place. */
+  var OPEN_KEY = "engrowdict:open:v1";
+  var opened = null;
+
+  function readOpened() {
+    if (opened) return opened;
+    try { opened = JSON.parse(localStorage.getItem(OPEN_KEY) || "{}"); }
+    catch (err) { opened = {}; }
+    if (!opened || typeof opened !== "object") opened = {};
+    return opened;
+  }
+
+  function keepOpen() {
+    var all = readOpened();
+    if (view === "read") {
+      if (selectedRead) all.read = selectedRead.id; else delete all.read;
+    } else if (view === "book") {
+      if (selectedBook) all.book = { id: selectedBook.id, chapter: openChapter || 0 };
+      else delete all.book;
+    } else return;
+    try { localStorage.setItem(OPEN_KEY, JSON.stringify(all)); } catch (err) { /* quota */ }
+  }
+
+  function reopen() {
+    var all = readOpened();
+    if (view === "read" && all.read && passageOrNothing(byId[all.read])) {
+      select(all.read);
+      showDetail();
+      return true;
+    }
+    if (view === "book" && all.book && bookOrNothing(byId[all.book.id])) {
+      select(all.book.id);
+      if (all.book.chapter) { openChapter = all.book.chapter; drawDetail(); }
+      showDetail();
+      return true;
+    }
+    return false;
+  }
+
   /* Where the dictionary was opened from, remembered so it can be got back to. */
   function markPlace() {
     if (view === "read" && selectedRead) {
@@ -1617,6 +1760,10 @@
       b.appendChild(el("span", "lab", t[1]));
       b.addEventListener("click", function () {
         if (view === t[0]) return;
+        /* On the way out: which passage, and how far down it. Both, before
+           anything is cleared — a moment later there is nothing left to ask. */
+        savePlace();
+        keepOpen();
         if (t[0] === "vocab") markPlace(); else cameFrom = null;
         /* Going somewhere means wanting to see what is there: a list folded
            away for room while reading is in the way of the place just asked
@@ -1632,6 +1779,7 @@
         showTop();
         syncViewButtons();
         refresh();
+        reopen();                 // and on the way in: back to where it was
       });
       nav.appendChild(b);
     });
@@ -1685,15 +1833,48 @@
     var pubRow = document.getElementById("book-pub-row");
     if (pubRow) pubRow.hidden = !!(addRow && addRow.hidden) || !canPublishBooks();
     document.body.dataset.solo = view === "translate" ? "on" : "off";
-    var box = document.querySelector(".search");
-    if (box) box.hidden = view === "translate";
+    if (searchBox) searchBox.hidden = view === "translate";
     if (qInput) {
-      qInput.placeholder = view === "read" ? "Search inside the passages…"
+      qInput.placeholder = view === "read" ? "Search by name or by a word inside…"
         : view === "book" ? "Search the shelf by title or author…"
         : "Search a word, a meaning, or Vietnamese…";
     }
+    placeSearch();
     if (view !== "read" && view !== "book") closePopDict();
     syncPopButton();
+  }
+
+  /* Searching the passages searches their names and what is written in them,
+     and either way the answer is a list of passages — which is the pane on the
+     left, not the page. So the box goes where its answers come out, at the top
+     of the list it is filtering, and the bar keeps nothing that belongs to a
+     reader halfway down a passage.
+
+     Only where that pane is actually beside the passage. Under 760px the open
+     passage covers the list, and a box inside something hidden cannot be typed
+     into at all; there the bar keeps it, which is what lets a search typed
+     over an open passage hand the screen back to the list.
+
+     The same box either way, moved rather than built twice: it carries the
+     handlers, the "/" shortcut and whatever is half-typed in it. */
+  function placeSearch() {
+    if (!searchBox || !topRow || !listPane) return;
+    var inList = view === "read" && !narrowScreen();
+    var want = inList ? listPane : topRow;
+    var before = inList ? listPane.firstChild : actsBox;
+    if (searchBox.parentNode === want && searchBox.nextSibling === before) return;
+
+    /* Moving a node takes the caret out of it, and this runs on every
+       keystroke that changes the view's mind about where the box belongs. */
+    var typing = document.activeElement === qInput;
+    var at = 0, to = 0;
+    if (typing) { at = qInput.selectionStart; to = qInput.selectionEnd; }
+    want.insertBefore(searchBox, before);
+    searchBox.classList.toggle("in-list", inList);
+    if (typing) {
+      qInput.focus();
+      try { qInput.setSelectionRange(at, to); } catch (err) { /* not a text box */ }
+    }
   }
 
   /* Many definitions lead with the exact form being defined — "be better off:
@@ -2173,9 +2354,22 @@
     var all = aiStore();
     all[r.id] = {
       stamp: aiStamp(r), at: Date.now(),
-      by: aiPane.by, paras: aiPane.paras, shut: !!(done === "shut")
+      by: aiPane.by, paras: aiPane.paras, shut: !!(done === "shut"),
+      /* The title is kept beside the English it was made from rather than
+         folded into the stamp above. Putting it in the stamp would have thrown
+         away every translation already paid for, on the day this page learned
+         to translate titles at all — and the paragraphs of those are still
+         perfectly good. A passage whose title has changed since, or which was
+         translated before there was a title to translate, asks for the one
+         line and keeps the rest. */
+      title: aiPane.title || "", en: r.title
     };
     aiStoreWrite(all);
+  }
+
+  /* The translation held for a passage, if it is of the title it has now. */
+  function aiKeptTitle(r, kept) {
+    return (kept && kept.en === r.title && kept.title) ? kept.title : "";
   }
 
   function aiShut(r, yes) {
@@ -2188,10 +2382,12 @@
   function openAiPane(r) {
     var kept = aiKept(r);
     if (kept && kept.paras && kept.paras.length) {
-      aiPane = { id: r.id, state: "done", paras: kept.paras, by: kept.by || "", msg: "" };
+      aiPane = { id: r.id, state: "done", paras: kept.paras, by: kept.by || "",
+                 msg: "", title: aiKeptTitle(r, kept) };
       aiShut(r, false);
       drawDetail();
       syncAiScroll();
+      if (!aiPane.title && canWriteSheet()) runAiTitle(r);
       return;
     }
     if (!canWriteSheet()) {
@@ -2199,7 +2395,7 @@
       return;
     }
     if (aiPane && aiPane.id === r.id) { drawDetail(); return; }
-    aiPane = { id: r.id, state: "working", paras: [], by: "", msg: "", done: 0 };
+    aiPane = { id: r.id, state: "working", paras: [], by: "", msg: "", done: 0, title: "" };
     drawDetail();
     runAiTranslate(r);
   }
@@ -2210,7 +2406,12 @@
     if (!r) return;
     var kept = aiKept(r);
     if (!kept || kept.shut || !kept.paras || !kept.paras.length) return;
-    aiPane = { id: r.id, state: "done", paras: kept.paras, by: kept.by || "", msg: "" };
+    aiPane = { id: r.id, state: "done", paras: kept.paras, by: kept.by || "",
+               msg: "", title: aiKeptTitle(r, kept) };
+    /* The way most translations are seen again is this one — a passage opened
+       from the list, not from the menu — so a heading still owing is fetched
+       here too, or the passages kept from before titles would never get one. */
+    if (!aiPane.title && canWriteSheet()) runAiTitle(r);
   }
 
   function closeAiPane() {
@@ -2220,10 +2421,18 @@
     drawDetail();
   }
 
+  /* The title rides in as the first line of the first batch. It is a line of
+     English like any other, so the sheet needs to know nothing new about it —
+     no redeploy of the script for the sake of one heading — and it costs no
+     extra call, because that batch was being sent anyway. */
   function runAiTranslate(r) {
     var want = r.id;
-    var lines = r.paras.map(function (p) { return stripMarks(p.text); });
+    var lines = [r.title].concat(r.paras.map(function (p) { return stripMarks(p.text); }));
     var at = 0;
+
+    function fill(k, said) {
+      if (k === 0) aiPane.title = said; else aiPane.paras[k - 1] = said;
+    }
 
     function next() {
       if (!aiPane || aiPane.id !== want) return;          // closed, or another
@@ -2238,9 +2447,10 @@
       at += batch.length;
       callSheet({ action: "aitranslate", paras: batch }).then(function (res) {
         if (!aiPane || aiPane.id !== want) return;
-        (res.paras || []).forEach(function (one, i) { aiPane.paras[from + i] = one; });
+        (res.paras || []).forEach(function (one, i) { fill(from + i, one); });
         aiPane.by = res.by || aiPane.by || "the model";
-        aiPane.done = Math.min(lines.length, at);
+        // the count is of paragraphs; the title is not one of them
+        aiPane.done = Math.min(r.paras.length, Math.max(0, at - 1));
         aiKeep(r);                                        // as far as it has got
         drawDetail();
         syncAiScroll();
@@ -2253,6 +2463,22 @@
       });
     }
     next();
+  }
+
+  /* Just the heading, for a passage whose paragraphs are already translated
+     and kept. One line, one call, and the rest is not asked for again. */
+  function runAiTitle(r) {
+    var want = r.id;
+    callSheet({ action: "aitranslate", paras: [r.title] }).then(function (res) {
+      if (!aiPane || aiPane.id !== want) return;
+      var said = (res.paras || [])[0];
+      if (!said) return;
+      aiPane.title = said;
+      aiPane.by = aiPane.by || res.by || "the model";
+      aiKeep(r);
+      drawDetail();
+      syncAiScroll();
+    }, function () { /* the paragraphs are the point; a heading can wait */ });
   }
 
   function aiPaneView(r) {
@@ -2276,7 +2502,8 @@
     again.disabled = aiPane.state === "working";
     again.disabled = aiPane.state === "working";
     again.addEventListener("click", function () {
-      aiPane = { id: r.id, state: "working", paras: [], by: "", msg: "", done: 0 };
+      aiPane = { id: r.id, state: "working", paras: [], by: "", msg: "",
+                 done: 0, title: "" };
       aiShut(r, false);
       drawDetail();
       runAiTranslate(r);
@@ -2299,6 +2526,16 @@
       if (aiPane.state === "part") {
         body.appendChild(el("p", "ai-none",
           "It stopped partway: " + aiPane.msg + " Press ↻ to ask for the rest."));
+      }
+      /* The heading, over its own column. Not an .ai-para: the paragraphs are
+         numbered against the English ones on the other side, and everything
+         that pairs the two columns — the scrolling that keeps them level, the
+         wash under a selected sentence — counts on that numbering. A title
+         woven in among them would shift every paragraph by one. */
+      if (aiPane.title || aiPane.state === "working") {
+        var h = el("p", "ai-h1" + (aiPane.title ? "" : " waiting"),
+          aiPane.title || "…");
+        body.appendChild(h);
       }
       r.paras.forEach(function (p, i) {
         var b = el("div", "ai-para");
@@ -3682,6 +3919,7 @@
         var inp = document.getElementById("pd-q");
         inp.value = text;
         popPicked = lookupText(text);
+        popAt = -1;             // a new selection, so the walk starts over
         drawPopDict();
         return;
       }
@@ -5422,12 +5660,14 @@
 
   /* ---- page chrome ---------------------------------------------------------- */
   var qInput;
+  var searchBox, topRow, actsBox, listPane;
 
   function build() {
     var app = document.getElementById("app");
     app.textContent = "";
 
     var top = el("header", "top");
+    topRow = top;
     var brand = el("div", "brand");
     brand.appendChild(el("span", "mark", "EngrowDict"));
     top.appendChild(brand);
@@ -5441,7 +5681,8 @@
     });
     top.appendChild(back);
 
-    var searchBox = el("div", "search");
+    searchBox = el("div", "search");
+    searchBox.id = "search";
     searchBox.innerHTML = '<svg class="glass" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg>';
     qInput = el("input");
     qInput.id = "q";
@@ -5459,6 +5700,7 @@
     /* The bar carries what gets used constantly; the rest lives under ⋯, so
        five things sit here rather than eight. */
     var acts = el("div", "acts");
+    actsBox = acts;
 
     var pop = el("button", "btn", "Look up");
     pop.type = "button";
@@ -5557,6 +5799,7 @@
     work.appendChild(alpha);
 
     var list = el("div", "list");
+    listPane = list;
     var chips = el("div", "chips");
     chips.id = "chips";
     list.appendChild(chips);
@@ -5605,6 +5848,7 @@
     }
     window.addEventListener("resize", function () {
       paint(true);
+      placeSearch();               // the breakpoint decides which home it has
       measureBar();
       if (!narrowScreen()) showTop();
       var dlg = document.getElementById("form-dlg");

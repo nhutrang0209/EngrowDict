@@ -87,7 +87,66 @@ const mk = store => boot({
      (doc.querySelector('.pd-note')?.textContent || '').includes('Nothing'),
      doc.querySelector('.pd-note')?.textContent);
 
+  /* --- walked with the arrow keys ---------------------------------------- */
+  /* The window is a list of words, and the keys that walk a list of words are
+     the two that walk the list on the Dictionary tab. Pressed on the window
+     rather than on the box, because after picking a word the focus is on a
+     button in here somewhere and they should still work. */
+  /* cancelable, because a real keydown is: an event built without it takes
+     preventDefault() and does nothing with it, and a test that leaves it out
+     is asking the page a question no browser ever asks. */
+  const press = key => pop().dispatchEvent(
+    new w.KeyboardEvent('keydown', { key: key, bubbles: true, cancelable: true }));
+  const arrow = press;
+  const marked = () => {
+    const on = doc.querySelector('.pd-hit[aria-current="true"]');
+    return on ? wordOf(on.querySelector('.pd-w')) : null;
+  };
+
+  typeIn('direct');
+  const list = [...doc.querySelectorAll('.pd-hit')].map(h => wordOf(h.querySelector('.pd-w')));
+  ok('nothing is marked before a key is pressed', marked() === null, marked());
+  arrow('ArrowDown');
+  ok('down marks the first result', marked() === list[0], marked());
+  arrow('ArrowDown');
+  ok('  and again the second', marked() === list[1], marked());
+  arrow('ArrowUp');
+  ok('up comes back', marked() === list[0], marked());
+  arrow('ArrowUp');
+  ok('  and stops at the top rather than wrapping round', marked() === list[0], marked());
+
+  arrow('ArrowDown');
+  press('Enter');
+  ok('Enter opens the one that is marked',
+     !!doc.querySelector('.pd-entry') && doc.querySelector('.pd-hw')?.textContent === list[1],
+     doc.querySelector('.pd-hw')?.textContent);
+
+  /* On an entry the same two keys turn the page, which is what they do on the
+     Dictionary tab — the results of one search read through without going back
+     to the list between each. */
+  arrow('ArrowDown');
+  ok('  from there they turn to the next word in the results',
+     doc.querySelector('.pd-hw')?.textContent === list[2],
+     doc.querySelector('.pd-hw')?.textContent);
+  arrow('ArrowUp');
+  ok('  and back to the one before it',
+     doc.querySelector('.pd-hw')?.textContent === list[1],
+     doc.querySelector('.pd-hw')?.textContent);
+
+  click(w, doc.querySelector('.pd-back'));
+  ok('  the results remember where the walk had got to',
+     marked() === list[1], marked());
+
   typeIn('zenith');
+  ok('  and typing again starts it over', marked() === null, marked());
+
+  /* Nothing behind the window may move while these keys are being used in it:
+     the passage list has the same two keys bound on the document. */
+  const before = doc.querySelector('.read h1')?.textContent;
+  arrow('ArrowDown');
+  ok('the passage behind is left where it was',
+     doc.querySelector('.read h1')?.textContent === before, before);
+
   click(w, doc.querySelector('.pd-hit'));
   ok('picking one shows its senses', !!doc.querySelector('.pd-entry'),
      doc.querySelector('.pd-hw')?.textContent);

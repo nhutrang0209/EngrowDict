@@ -64,6 +64,13 @@ drag it out of the way, and open the full entry when you want it. Selecting text
 while it is open feeds the selection straight into it rather than opening the
 small card. It stays where you drag it, and closes when you leave the tab.
 
+`↑` `↓` walk the results and `Enter` opens the one they are on — the same two
+keys that walk the list on the Dictionary tab, marking the row the same way. On
+an open word they turn to the word before or after it in the same results, so a
+search can be read through without going back to the list between each. The
+window keeps those keys to itself while it is open, so the passage behind stays
+where it was.
+
 The notebook is advanced vocabulary, so ordinary running words are often not in
 it. When there is no entry, the card falls back to machine translation, English
 to Vietnamese, and names the source it used so it is never mistaken for your own

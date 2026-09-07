@@ -73,6 +73,70 @@ ok('the shell itself stays light', shell.replace(/\r\n/g, '\n').length < 340000,
      doc.getElementById('count').textContent);
   ok('the chips are hidden while reading', doc.getElementById('chips').hidden);
 
+  /* --- the search box goes where its answers come out ----------------------
+     Searching the passages searches their names and what is written in them,
+     and either way the answer is a list of passages. That list is the pane on
+     the left, so the box belongs at the top of it rather than across the page
+     over a passage it is not filtering. */
+  const box = () => doc.getElementById('search');
+  ok('in the passages the box sits at the top of the list, not in the bar',
+     box().parentNode.classList.contains('list') &&
+     doc.querySelector('.list').firstChild === box() &&
+     box().classList.contains('in-list'),
+     box().parentNode.className);
+  ok('  and says it takes a name or a word out of one',
+     /name/.test(doc.getElementById('q').placeholder) &&
+     /word/.test(doc.getElementById('q').placeholder),
+     doc.getElementById('q').placeholder);
+  ok('  moved rather than built twice, so it is still the one "/" focuses',
+     doc.querySelectorAll('#q').length === 1 &&
+     doc.querySelectorAll('.search').length === 1,
+     doc.querySelectorAll('.search').length + ' boxes on the page');
+
+  const q = doc.getElementById('q');
+  const typeIn = (v) => {
+    q.value = v;
+    q.dispatchEvent(new w.Event('input'));
+  };
+  const listed = () => [...doc.querySelectorAll('.hit .hw')].map(n => n.textContent);
+
+  /* Whatever the sheet published last: a word out of the first passage, and a
+     word out of its title, both taken from the data rather than written down
+     here. */
+  const first = data.readings[0];
+  const titleWord = first.title.split(/\s+/).find(x => x.length > 5).toLowerCase()
+    .replace(/[^a-z]/g, '');
+  typeIn(titleWord);
+  await wait(30);
+  ok('a passage is found by its name', listed().indexOf(first.title) > -1,
+     titleWord + ' -> ' + listed().slice(0, 2).join(', '));
+
+  const inside = first.paras.map(p => p.text).join(' ')
+    .split(/\s+/).map(x => x.toLowerCase().replace(/[^a-z]/g, ''))
+    .find(x => x.length > 8 && first.title.toLowerCase().indexOf(x) < 0);
+  typeIn(inside);
+  await wait(30);
+  ok('  and by a word written inside it', listed().indexOf(first.title) > -1,
+     inside + ' -> ' + listed().slice(0, 2).join(', '));
+  ok('  with the answers in that same pane and nowhere else',
+     doc.querySelectorAll('.list .hit').length === listed().length &&
+     listed().length > 0,
+     listed().length + ' rows, all in the list');
+
+  typeIn('');
+  await wait(30);
+
+  /* Back in the dictionary the box belongs to the whole page again: the
+     answers there are words, and a word takes over the page. */
+  click(w, doc.getElementById('tab-dictionary'));
+  await wait(30);
+  ok('in the dictionary it goes back to the bar',
+     box().parentNode.classList.contains('top') &&
+     !box().classList.contains('in-list'),
+     box().parentNode.className);
+  click(w, doc.getElementById('tab-passages'));
+  await wait(30);
+
   click(w, doc.querySelector('.hit'));
   await wait(30);
   ok('a passage opens with its paragraphs',

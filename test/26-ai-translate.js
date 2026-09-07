@@ -27,8 +27,9 @@ function page(store, posts, reply) {
   const realFetch = g.window.fetch;
   g.window.fetch = (url, opts) => {
     if (opts && opts.method === 'POST') {
-      posts.push({ url, body: JSON.parse(opts.body) });
-      return Promise.resolve({ ok: true, json: () => Promise.resolve(reply()) });
+      const body = JSON.parse(opts.body);
+      posts.push({ url, body });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(reply(body)) });
     }
     return realFetch(url, opts);
   };
@@ -43,9 +44,14 @@ const openMenu = g => {
 
 (async () => {
   const posts = [];
-  let answer = () => ({ ok: true, by: 'Gemini',
-    paras: ['Đoạn một.', 'Đoạn hai.', 'Đoạn ba.'] });
-  const a = page(unlockedStore(CFG), posts, () => answer());
+  /* One Vietnamese line back for every English line sent, which is what a
+     translator does. The stub used to answer three lines whatever it was
+     asked, and the day a fourth line was added to the first batch — the
+     title — that told us nothing about where the fourth answer went. */
+  const VI = ['Đoạn một.', 'Đoạn hai.', 'Đoạn ba.', 'Đoạn bốn.', 'Đoạn năm.'];
+  let answer = (body) => ({ ok: true, by: 'Gemini',
+    paras: (body.paras || []).map((_, i) => VI[i] || 'Đoạn nữa.') });
+  const a = page(unlockedStore(CFG), posts, (body) => answer(body));
   await wait(900);
   const { doc, window: w } = a;
 
@@ -99,19 +105,31 @@ const openMenu = g => {
   const firstEnglish = (label
     ? firstNode.textContent.slice(label.textContent.length)
     : firstNode.textContent).trim();
-  ok('  a few paragraphs at a time, so the first of it can be read at once',
-     !!sent && sent.body.paras.length <= 4 && sent.body.paras[0] === firstEnglish,
+  const title = doc.querySelector('.read h1').textContent;
+  ok('  led by the title, which is a line of English like any other',
+     !!sent && sent.body.paras[0] === title && sent.body.paras[1] === firstEnglish,
+     sent && JSON.stringify(sent.body.paras.slice(0, 2)));
+  ok('  so it costs no extra call, and the sheet needs to know nothing new',
+     !!sent && sent.body.paras.length <= 4 && sent.body.action === 'aitranslate',
      sent && sent.body.paras.length + ' in the first ask');
   ok('  and every paragraph of it in the end, in order', (() => {
     const all = posts.filter(p => p.body.action === 'aitranslate')
       .reduce((list, p) => list.concat(p.body.paras), []);
-    return all.length === paras && all[0] === firstEnglish;
+    return all.length === paras + 1 && all[0] === title && all[1] === firstEnglish;
   })(), posts.filter(p => p.body.action === 'aitranslate').length + ' asks for '
-     + paras + ' paragraphs');
+     + paras + ' paragraphs and a title');
 
   const said = [...doc.querySelectorAll('.ai-para .vi')].map(n => n.textContent);
-  ok('what comes back is read down the right', said[0] === 'Đoạn một.' &&
-     said[1] === 'Đoạn hai.', said.slice(0, 2).join(' | '));
+  ok('what comes back is read down the right', said[0] === 'Đoạn hai.' &&
+     said[1] === 'Đoạn ba.', said.slice(0, 2).join(' | '));
+  ok('  under the name of the passage in Vietnamese, over the column it heads',
+     (doc.querySelector('.ai-h1') || {}).textContent === 'Đoạn một.' &&
+     doc.querySelector('.ai-body').firstChild.className === 'ai-h1',
+     (doc.querySelector('.ai-h1') || {}).textContent);
+  ok('    and it is not one of the paragraphs, which are numbered against the English',
+     doc.querySelectorAll('.ai-para').length === paras &&
+     !doc.querySelector('.ai-h1').classList.contains('ai-para'),
+     doc.querySelectorAll('.ai-para').length + ' paragraphs against ' + paras);
   ok('  one line to a paragraph, level with the English',
      said.length === paras, said.length + ' against ' + paras);
   ok('  and it says who translated it', /Gemini/.test(doc.getElementById('ai-by').textContent),
@@ -208,7 +226,8 @@ const openMenu = g => {
      reader complained of: half a line selected, the whole paragraph lit. */
   posts.length = 0;
   const FOUR = 'Câu một. Câu hai. Câu ba. Câu bốn.';
-  answer = () => ({ ok: true, by: 'Gemini', paras: [FOUR, FOUR, FOUR, FOUR] });
+  answer = (body) => ({ ok: true, by: 'Gemini',
+    paras: (body.paras || []).map(() => FOUR) });
   click(w, doc.getElementById('ai-again'));
   await wait(1200);
 
@@ -313,12 +332,16 @@ const openMenu = g => {
 
   /* --- asking again, and closing ------------------------------------------ */
   posts.length = 0;
-  answer = () => ({ ok: true, by: 'Gemini', paras: ['Lần hai.', 'Hai.', 'Ba.'] });
+  answer = (body) => ({ ok: true, by: 'Gemini',
+    paras: (body.paras || []).map((_, i) => i === 0 ? 'Lần hai.' : 'Nữa.') });
   click(w, doc.getElementById('ai-again'));
   await wait(300);
   ok('it can be asked again', posts.some(p => p.body.action === 'aitranslate') &&
-     doc.querySelector('.ai-para .vi').textContent === 'Lần hai.',
+     doc.querySelector('.ai-para .vi').textContent === 'Nữa.',
      doc.querySelector('.ai-para .vi').textContent);
+  ok('  the title with it, rather than the old one left standing over new prose',
+     doc.querySelector('.ai-h1').textContent === 'Lần hai.',
+     doc.querySelector('.ai-h1').textContent);
 
   click(w, doc.getElementById('ai-close'));
   ok('closing it gives the passage its measure back',
@@ -368,6 +391,68 @@ const openMenu = g => {
      !posts.some(p => p.body.action === 'aitranslate'),
      posts.map(p => p.body.action).join(', ') || 'nothing asked');
 
+  /* --- a passage translated before there were titles ----------------------
+     Folding the title into the stamp that decides whether a kept translation
+     is still good would have thrown away every passage already paid for, on
+     the day this page learned to translate titles at all. The paragraphs of
+     those are perfectly good. Only the one line is asked for. */
+  const older = JSON.parse(a.store[AI_STORE]);
+  const paraCount = older.r0.paras.length;
+  delete older.r0.title;
+  delete older.r0.en;
+  older.r0.shut = true;
+  a.store[AI_STORE] = JSON.stringify(older);
+
+  posts.length = 0;
+  answer = (body) => ({ ok: true, by: 'Gemini',
+    paras: (body.paras || []).map(() => 'Tên bài dịch muộn.') });
+  openMenu(a);
+  click(w, doc.getElementById('passage-ai'));
+  await wait(200);
+  const asked = posts.filter(p => p.body.action === 'aitranslate');
+  ok('a passage kept from before titles asks for the title alone',
+     asked.length === 1 && asked[0].body.paras.length === 1 &&
+     asked[0].body.paras[0] === title,
+     asked.length + ' asks, ' + JSON.stringify(asked.map(x => x.body.paras.length)));
+  ok('  and the paragraphs already paid for are not asked for again',
+     doc.querySelectorAll('.ai-para').length === paraCount &&
+     doc.querySelector('.ai-para .vi').textContent !== 'Tên bài dịch muộn.',
+     doc.querySelectorAll('.ai-para').length + ' paragraphs, first reads '
+       + doc.querySelector('.ai-para .vi').textContent);
+  ok('  the title then stands over the column with them',
+     (doc.querySelector('.ai-h1') || {}).textContent === 'Tên bài dịch muộn.',
+     (doc.querySelector('.ai-h1') || {}).textContent);
+  ok('    and is kept, so the next visit does not ask even for that',
+     JSON.parse(a.store[AI_STORE]).r0.title === 'Tên bài dịch muộn.' &&
+     JSON.parse(a.store[AI_STORE]).r0.en === title,
+     JSON.stringify(JSON.parse(a.store[AI_STORE]).r0.title));
+
+  /* Most translations are seen again by opening the passage from the list
+     rather than from the menu, and in a later session at that — the pane is
+     built back out of the store, by a different door into the same room. A
+     heading still owing has to be fetched at both. */
+  const before = JSON.parse(a.store[AI_STORE]);
+  delete before.r0.title;
+  delete before.r0.en;
+  before.r0.shut = false;
+  const laterStore = Object.assign({}, a.store, { [AI_STORE]: JSON.stringify(before) });
+  const postsLater = [];
+  const later = page(laterStore, postsLater, (body) => ({ ok: true, by: 'Gemini',
+    paras: (body.paras || []).map(() => 'Tên bài dịch muộn.') }));
+  await wait(900);
+  click(later.window, later.doc.getElementById('tab-passages'));
+  await wait(40);
+  click(later.window, later.doc.querySelector('.hit'));
+  await wait(250);
+  const asked2 = postsLater.filter(p => p.body.action === 'aitranslate');
+  ok('a later visit that opens the passage fetches a heading still owing',
+     asked2.length === 1 && asked2[0].body.paras.length === 1,
+     asked2.length + ' asks, ' + JSON.stringify(asked2.map(x => x.body.paras)));
+  ok('  and stands it over the paragraphs that were already kept',
+     (later.doc.querySelector('.ai-h1') || {}).textContent === 'Tên bài dịch muộn.' &&
+     later.doc.querySelectorAll('.ai-para').length === paraCount,
+     (later.doc.querySelector('.ai-h1') || {}).textContent || 'no title');
+
   /* --- another passage does not keep the last one's translation ------------ */
   click(w, doc.getElementById('passage-ai'));   // gone with the pane
   await wait(50);
@@ -411,7 +496,7 @@ const openMenu = g => {
   const gridsPath = path.join(__dirname, 'grids.json');
   if (!fs.existsSync(gridsPath)) {
     ok('skipped the script side: no grids.json yet', true);
-    done(a.errs.concat(b.errs, c.errs));
+    done(a.errs.concat(b.errs, c.errs, later.errs));
     return;
   }
   const grids = JSON.parse(fs.readFileSync(gridsPath, 'utf8'));
@@ -488,5 +573,5 @@ const openMenu = g => {
   ok('with no key in the script it says which menu item sets one',
      bare.ok === false && /Key for the Vietnamese column/.test(bare.error), bare.error);
 
-  done(a.errs.concat(b.errs, c.errs));
+  done(a.errs.concat(b.errs, c.errs, later.errs));
 })();

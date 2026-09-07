@@ -70,5 +70,31 @@ async function open(g, word) {
   ok('which is the reason: under 760px the list is hidden by the open word',
      /@media \(max-width: 760px\)[\s\S]*body\[data-view="detail"\] \.list/.test(css));
 
+  /* Which is also why the passages keep their box in the bar on a phone. On a
+     wide window it moves into the list it filters, but a box inside a hidden
+     list cannot be typed into, and typing is what brings the list back. */
+  const box = g2 => g2.doc.getElementById('search');
+  click(g.window, g.doc.getElementById('tab-passages'));
+  await wait(40);
+  ok('on a phone the passages keep the box in the bar, where it can be reached',
+     box(g).parentNode.classList.contains('top') &&
+     !box(g).classList.contains('in-list'),
+     box(g).parentNode.className);
+
+  click(g.window, g.doc.querySelector('.hit'));
+  await wait(40);
+  type(g.window, g.doc.getElementById('q'), 'the');
+  await wait(40);
+  ok('  so a passage opened over the list can still be searched past',
+     view(g) === 'list' && g.doc.querySelectorAll('.hit').length > 0,
+     view(g) + ', ' + g.doc.querySelectorAll('.hit').length + ' rows');
+
+  click(wide.window, wide.doc.getElementById('tab-passages'));
+  await wait(40);
+  ok('  while a wide window puts it at the top of that list instead',
+     box(wide).parentNode.classList.contains('list') &&
+     box(wide).classList.contains('in-list'),
+     box(wide).parentNode.className);
+
   done(g.errs.concat(wide.errs));
 })();
