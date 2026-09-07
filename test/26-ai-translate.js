@@ -126,6 +126,18 @@ const openMenu = g => {
      (doc.querySelector('.ai-h1') || {}).textContent === 'Đoạn một.' &&
      doc.querySelector('.ai-body').firstChild.className === 'ai-h1',
      (doc.querySelector('.ai-h1') || {}).textContent);
+  ok('    set the same way as the English title it translates, by one rule', (() => {
+    const css = read('app.css');
+    /* One rule for both, so they cannot drift apart again — which is how the
+       English came to be 38px over half a column while this read as a caption
+       under it. */
+    const both = css.match(/\.ai-h1,\s*\.readsplit \.read h1 \{([^}]*)\}/);
+    if (!both) return false;
+    const solo = css.match(/(?<!split )\.read h1 \{([^}]*)\}/);
+    return /font-size: 22px/.test(both[1]) && /var\(--serif\)/.test(both[1]) &&
+      // and the passage read on its own keeps the big opening line
+      !!solo && /clamp\(/.test(solo[1]);
+  })(), 'one rule for both, and the single column keeps its own');
   ok('    and it is not one of the paragraphs, which are numbered against the English',
      doc.querySelectorAll('.ai-para').length === paras &&
      !doc.querySelector('.ai-h1').classList.contains('ai-para'),

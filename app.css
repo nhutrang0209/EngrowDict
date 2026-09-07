@@ -997,12 +997,23 @@ dialog::backdrop { background: rgba(8, 14, 11, .5); backdrop-filter: blur(2px); 
 /* The passage's name in Vietnamese, over the column it heads — the same serif
    as the English title but set smaller. It is a translation of a heading, not
    a second heading competing with the one beside it. */
-.ai-h1 {
-  font-family: var(--serif); font-size: 20px; font-weight: 600;
+/* The two titles are one title in two languages, so they are set once, here,
+   rather than in the two places they had drifted apart in: 38px against 20px,
+   one of them filling five lines of half a column while the other read as a
+   caption under it.
+
+   The English comes down to meet the Vietnamese rather than the other way
+   about. Beside a translation it is not a page-wide opening line any more — it
+   has half the room and the same words to put in it — and a size chosen for
+   the full measure is simply the wrong size here. Read on its own, with no
+   translation beside it, the passage keeps the big line it always had. */
+.ai-h1,
+.readsplit .read h1 {
+  font-family: var(--serif); font-size: 22px; font-weight: 600;
   line-height: 1.25; letter-spacing: -.014em;
   font-variation-settings: "opsz" 30; text-wrap: balance;
-  color: var(--ink); margin-bottom: 2px;
 }
+.ai-h1 { color: var(--ink); margin-bottom: 2px; }
 .ai-h1.waiting { color: var(--faint); }
 .ai-para .vi { font-size: 15.5px; line-height: 1.7; color: var(--ink-2); }
 .ai-para .vi.waiting { color: var(--faint); }
