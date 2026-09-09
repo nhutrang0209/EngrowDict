@@ -440,6 +440,7 @@ function nextGroup(sh) {
 
 var LINK_BLUE = '#1155cc';   // the blue the sheet already uses for headwords
 var TEXT_INK = '#1f1f1f';    // and its near-black for everything under them
+var EG_INK = '#741b47';      // dark magenta 2, the colour the examples are in
 var BORDER_INK = '#000000';
 
 /** Where the headword links to. Cambridge slugs are lowercase, hyphenated. */
@@ -478,7 +479,41 @@ function headRichText(fullText, word, url) {
  * Make the new rows look like every other entry: one merged cell for the head,
  * a dashed rule between senses, solid lines everywhere else.
  */
-function formatInserted(sh, at, n, entry, w) {
+/**
+ * A definition cell, with the examples under it set apart.
+ *
+ * An example is not the definition — it is the definition being used — and in
+ * one colour down the whole cell that is something you have to read to find
+ * out. The sheet has always set them in italic dark magenta by hand; a row
+ * written from the web page came out flat, and the two did not match.
+ *
+ * The lines are found by the mark insertEntry writes them with, so the two
+ * stay in step: change how an example is written and this stops claiming to
+ * have styled one.
+ */
+function defRichText(text) {
+  var plain = SpreadsheetApp.newTextStyle()
+    .setBold(false).setItalic(false).setUnderline(false)
+    .setForegroundColor(TEXT_INK).build();
+  var shown = SpreadsheetApp.newTextStyle()
+    .setBold(false).setItalic(true).setUnderline(false)
+    .setForegroundColor(EG_INK).build();
+
+  var b = SpreadsheetApp.newRichTextValue().setText(text);
+  if (!text.length) return b.build();
+  b = b.setTextStyle(0, text.length, plain);
+
+  var lines = text.split('\n');
+  var at = 0;
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i];
+    if (/^\s*- \S/.test(line)) b = b.setTextStyle(at, at + line.length, shown);
+    at += line.length + 1;              // the newline split took out
+  }
+  return b.build();
+}
+
+function formatInserted(sh, at, n, entry, w, rows) {
   var headWide = (entry.type === 'phrasal' || entry.type === 'compare') ? 2 : 1;
 
   if (n > 1) {
@@ -499,6 +534,19 @@ function formatInserted(sh, at, n, entry, w) {
     var text = headCell(entry);
     sh.getRange(at, 1).setRichTextValue(
       headRichText(text, txt(entry.word), cambridgeUrl(entry.word)));
+  }
+
+  /* The examples under each definition. Only the cells that have one is
+     touched: a definition on its own is plain text and stays plain text,
+     rather than being rewritten as rich text that says the same thing. */
+  var defCol = headWide + 1;
+  if (rows && w >= defCol) {
+    for (var r = 0; r < rows.length; r++) {
+      var body = txt(rows[r][defCol - 1]);
+      if (body.indexOf('\n') > -1) {
+        sh.getRange(at + r, defCol).setRichTextValue(defRichText(body));
+      }
+    }
   }
 
   // outline and the column rules stay solid
@@ -609,7 +657,7 @@ function insertEntry(entry) {
   // The words matter more than the styling, so a formatting failure is
   // reported rather than allowed to throw the whole insert away.
   try {
-    formatInserted(sh, at, trimmed.length, entry, w);
+    formatInserted(sh, at, trimmed.length, entry, w, trimmed);
   } catch (err) {
     return { ok: true, sheet: tab.sheet, row: at, rows: trimmed.length,
              warning: 'Added, but the formatting did not apply: ' + String(err) };

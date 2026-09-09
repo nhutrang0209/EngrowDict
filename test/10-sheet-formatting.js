@@ -28,6 +28,55 @@ const mark = () => ({
   rich: vocab.log.rich.length,
 });
 
+/* --- the examples under a definition --------------------------------------
+   An example is not the definition, it is the definition being used, and one
+   colour down the whole cell makes that something you have to read to find
+   out. The sheet has always set them in italic dark magenta by hand; a row
+   written from the web page came out flat and the two did not match. */
+{
+  const m0 = mark();
+  const r0 = call({
+    type: 'word', word: 'quixotry', pos: 'n', ipa: '', note: '',
+    senses: [
+      { def: 'a quixotic action or idea',
+        eg: ['A fine piece of quixotry.', 'Quixotry, and no mistake.'], vi: 'hành vi viển vông' },
+      { def: 'a sense with nothing under it', eg: [], vi: 'nghĩa trơ trọi' },
+    ],
+  });
+  ok('a word with examples is inserted', r0.ok, JSON.stringify(r0));
+  const g0 = since(m0);
+  const defCells = g0.rich.filter(x => x.at.col === 2);
+  ok('the definition cell that has examples is written as rich text',
+     defCells.length === 1, defCells.length + ' definition cells restyled');
+  ok('  and the one with none is left as plain text, not rewritten to say the same',
+     g0.rich.length === 2, g0.rich.length + ' cells in all, head included');
+
+  const d = defCells[0].value;
+  const lines = d.text.split(String.fromCharCode(10));
+  ok('  the cell holds the definition and both examples',
+     lines.length === 3 && lines[0] === 'a quixotic action or idea',
+     JSON.stringify(lines));
+  ok('  reset to plain down its whole length first',
+     d.styles[0].from === 0 && d.styles[0].to === d.text.length &&
+     d.styles[0].style.italic === false && d.styles[0].style.color === '#1f1f1f',
+     JSON.stringify(d.styles[0].style));
+
+  const marked = d.styles.slice(1);
+  ok('  every example line styled, and only those',
+     marked.length === 2 &&
+     marked.every(x => /^\s*- /.test(d.text.slice(x.from, x.to))) &&
+     marked.every(x => d.text.slice(x.from, x.to).indexOf('quixotic action') < 0),
+     marked.map(x => JSON.stringify(d.text.slice(x.from, x.to))).join(' | '));
+  ok('    in italic, in the dark magenta the sheet uses',
+     marked.every(x => x.style.italic === true && x.style.color === '#741b47' &&
+                       x.style.bold === false),
+     JSON.stringify(marked[0] && marked[0].style));
+  ok('    each one whole, to the end of its own line and no further',
+     marked.every(x => d.text.slice(x.from, x.to).indexOf(String.fromCharCode(10)) < 0) &&
+     d.text.slice(marked[1].from, marked[1].to) === '   - Quixotry, and no mistake.',
+     JSON.stringify(d.text.slice(marked[1].from, marked[1].to)));
+}
+
 /* --- one sense ---------------------------------------------------------- */
 let m = mark();
 let res = call({
