@@ -29,6 +29,7 @@ function scrollTo(g, y) {
 const bar = g => g.doc.querySelector('.top');
 const lift = g => bar(g).style.transform;
 const settling = g => bar(g).classList.contains('settling');
+const barOff = g => g.doc.getElementById('app').style.getPropertyValue('--bar-off');
 
 async function openPassage(g) {
   click(g.window, g.doc.getElementById('tab-passages'));
@@ -79,6 +80,33 @@ async function openPassage(g) {
   await wait(200);
   ok('  the other short way when that is the short way',
      lift(g) === '' && settling(g) === true, JSON.stringify(lift(g)));
+
+  /* --- what is pinned under the bar goes with it ---------------------------
+     The passage's own button sits a bar's height down so as not to hide under
+     it. Held at that height while the bar slid away, it was pinned to where
+     the bar used to be: a button hanging in the middle of the prose with
+     nothing above it. The stylesheet cannot see how far the bar has gone, so
+     it is told. */
+  scrollTo(g, 400);
+  ok('the button pinned below the bar is told how far the bar has gone',
+     barOff(g) === '100px' && lift(g) === 'translateY(-100px)',
+     barOff(g) + ' against ' + lift(g));
+  scrollTo(g, 600);
+  ok('  all the way, and no further than the bar itself goes',
+     barOff(g) === BAR + 'px' && lift(g) === 'translateY(-' + BAR + 'px)',
+     barOff(g) + ' against ' + lift(g));
+  ok('  which the stylesheet takes off the height it was holding',
+     /\.read \.entry-nav \{ top: calc\(var\(--bar-h[^)]*\) - var\(--bar-off[^)]*\)/
+       .test(read('app.css')),
+     'top follows the bar');
+
+  scrollTo(g, 300);
+  await wait(200);
+  ok('  and comes back down with it', barOff(g) === '0px', barOff(g));
+  ok('    travelling over the same 180ms the bar settles in',
+     /\.top\.settling ~ \.work \.read \.entry-nav \{ transition: top \.18s/
+       .test(read('app.css')),
+     'settles together');
 
   scrollTo(g, 40);
   ok('the top of the passage always has it', lift(g) === '', JSON.stringify(lift(g)));

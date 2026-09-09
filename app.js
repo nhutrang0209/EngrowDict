@@ -1295,6 +1295,12 @@
     barOff = px;
     bar.classList.toggle("settling", !!settling);
     bar.style.transform = px ? "translateY(-" + px + "px)" : "";
+    /* How far the bar has gone, for the things pinned below it. The passage's
+       own button sits a bar's height down so as not to hide under it; when the
+       bar leaves, that height is a gap with nothing above it, and the button
+       reads as having drifted into the middle of the prose. */
+    var app = document.getElementById("app");
+    if (app) app.style.setProperty("--bar-off", px + "px");
   }
 
   function showTop() {

@@ -1356,7 +1356,13 @@ a.btn[hidden] { display: none; }
   }
   /* Reading: the passage starts below the bar and carries on underneath it. */
   body[data-view="detail"] .detail-inner { padding-top: calc(26px + var(--bar-h, 132px)); }
-  .read .entry-nav { top: calc(var(--bar-h, 132px) + 8px); }
+  /* Pinned under the bar, and the bar slides away as you read down. Held at
+     the bar's full height it would be pinned to where the bar used to be —
+     a button hanging in the middle of the prose with nothing above it. It
+     follows the bar up instead, and comes to rest 8px from the top. */
+  .read .entry-nav { top: calc(var(--bar-h, 132px) - var(--bar-off, 0px) + 8px); }
+  /* and travels with it over the 180ms the bar takes to settle */
+  .top.settling ~ .work .read .entry-nav { transition: top .18s ease-out; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2843,6 +2849,12 @@ a.btn[hidden] { display: none; }
     barOff = px;
     bar.classList.toggle("settling", !!settling);
     bar.style.transform = px ? "translateY(-" + px + "px)" : "";
+    /* How far the bar has gone, for the things pinned below it. The passage's
+       own button sits a bar's height down so as not to hide under it; when the
+       bar leaves, that height is a gap with nothing above it, and the button
+       reads as having drifted into the middle of the prose. */
+    var app = document.getElementById("app");
+    if (app) app.style.setProperty("--bar-off", px + "px");
   }
 
   function showTop() {
