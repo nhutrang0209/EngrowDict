@@ -2008,17 +2008,21 @@
      to have more money…". The sheet sets that lead-in apart, so the page does
      too. A colon this early is always a lead-in in this data, never a sentence
      break. */
-  function defNode(text) {
-    var p = el("p", "def");
-    var i = text.indexOf(":");
+  /* The lead-in, set apart, into whatever is holding the definition. A
+     paragraph in an entry, an <em> under a Vietnamese gloss on the card that
+     opens over a selection — the same words either way, so the same mark. */
+  function defInto(host, text) {
+    var i = String(text || "").indexOf(":");
     if (i > 0 && i <= 70 && (text.charAt(i + 1) === " " || i === text.length - 1)) {
-      p.appendChild(el("b", "term", text.slice(0, i)));
-      p.appendChild(document.createTextNode(text.slice(i)));
+      host.appendChild(el("b", "term", text.slice(0, i)));
+      host.appendChild(document.createTextNode(text.slice(i)));
     } else {
-      p.textContent = text;
+      host.textContent = text;
     }
-    return p;
+    return host;
   }
+
+  function defNode(text) { return defInto(el("p", "def"), text); }
 
   /* Related entries: the mixed-up group, the same phrasal verb, or same root. */
   function relatedOf(e) {
@@ -4129,8 +4133,12 @@
          so the headword and Open entry stay where they are. */
       var box = el("div", "glosses senses");
       found.senses.forEach(function (s) {
-        var g = el("div", "g", s.vi || s.def);
-        if (s.vi && s.def) g.appendChild(el("em", null, s.def));
+        var g = defInto(el("div", "g"), s.vi || s.def);
+        /* The English under the Vietnamese carries the lead-in — "fair
+           enough: something you say…" — and it is marked here the way it is
+           marked in the entry itself. Read twice in two places, it should not
+           be two different things to look at. */
+        if (s.vi && s.def) g.appendChild(defInto(el("em"), s.def));
         box.appendChild(g);
       });
       lookupCard.appendChild(box);

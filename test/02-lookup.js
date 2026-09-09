@@ -58,8 +58,14 @@ const { read, boot, ok, done, wait, click, type, btn } = require('./helpers');
   ok('  and the rest of the definition is left alone',
      (doc.querySelector('.def')?.textContent || '').startsWith('be better off: to have more money'),
      doc.querySelector('.def')?.textContent?.slice(0, 52));
-  ok('  in the ochre the sheet uses', /\.def \.term \{[^}]*var\(--term\)/.test(read('app.css')) &&
-     /--term:\s*#bf9000/.test(read('app.css')));
+  /* The mark is one rule now, asking nothing about what is holding the
+     definition: the card that opens over a selection sets its definitions in
+     an <em>, and a rule written for a paragraph went unseen there. */
+  ok('  in the ochre the sheet uses', (() => {
+    const sheet = read('app.css').replace(/\/\*[\s\S]*?\*\//g, '');
+    return sheet.includes('.term { font-weight: 600; color: var(--term); }') &&
+      /--term:\s*#bf9000/.test(sheet);
+  })(), 'one rule, wherever the definition is read');
   ok('  every sense that has one gets it',
      doc.querySelectorAll('.def .term').length >= 3,
      doc.querySelectorAll('.def .term').length + ' of ' +

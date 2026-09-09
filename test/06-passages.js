@@ -224,6 +224,33 @@ ok('the shell itself stays light', shell.replace(/\r\n/g, '\n').length < 345000,
   ok('  and the Vietnamese meaning',
      (card().querySelector('.g')?.textContent || '').includes('đỉnh'),
      card().querySelector('.g')?.textContent);
+  /* --- the lead-in is marked here as it is in the entry --------------------
+     Many definitions open with the exact form being defined — "be taken
+     aback: to be very shocked". The entry sets that apart in ochre; the card
+     used to run it in with the rest, because it sets its definitions in an
+     <em> and the rule was written for a paragraph only. The word is taken
+     from the data rather than named here: the sheet is edited. */
+  const leadIn = data.entries.find(e => e.senses.some(
+    x => x.vi && x.def && /^[^:]{1,60}: /.test(x.def)));
+  const sense = leadIn.senses.find(x => x.vi && x.def && /^[^:]{1,60}: /.test(x.def));
+  await selectText(leadIn.word);
+  const marked = [...card().querySelectorAll('.g em .term')]
+    .map(n => n.textContent);
+  ok('the lead-in a definition opens with is set apart on the card too',
+     marked.includes(sense.def.split(':')[0]),
+     JSON.stringify(marked.slice(0, 3)) + ' — wanted ' +
+       JSON.stringify(sense.def.split(':')[0]));
+  ok('  in the ochre the entry uses, by a rule that does not ask where it is', (() => {
+    // comments stripped: the one above the rule quotes the selector it replaced
+    const sheet = read('app.css').replace(/\/\*[\s\S]*?\*\//g, '');
+    return sheet.includes('.term { font-weight: 600; color: var(--term); }') &&
+      !sheet.includes('.def .term');
+  })(), 'one rule for the mark, wherever it is read');
+  ok('  and the definition is still whole, lead-in and all',
+     (card().querySelector('.g em')?.textContent || '') === sense.def,
+     card().querySelector('.g em')?.textContent);
+
+  await selectText('zenith');
   ok('  offering a jump to the full entry', !!btn(doc, '#lookup .btn', 'Open entry'));
   ok('  and a speaker, since a word is a word wherever it is read',
      !!card().querySelector('.picked .say') &&
