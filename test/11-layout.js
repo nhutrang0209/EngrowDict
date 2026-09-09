@@ -99,6 +99,31 @@ const mk = store => boot({
   /* jsdom lays nothing out, so the grid is checked by arithmetic instead: a
      track count that does not match the number of children still in the flow
      silently drops the last one into a zero-width column. */
+  /* --- a phone keeps no column for a rail it is not showing ---------------
+     A media query says when a rule applies and adds nothing to how specific it
+     is, so `body[data-list="off"] .work` (a class and an attribute) outranks
+     the bare `.work` inside the narrow block at every width. Fold the list
+     away, open a passage, narrow the window, and the grid still held a first
+     column the width of the navigation rail — which is hidden there, so the
+     passage was dealt those 46 pixels and the rest of the screen was empty
+     track beside it. */
+  // comments stripped first: this one quotes the very selector it is about
+  const sheet = read('app.css').replace(/\/\*[\s\S]*?\*\//g, '');
+  const phone = sheet.slice(sheet.indexOf('@media (max-width: 760px)'));
+  const collapsed = (sel) => {
+    const at = phone.indexOf(sel);
+    return at > -1 && /grid-template-columns: 1fr/.test(phone.slice(at, at + 200));
+  };
+  ok('the states that set their own columns are collapsed on a phone as well',
+     collapsed('body[data-list="off"] .work') &&
+     collapsed('body[data-solo="on"] .work'),
+     'both restated where they would otherwise outrank the narrow rule');
+  ok('  and every such state is accounted for, not just the two known today',
+     [...sheet.matchAll(/(body\[data-[a-z]+="[^"]+"\] \.work) \{[^}]*grid-template-columns/g)]
+       .every(m => collapsed(m[1])),
+     [...sheet.matchAll(/(body\[data-[a-z]+="[^"]+"\] \.work) \{[^}]*grid-template-columns/g)]
+       .map(m => m[1]).join(', '));
+
   const css = read('app.css');
   function tracks(after) {
     const i = css.indexOf(after);

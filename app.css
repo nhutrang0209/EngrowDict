@@ -1269,6 +1269,18 @@ a.btn[hidden] { display: none; }
   /* A rail down the side of a phone is width nobody has. It lies back down as
      a strip, with the names on it: there is no hovering for a tooltip here. */
   .work { grid-template-columns: 1fr; grid-template-rows: auto auto 1fr; }
+  /* Restated for the two states that set columns of their own, or the single
+     column above loses to them: a media query says when a rule applies and
+     adds nothing to how specific it is, so `body[data-list="off"] .work`
+     outranks a bare `.work` at every width there is.
+
+     What that cost: fold the list away, open a passage, narrow the window, and
+     the grid went on holding a first column the width of a navigation rail
+     that is hidden here. The passage was dealt those 46 pixels — the hint box
+     came out as a green thread, the paragraph letter had a scrollbar of its
+     own — and the rest of the screen was the empty tracks beside it. */
+  body[data-list="off"] .work,
+  body[data-solo="on"] .work { grid-template-columns: 1fr; }
   .nav {
     flex-direction: row; gap: 4px; padding: 6px 8px; overflow-x: auto;
     border-right: 0; border-bottom: 1px solid var(--rule); scrollbar-width: none;
