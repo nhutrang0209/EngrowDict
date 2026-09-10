@@ -22,6 +22,7 @@ ol, ul { padding: 0; list-style: none; }
   --accent-hi:   #0a5540;
   --accent-soft: #dff0e6;
   --accent-line: #0d6b4f;
+  --mark:        #d0342c;   /* the dot you leave where you stopped reading */
   --lit:         #a5dfc2;   /* the wash behind the sentence being looked at */
   --lit-ink:     #0c2a1e;
   --flag:        #b04a2b;
@@ -59,6 +60,7 @@ ol, ul { padding: 0; list-style: none; }
     --accent-hi:   #7cdcb6;
     --accent-soft: #163126;
     --accent-line: #52c396;
+    --mark:        #ff7a6e;
     --lit:         #2c6a4e;
     --lit-ink:     #eaf6f0;
     --flag:        #e0906f;
@@ -86,6 +88,7 @@ ol, ul { padding: 0; list-style: none; }
   --accent-hi:   #7cdcb6;
   --accent-soft: #163126;
   --accent-line: #52c396;
+  --mark:        #ff7a6e;
   --lit:         #2c6a4e;
   --lit-ink:     #eaf6f0;
   --flag:        #e0906f;
@@ -1021,6 +1024,22 @@ dialog::backdrop { background: rgba(8, 14, 11, .5); backdrop-filter: blur(2px); 
 .ai-h1.waiting { color: var(--faint); }
 .ai-para .vi { font-size: 15.5px; line-height: 1.7; color: var(--ink-2); }
 .ai-para .vi.waiting { color: var(--faint); }
+
+/* The mark a reader leaves where they stopped. One to a passage: a second
+   would make it a highlighter, and the question it answers is where you got
+   to. Small enough to sit between two words without pushing them apart, and
+   the only red on the page, so it is found without being looked for. */
+.readmark {
+  display: inline-block; width: .46em; height: .46em; border-radius: 50%;
+  background: var(--mark); vertical-align: .1em; margin: 0 .2em;
+  cursor: pointer; flex: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mark) 18%, transparent);
+  transition: box-shadow .14s ease, transform .14s ease;
+}
+.readmark:hover, .readmark:focus-visible {
+  outline: none; transform: scale(1.15);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--mark) 26%, transparent);
+}
 
 /* What has been picked out on the English side, picked out here too — by the
    sentence, so a phrase does not light the whole paragraph it sits in. A wash

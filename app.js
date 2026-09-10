@@ -2056,6 +2056,125 @@
     return out;
   }
 
+  /* ---- the mark you leave where you stopped -------------------------------
+
+     The place a passage is kept at is where the pane was scrolled to, which is
+     the machine remembering for you. This is the other thing: a reader putting
+     a finger on a line and saying, that one. It is not where the screen was —
+     it is where you were.
+
+     One to a passage, because that is what it is for. Leaving a second would
+     make it a highlighter, and the question it answers is where you stopped.
+
+     Placed by double-clicking, which is the gesture for putting something at a
+     word and costs the bar no button — the passage menu would have done, but
+     that menu belongs to whoever may edit the passage, and stopping to read is
+     not an editor's business. */
+  var MARK_KEY = "engrowdict:mark:v1";
+  var marks = null, justMarked = false;
+
+  function readMarks() {
+    if (marks) return marks;
+    try { marks = JSON.parse(localStorage.getItem(MARK_KEY) || "{}"); }
+    catch (err) { marks = {}; }
+    if (!marks || typeof marks !== "object") marks = {};
+    return marks;
+  }
+
+  function markOf(id) {
+    var got = id ? readMarks()[id] : null;
+    return (got && typeof got.p === "number") ? got : null;
+  }
+
+  function keepMark(id, at) {
+    var all = readMarks();
+    if (at) all[id] = at; else delete all[id];
+    try { localStorage.setItem(MARK_KEY, JSON.stringify(all)); }
+    catch (err) { /* private mode: the mark lasts as long as the page does */ }
+  }
+
+  function markDot() {
+    var d = el("span", "readmark");
+    d.setAttribute("role", "button");
+    d.tabIndex = 0;
+    d.title = "You read to here. Click to take it off.";
+    d.setAttribute("aria-label", "The mark you left. Click to take it off.");
+    d.addEventListener("click", function (ev) {
+      ev.stopPropagation();
+      dropMark();
+    });
+    d.addEventListener("keydown", function (ev) {
+      if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); dropMark(); }
+    });
+    return d;
+  }
+
+  /* Into a paragraph at a character of its own text, past the A/B/C label,
+     splitting whatever text node the count lands inside. */
+  function markInto(para, at, node) {
+    var label = para.querySelector && para.querySelector(".pmark");
+    var walk = document.createTreeWalker(para, 4);   // NodeFilter.SHOW_TEXT
+    var seen = 0, t;
+    while ((t = walk.nextNode())) {
+      if (label && label.contains(t)) continue;
+      var len = t.textContent.length;
+      if (seen + len >= at) {
+        var into = at - seen;
+        if (into <= 0) t.parentNode.insertBefore(node, t);
+        else if (into >= len) t.parentNode.insertBefore(node, t.nextSibling);
+        else t.parentNode.insertBefore(node, t.splitText(into));
+        return;
+      }
+      seen += len;
+    }
+    para.appendChild(node);                          // past the end of the text
+  }
+
+  /* Taken off and put on again wherever it belongs. Redrawing the passage
+     would do it as well and would put the reader back at the top of it. */
+  function paintMark(prose) {
+    if (!prose) return;
+    var old = prose.querySelector(".readmark");
+    if (old) {
+      var host = old.parentNode;
+      host.removeChild(old);
+      host.normalize();            // the two halves of the split text, rejoined
+    }
+    var at = markOf(selectedRead && selectedRead.id);
+    if (!at) return;
+    var para = prose.children[at.p];
+    if (para) markInto(para, Math.max(0, at.at), markDot());
+  }
+
+  function dropMark() {
+    if (!selectedRead) return;
+    keepMark(selectedRead.id, null);
+    paintMark(document.querySelector(".detail .prose"));
+  }
+
+  /* Where the double-click landed, as a paragraph and a count of characters
+     into it — the same anchor the reading place uses, and steady for the same
+     reason: it is the text, not the height of it. */
+  function markAtClick() {
+    var prose = document.querySelector(".detail .prose");
+    if (!prose || !selectedRead) return;
+    var sel = window.getSelection && window.getSelection();
+    if (!sel || !sel.rangeCount) return;
+    var range = sel.getRangeAt(0);
+    var paras = prose.children;
+    var p = proseIndex(range.startContainer, paras);
+    if (p < 0) return;
+    var into = offsetIn(paras[p], range.startContainer, range.startOffset);
+    if (into < 0) return;
+
+    justMarked = true;             // the card this click would have opened
+    sel.removeAllRanges();
+    hideLookup();
+    dimAiParas();
+    keepMark(selectedRead.id, { p: p, at: into });
+    paintMark(prose);
+  }
+
   function readingView(r, lead) {
     var w = el("div", "read");
     /* Beside a translation the button sits in a header of its own, the twin of
@@ -2075,12 +2194,16 @@
     var words = r._text.split(/\s+/).length;
     w.appendChild(el("p", "meta",
       (lead || "Passage " + r.index) + " · " + fmt(words) + " words"));
-    w.appendChild(el("p", "hint",
-      "Select any word or phrase to see what the notebook has on it — English to Vietnamese."));
+    var hint = el("p", "hint",
+      "Select any word or phrase to see what the notebook has on it — English "
+      + "to Vietnamese. Double-click a word to mark where you stopped.");
+    w.appendChild(hint);
     var prose = el("div", "prose");
     r.paras.forEach(function (x) { prose.appendChild(proseNode(x)); });
     prose.addEventListener("mouseup", onSelectInProse);
     prose.addEventListener("touchend", onSelectInProse);
+    prose.addEventListener("dblclick", markAtClick);
+    paintMark(prose);
     w.appendChild(prose);
     return w;
   }
@@ -4036,6 +4159,9 @@
   function onSelectInProse() {
     // let the browser settle the selection first
     setTimeout(function () {
+      /* A double-click has just put the mark where this click landed; the
+         card it would otherwise open is not what was being asked for. */
+      if (justMarked) { justMarked = false; return; }
       var sel = window.getSelection && window.getSelection();
       if (!sel || sel.isCollapsed) { hideLookup(); dimAiParas(); return; }
       var range = null;

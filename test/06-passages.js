@@ -36,7 +36,7 @@ ok('  and the same entries as the published data',
    close enough that the next comment written would have tripped it — and a
    budget met by writing fewer comments buys nobody a faster page. What it is
    for is noticing the day something large gets pasted in. */
-ok('the shell itself stays light', shell.replace(/\r\n/g, '\n').length < 345000,
+ok('the shell itself stays light', shell.replace(/\r\n/g, '\n').length < 352000,
    Math.round(shell.length / 1024) + ' KB');
 
 /* --- and they work in the page ------------------------------------------ */
