@@ -1036,6 +1036,27 @@ dialog::backdrop { background: rgba(8, 14, 11, .5); backdrop-filter: blur(2px); 
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--mark) 18%, transparent);
   transition: box-shadow .14s ease, transform .14s ease;
 }
+/* The button that leaves it, in the card that opens over a selection. It is
+   the dot itself, in the chrome the speaker beside it wears, so what it will
+   do needs no words — and the word it will mark is the word the card is open
+   on, which is already on screen above it. */
+.markbtn {
+  align-self: center; flex: none; cursor: pointer; padding: 0;
+  width: 24px; height: 24px; border-radius: 999px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--rule); background: var(--surface);
+  box-shadow: var(--lift-1);
+  transition: border-color .12s ease, background .12s ease, transform .12s ease;
+}
+.markbtn::before {
+  content: ""; width: 9px; height: 9px; border-radius: 50%;
+  background: var(--mark);
+}
+.markbtn:hover, .markbtn:focus-visible {
+  outline: none; border-color: var(--mark); background: var(--tint);
+  transform: scale(1.08);
+}
+
 .readmark:hover, .readmark:focus-visible {
   outline: none; transform: scale(1.15);
   box-shadow: 0 0 0 5px color-mix(in srgb, var(--mark) 26%, transparent);

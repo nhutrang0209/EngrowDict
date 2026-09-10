@@ -5,9 +5,12 @@
    and saying, that one. One to a passage — a second would make it a
    highlighter, and the question it answers is where you got to.
 
-   Placed by double-clicking, which costs the bar no button. The passage menu
-   would have done, but that menu belongs to whoever may edit the passage, and
-   stopping to read is not an editor's business. */
+   Placed from the card that opens over a selection. It was a double-click
+   first, and a double-click cannot be told from the selection it makes: the
+   browser dispatches dblclick after the mouseup that opened the card, so by
+   the time the click could say "not that, this" the card was already up. The
+   card is the better place anyway — it is open on the word, it knows where
+   the word is, and a button in it is something a reader can see. */
 const { read, boot, ok, done, wait, click } = require('./helpers');
 
 const shell = read('docs/index.html');
@@ -22,19 +25,28 @@ const mk = store => boot({
 const paras = g => [...g.doc.querySelectorAll('.detail .prose > *')];
 const dots = g => g.doc.querySelectorAll('.readmark').length;
 
-/* A double-click at a character of a paragraph: the caret the browser leaves
-   at the start of the word it selects, then the event itself. */
-function markAt(g, i, off) {
+/* Select a word the way a reader does — a double-click is one way, and it is
+   the selection it leaves that opens the card — then press the dot in it. */
+function selectIn(g, i, from, to) {
   const para = paras(g)[i];
-  const text = [...para.childNodes].find(n => n.nodeType === 3 && n.textContent.length > off + 2);
+  const text = [...para.childNodes]
+    .find(n => n.nodeType === 3 && n.textContent.length > to + 2);
   const r = g.doc.createRange();
-  r.setStart(text, off);
-  r.setEnd(text, off);
+  r.setStart(text, from);
+  r.setEnd(text, to);
   g.window.getSelection().removeAllRanges();
   g.window.getSelection().addRange(r);
   para.dispatchEvent(new g.window.Event('mouseup', { bubbles: true }));
-  para.dispatchEvent(new g.window.Event('dblclick', { bubbles: true }));
   return para;
+}
+
+const markBtn = g => g.doc.getElementById('mark-here');
+
+async function markIn(g, i, from, to) {
+  selectIn(g, i, from, to);
+  await wait(60);
+  click(g.window, markBtn(g));
+  await wait(40);
 }
 
 async function openFirstPassage(g) {
@@ -53,9 +65,21 @@ async function openFirstPassage(g) {
   ok('  and it starts with no mark in it', dots(a) === 0, String(dots(a)));
 
   const before = paras(a)[1].textContent;
-  markAt(a, 1, 20);
+  selectIn(a, 1, 20, 25);
+  await wait(60);
+  ok('selecting a word offers a dot in the card, beside the speaker',
+     !!markBtn(a) && markBtn(a).parentNode.classList.contains('picked'),
+     markBtn(a) ? markBtn(a).parentNode.className : 'no button');
+  ok('  saying what it will do when it is held',
+     /how far you have read/.test(markBtn(a).title) &&
+     markBtn(a).getAttribute('aria-label') === markBtn(a).title,
+     markBtn(a).title);
+
+  click(a.window, markBtn(a));
   await wait(40);
-  ok('double-clicking leaves a mark where the click landed', dots(a) === 1, String(dots(a)));
+  ok('pressing it leaves the mark at that word', dots(a) === 1, String(dots(a)));
+  ok('  and puts the card away, since that is the whole of the errand',
+     a.doc.getElementById('lookup').hidden, 'card closed');
   ok('  kept under the id of the passage it is in',
      JSON.stringify(JSON.parse(store[MARK_KEY] || '{}').r0) === '{"p":1,"at":20}',
      store[MARK_KEY]);
@@ -66,16 +90,9 @@ async function openFirstPassage(g) {
      paras(a)[1].textContent === before,
      JSON.stringify(paras(a)[1].textContent.slice(0, 40)));
 
-  /* The double-click selects the word under it, and a selection is what opens
-     the card that looks a word up. That is not what was being asked for. */
-  ok('  without the lookup card opening on the selection it made',
-     !a.doc.getElementById('lookup') || a.doc.getElementById('lookup').hidden,
-     'card stayed shut');
-
-  markAt(a, 2, 5);
-  await wait(40);
-  ok('a second double-click moves it rather than leaving two', dots(a) === 1, String(dots(a)));
-  ok('  to the paragraph clicked this time',
+  await markIn(a, 2, 5, 10);
+  ok('marking again moves it rather than leaving two', dots(a) === 1, String(dots(a)));
+  ok('  to the paragraph marked this time',
      paras(a)[2].querySelectorAll('.readmark').length === 1 &&
      paras(a)[1].querySelectorAll('.readmark').length === 0,
      JSON.parse(store[MARK_KEY]).r0 && JSON.stringify(JSON.parse(store[MARK_KEY]).r0));
@@ -118,13 +135,16 @@ async function openFirstPassage(g) {
 
   ok('the passage says how to leave one', (() => {
     const hint = b.doc.querySelector('.read .hint');
-    return !!hint && /[Dd]ouble-click/.test(hint.textContent);
+    return !!hint && /red dot/.test(hint.textContent);
   })(), (b.doc.querySelector('.read .hint') || {}).textContent);
 
   ok('the dot is red, and its own colour in either theme',
      (read('app.css').match(/--mark:/g) || []).length === 3 &&
      /\.readmark \{[^}]*background: var\(--mark\)/.test(read('app.css')),
      'a colour of its own');
+  ok('  and the button wears the same dot it will leave',
+     /\.markbtn::before \{[^}]*background: var\(--mark\)/.test(read('app.css')),
+     'the button carries the dot');
 
   done(a.errs.concat(b.errs));
 })();

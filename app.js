@@ -2066,12 +2066,20 @@
      One to a passage, because that is what it is for. Leaving a second would
      make it a highlighter, and the question it answers is where you stopped.
 
-     Placed by double-clicking, which is the gesture for putting something at a
-     word and costs the bar no button — the passage menu would have done, but
-     that menu belongs to whoever may edit the passage, and stopping to read is
-     not an editor's business. */
+     Placed from the card that opens over a selection. It was a double-click
+     first, and a double-click cannot be told from the selection it makes: the
+     browser dispatches dblclick after the mouseup that opened the card, so by
+     the time the click could say "not that, this" the card was already up.
+
+     The card is the better place anyway. It is already open on the word, it
+     already knows where the word is, and a button in it is something a reader
+     can see — which a double-click was never going to be. */
   var MARK_KEY = "engrowdict:mark:v1";
-  var marks = null, justMarked = false;
+  var marks = null;
+  /* Where the last selection began, as a paragraph and a count of characters
+     into it, for the button in the card to place the dot at. Null whenever the
+     selection was not in a passage — the Translate tab shares this card. */
+  var markSpot = null;
 
   function readMarks() {
     if (marks) return marks;
@@ -2152,27 +2160,36 @@
     paintMark(document.querySelector(".detail .prose"));
   }
 
-  /* Where the double-click landed, as a paragraph and a count of characters
-     into it — the same anchor the reading place uses, and steady for the same
-     reason: it is the text, not the height of it. */
-  function markAtClick() {
+  /* A point in the passage, as a paragraph and a count of characters into it
+     — the same anchor the reading place uses, and steady for the same reason:
+     it is the text, not the height of it. */
+  function spotOf(range) {
+    if (!range || view !== "read" || !selectedRead) return null;
     var prose = document.querySelector(".detail .prose");
-    if (!prose || !selectedRead) return;
-    var sel = window.getSelection && window.getSelection();
-    if (!sel || !sel.rangeCount) return;
-    var range = sel.getRangeAt(0);
-    var paras = prose.children;
-    var p = proseIndex(range.startContainer, paras);
-    if (p < 0) return;
-    var into = offsetIn(paras[p], range.startContainer, range.startOffset);
-    if (into < 0) return;
+    if (!prose) return null;
+    var p = proseIndex(range.startContainer, prose.children);
+    if (p < 0) return null;
+    var at = offsetIn(prose.children[p], range.startContainer, range.startOffset);
+    return at < 0 ? null : { p: p, at: at };
+  }
 
-    justMarked = true;             // the card this click would have opened
-    sel.removeAllRanges();
-    hideLookup();
-    dimAiParas();
-    keepMark(selectedRead.id, { p: p, at: into });
-    paintMark(prose);
+  /* It carries the dot it will leave, so there is nothing to explain. */
+  function markButton(spot) {
+    var b = el("button", "markbtn");
+    b.type = "button";
+    b.id = "mark-here";
+    b.title = "Mark how far you have read";
+    b.setAttribute("aria-label", "Mark how far you have read");
+    b.addEventListener("click", function () {
+      if (!selectedRead) return;
+      keepMark(selectedRead.id, spot);
+      hideLookup();
+      var sel = window.getSelection && window.getSelection();
+      if (sel) sel.removeAllRanges();
+      dimAiParas();
+      paintMark(document.querySelector(".detail .prose"));
+    });
+    return b;
   }
 
   function readingView(r, lead) {
@@ -2196,13 +2213,12 @@
       (lead || "Passage " + r.index) + " · " + fmt(words) + " words"));
     var hint = el("p", "hint",
       "Select any word or phrase to see what the notebook has on it — English "
-      + "to Vietnamese. Double-click a word to mark where you stopped.");
+      + "to Vietnamese, and the red dot in that card marks how far you have read.");
     w.appendChild(hint);
     var prose = el("div", "prose");
     r.paras.forEach(function (x) { prose.appendChild(proseNode(x)); });
     prose.addEventListener("mouseup", onSelectInProse);
     prose.addEventListener("touchend", onSelectInProse);
-    prose.addEventListener("dblclick", markAtClick);
     paintMark(prose);
     w.appendChild(prose);
     return w;
@@ -4159,14 +4175,12 @@
   function onSelectInProse() {
     // let the browser settle the selection first
     setTimeout(function () {
-      /* A double-click has just put the mark where this click landed; the
-         card it would otherwise open is not what was being asked for. */
-      if (justMarked) { justMarked = false; return; }
       var sel = window.getSelection && window.getSelection();
       if (!sel || sel.isCollapsed) { hideLookup(); dimAiParas(); return; }
       var range = null;
       try { range = sel.getRangeAt(0); } catch (err) { range = null; }
       litAiParas(range);
+      markSpot = spotOf(range);       // where the button in the card would mark
       var text = String(sel).trim();
       if (!text || text.length > LOOKUP_MAX) { hideLookup(); return; }
       var rect = null;
@@ -4230,6 +4244,8 @@
     var picked = el("div", "picked" + (word.length > 60 ? " line" : ""), word);
     /* The word is a word wherever it is read: the same speaker as the entry. */
     if (canSpeak()) picked.appendChild(sayButton(word));
+    /* And, in a passage, the dot that says you read this far. */
+    if (markSpot) picked.appendChild(markButton(markSpot));
     lookupCard.appendChild(picked);
 
     if (asLine) lineInto(lookupCard, text, rect, found);
