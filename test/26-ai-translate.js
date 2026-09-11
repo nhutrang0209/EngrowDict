@@ -18,7 +18,7 @@ const CFG = {
   key: 'a-secret-key',
 };
 
-function page(store, posts, reply) {
+function page(store, posts, reply, mt) {
   const g = boot({
     html: shell, full: true, store, width: 1500,
     url: 'https://nhutrang0209.github.io/EngrowDict/',
@@ -26,6 +26,13 @@ function page(store, posts, reply) {
   });
   const realFetch = g.window.fetch;
   g.window.fetch = (url, opts) => {
+    /* The translator the card falls back on, answered here when a test says
+       what it should say: a word in, a Vietnamese rendering out. */
+    if (mt && String(url).indexOf('translate.googleapis.com') > -1) {
+      const q = decodeURIComponent((String(url).match(/[?&]q=([^&]*)/) || [])[1] || '');
+      const said = mt(q) || 'không có ở đây';
+      return Promise.resolve({ ok: true, json: () => Promise.resolve([[[said, q]]]) });
+    }
     if (opts && opts.method === 'POST') {
       const body = JSON.parse(opts.body);
       posts.push({ url, body });
@@ -382,6 +389,230 @@ const openMenu = g => {
       /^\s*--lit:/m.test(css) && css.match(/^\s*--lit:/gm).length === 3;
   })(), 'washed, and a colour of its own in every theme');
 
+  /* --- the very words, and the right sentence however the model divides ----
+     A reader selected "determined", at the end of a run-on English sentence
+     about Binet, and the Vietnamese of that sentence's opening clause lit up.
+     The model does not spread a difference evenly over a paragraph: it broke
+     that one long sentence in two, and ran two short ones together further
+     on. Pairing by sentence index smeared the reader's word onto the wrong
+     sentence — and when the break and the join cancelled out, the two sides
+     counted the same and the index was trusted outright, one sentence out
+     all the way down. And a sentence was the finest the wash could go, when
+     what was wanted was the two words "xác định".
+
+     The English is whatever the sheet published, split by the page's own
+     rule — taken from app.js rather than written again here, since a second
+     rule that disagrees with the first builds the wrong Vietnamese to test
+     against. The Vietnamese is made-up words, so no gloss in the notebook can
+     match it by accident, each sentence about the length of what it stands
+     for. The translator is told what to say. */
+  const appSentences = (() => {
+    const src = read('app.js');
+    const grab = (name) => {
+      const at = src.indexOf('function ' + name + '(');
+      let depth = 0;
+      for (let j = src.indexOf('{', at); j < src.length; j++) {
+        if (src[j] === '{') depth++;
+        else if (src[j] === '}' && --depth === 0) return src.slice(at, j + 1);
+      }
+      return '';
+    };
+    const lineOf = (needle) => {
+      const at = src.indexOf(needle);
+      return src.slice(at, src.indexOf('\n', at));
+    };
+    return new Function(lineOf('var NOT_END') + '\n' + grab('lower') + '\n' +
+      grab('sentences') + '\nreturn sentences;')();
+  })();
+  const CAPS = ['Zanh', 'Zbnh', 'Zcnh', 'Zdnh', 'Zenh', 'Zfnh', 'Zgnh', 'Zhnh', 'Zinh', 'Zknh'];
+  const viSentence = (cap, len, tail) => {
+    let t = cap;
+    while (t.length < len - 1 - (tail ? tail.length + 1 : 0)) t += ' zamô';
+    return t + (tail ? ' ' + tail : '') + '.';
+  };
+  const lateWords = (text) => {
+    const out = [];
+    const re = /[A-Za-z]{6,}/g;
+    let m;
+    while ((m = re.exec(text))) {
+      if (m.index > text.length * 0.6) out.push({ w: m[0], at: m.index });
+    }
+    return out.reverse();                     // the latest first
+  };
+  const midWordOf = (text, cut) => {
+    const re = /[A-Za-z]{4,}/g;
+    const seg = text.slice(cut.from, cut.to);
+    const hits = [];
+    let m;
+    while ((m = re.exec(seg))) hits.push({ w: m[0], at: cut.from + m.index });
+    return hits[Math.floor(hits.length / 2)];
+  };
+  const lens = (cuts) => cuts.map(c => c.to - c.from);
+
+  /* The two ways the model divides differently, each built from an English
+     paragraph as it stands. A break alone: the opening sentence in two, the
+     rest whole — one more Vietnamese sentence than English. A break and a
+     join: the opening in two and the last two run together — the same count
+     on both sides, which is the case that was trusted and should not be. */
+  const breakOnly = (cuts, tail) => {
+    const n = lens(cuts);
+    const v = [Math.ceil(n[0] / 2), Math.floor(n[0] / 2)].concat(n.slice(1));
+    return v.map((x, i) => viSentence(CAPS[i % CAPS.length], Math.max(12, x),
+      i === v.length - 1 ? tail : '')).join(' ');
+  };
+  const breakAndJoin = (cuts) => {
+    const n = lens(cuts);
+    const v = [Math.ceil(n[0] / 2), Math.floor(n[0] / 2)]
+      .concat(n.slice(1, -2), [n[n.length - 2] + n[n.length - 1] + 1]);
+    return v.map((x, i) => viSentence(CAPS[i % CAPS.length], Math.max(12, x), '')).join(' ');
+  };
+
+  const viFor = {};                            // English paragraph -> its Vietnamese
+  let target = '', inside = '';
+  const postsP = [];
+  const ph = page(unlockedStore(CFG), postsP, (body) => ({
+    ok: true, by: 'Gemini',
+    paras: (body.paras || []).map(en => viFor[en] || 'Câu. Câu nữa.'),
+  }), (q) => {
+    const w = q.toLowerCase();
+    if (w === target) return 'tớiđích';
+    if (w === inside) return 'đích';          // a whole word, found only inside one
+    return 'không có ở đây';
+  });
+  await wait(900);
+  click(ph.window, ph.doc.getElementById('tab-passages'));
+  await wait(40);
+  click(ph.window, ph.doc.querySelector('.hit'));
+  await wait(60);
+
+  const engP = () => [...ph.doc.querySelectorAll('.read .prose > *')];
+  const own = (node) => {
+    const mark = node.querySelector('.pmark');
+    return mark ? node.textContent.slice(mark.textContent.length) : node.textContent;
+  };
+
+  /* Built from the English as it is on screen, before the translation is
+     asked for, so the two sides line up the way a real answer would. */
+  const en0 = own(engP()[0]);
+  const cuts0 = appSentences(en0);
+  ok('the English opening has more than one sentence to build a Vietnamese from',
+     cuts0.length >= 2, cuts0.length + ' sentences');
+  viFor[en0] = breakOnly(cuts0, 'tớiđích zamu');
+
+  // a later paragraph long enough for a break and a join both
+  const joinAt = engP().findIndex((n, i) => i > 0 && appSentences(own(n)).length >= 4);
+  const enJ = joinAt > -1 ? own(engP()[joinAt]) : '';
+  const cutsJ = joinAt > -1 ? appSentences(enJ) : [];
+  if (joinAt > -1) viFor[enJ] = breakAndJoin(cutsJ);
+  ok('  and a later paragraph long enough to break one sentence and join two',
+     joinAt > 0, joinAt > 0 ? 'paragraph ' + joinAt + ', ' + cutsJ.length + ' sentences'
+       : 'none in this passage');
+
+  openMenu(ph);
+  click(ph.window, ph.doc.getElementById('passage-ai'));
+  await wait(1500);
+
+  const viP = () => [...ph.doc.querySelectorAll('#ai-body .ai-para')];
+  const selectChars = (node, a0, b0) => {
+    const mark = node.querySelector('.pmark');
+    const walk = ph.doc.createTreeWalker(node, 4);
+    const range = ph.doc.createRange();
+    let seen = 0, set = false, t;
+    while ((t = walk.nextNode())) {
+      if (mark && mark.contains(t)) continue;
+      const len = t.textContent.length;
+      if (!set && seen + len >= a0) { range.setStart(t, a0 - seen); set = true; }
+      if (seen + len >= b0) { range.setEnd(t, b0 - seen); break; }
+      seen += len;
+    }
+    ph.window.getSelection().removeAllRanges();
+    ph.window.getSelection().addRange(range);
+    node.dispatchEvent(new ph.window.Event('mouseup', { bubbles: true }));
+  };
+  const litVs = (i) => [...viP()[i].querySelectorAll('.vs')]
+    .map((n, k) => (n.classList.contains('lit') ? k : -1)).filter(k => k > -1);
+  const phrase = () => viP()[0].querySelector('.vp');
+  /* English sentence k is Vietnamese sentence k + 1 once the opening one has
+     been broken in two. */
+  const brokenOpening = (cuts, at) => {
+    let k = 0;
+    while (k < cuts.length - 1 && at >= cuts[k].to) k++;
+    if (k > 0) return k + 1;
+    return at < (cuts[0].from + cuts[0].to) / 2 ? 0 : 1;
+  };
+
+  ok('the Vietnamese came back one sentence longer than the English, as the model breaks them',
+     (viP()[0].querySelector('.vi') || {}).textContent === viFor[en0] &&
+     viP()[0].querySelectorAll('.vs').length === cuts0.length + 1,
+     viP()[0].querySelectorAll('.vs').length + ' Vietnamese against ' + cuts0.length + ' English');
+
+  /* A word in the middle of the second English sentence. It is the third
+     Vietnamese one, since the first English sentence became two. */
+  const mid0 = midWordOf(en0, cuts0[1]);
+  selectChars(engP()[0], mid0.at, mid0.at + mid0.w.length);
+  await wait(150);
+  ok('a word in the second English sentence lights the third Vietnamese one, and only that',
+     litVs(0).join() === '2',
+     JSON.stringify(mid0.w) + ' lit ' + (litVs(0).join() || 'nothing') + ', wanted 2');
+
+  if (joinAt > 0) {
+    ok('  a break and a join come out the same count on both sides',
+       viP()[joinAt].querySelectorAll('.vs').length === cutsJ.length,
+       viP()[joinAt].querySelectorAll('.vs').length + ' against ' + cutsJ.length);
+    const midJ = midWordOf(enJ, cutsJ[1]);
+    selectChars(engP()[joinAt], midJ.at, midJ.at + midJ.w.length);
+    await wait(150);
+    ok('    and that count is not trusted: the word still lights the sentence it is in',
+       litVs(joinAt).join() === '2',
+       JSON.stringify(midJ.w) + ' lit ' + (litVs(joinAt).join() || 'nothing')
+         + ', wanted 2 — pairing by index says 1');
+  }
+
+  const words = lateWords(en0);
+  ok('  the English opening has words late in it to select', words.length >= 3,
+     words.slice(0, 3).map(x => x.w).join(', '));
+  target = words[0].w.toLowerCase();
+  inside = words[2].w.toLowerCase();
+
+  /* a word whose Vietnamese is not in the paragraph: the sentence stays lit,
+     and it is the sentence the word is in, not that one and the one before */
+  selectChars(engP()[0], words[1].at, words[1].at + words[1].w.length);
+  await wait(150);
+  ok('a word late in a paragraph lights the one Vietnamese sentence it is in',
+     litVs(0).join() === String(brokenOpening(cuts0, words[1].at)) && !phrase(),
+     litVs(0).join() + ', wanted ' + brokenOpening(cuts0, words[1].at)
+       + (phrase() ? ' and no phrase' : ''));
+
+  /* a word whose Vietnamese is there: those words, and not the sentence */
+  const vtext = viP()[0].querySelector('.vi').textContent;
+  selectChars(engP()[0], words[0].at, words[0].at + words[0].w.length);
+  await wait(150);
+  ok('a word whose Vietnamese is in the paragraph lights those very words',
+     !!phrase() && phrase().textContent === 'tớiđích',
+     phrase() ? phrase().textContent : 'nothing narrower than a sentence');
+  ok('  and the sentence around them steps back', litVs(0).length === 0, litVs(0).join());
+  ok('  with the Vietnamese itself left exactly as it was',
+     viP()[0].querySelector('.vi').textContent === vtext, 'text intact');
+
+  /* "đích" is a whole Vietnamese word, and here it is only the end of a longer
+     made-up one: that is not a match, and the sentence stands in for it */
+  selectChars(engP()[0], words[2].at, words[2].at + words[2].w.length);
+  await wait(150);
+  ok('  a rendering found only inside a longer word is not taken for it',
+     !phrase() && litVs(0).length === 1, phrase() ? phrase().textContent : litVs(0).join());
+
+  ph.window.getSelection().removeAllRanges();
+  engP()[0].dispatchEvent(new ph.window.Event('mouseup', { bubbles: true }));
+  await wait(60);
+  ok('letting the selection go takes the words out of the wash again',
+     !phrase() && litVs(0).length === 0 &&
+     [...viP()[0].querySelectorAll('.vs')].every(n => n.childNodes.length === 1),
+     'sentences whole');
+
+  ok('the very words wear the same wash as a sentence',
+     /\.ai-para \.vp \{[^}]*background: var\(--lit\)/.test(read('app.css')),
+     'one wash');
+
   /* --- asking again, and closing ------------------------------------------ */
   posts.length = 0;
   answer = (body) => ({ ok: true, by: 'Gemini',
@@ -548,7 +779,7 @@ const openMenu = g => {
   const gridsPath = path.join(__dirname, 'grids.json');
   if (!fs.existsSync(gridsPath)) {
     ok('skipped the script side: no grids.json yet', true);
-    done(a.errs.concat(b.errs, c.errs, later.errs));
+    done(a.errs.concat(b.errs, c.errs, later.errs, ph.errs));
     return;
   }
   const grids = JSON.parse(fs.readFileSync(gridsPath, 'utf8'));
@@ -625,5 +856,5 @@ const openMenu = g => {
   ok('with no key in the script it says which menu item sets one',
      bare.ok === false && /Key for the Vietnamese column/.test(bare.error), bare.error);
 
-  done(a.errs.concat(b.errs, c.errs, later.errs));
+  done(a.errs.concat(b.errs, c.errs, later.errs, ph.errs));
 })();

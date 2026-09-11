@@ -1074,6 +1074,13 @@ dialog::backdrop { background: rgba(8, 14, 11, .5); backdrop-filter: blur(2px); 
   background: transparent; transition: background-color .16s ease, color .16s ease;
 }
 .ai-para .vs.lit { background: var(--lit); color: var(--lit-ink); }
+/* The very words, when the Vietnamese for the selection can be found: the
+   same wash, drawn round two words rather than the sentence they sit in. */
+.ai-para .vp {
+  border-radius: 3px; padding: .1em .12em; margin: 0 -.06em;
+  -webkit-box-decoration-break: clone; box-decoration-break: clone;
+  background: var(--lit); color: var(--lit-ink);
+}
 @media (prefers-reduced-motion: reduce) {
   .ai-para .vs { transition: none; }
 }

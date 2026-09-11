@@ -1515,16 +1515,44 @@
     return Math.max(0, list.length - 1);
   }
 
-  function pairSpan(from, to, ens, vis) {
-    if (!ens || !vis) return null;
-    if (ens === vis) return { from: from, to: to };
-    return { from: Math.min(vis - 1, Math.floor(from * vis / ens)),
-             to: Math.min(vis - 1, Math.ceil((to + 1) * vis / ens) - 1) };
+
+  /* Where the selection sits on the English side, for the Vietnamese to be
+     looked for near: the paragraph, and how far through it the middle of the
+     selection falls. Null for a selection across paragraphs — a phrase is not
+     what one of those is asking about. */
+  var aiAnchor = null;
+
+  /* Which sentence a character of a paragraph falls in. */
+  function sentenceAtChar(cuts, at) {
+    for (var k = 0; k < cuts.length; k++) if (at < cuts[k].to) return k;
+    return Math.max(0, cuts.length - 1);
+  }
+
+  /* Counted the same is not paired the same. A model that breaks one long
+     English sentence in two and runs two short ones together comes out even,
+     and every sentence between the two is then paired with its neighbour's
+     translation: "determined", at the end of a run-on English sentence about
+     Binet, lit the Vietnamese of that sentence's opening clause, because the
+     paragraph had five sentences on each side and the fifth pairs with the
+     fifth. What each sentence takes of its paragraph says whether the count
+     can be trusted: a sentence and its translation are near enough the same
+     share of their paragraphs, and a sentence paired with half of another's
+     translation is not. */
+  function sharesAgree(ens, vcuts, enLen, viLen) {
+    if (!enLen || !viLen || ens.length !== vcuts.length) return false;
+    for (var k = 0; k < ens.length; k++) {
+      var a = (ens[k].to - ens[k].from) / enLen;
+      var b = (vcuts[k].to - vcuts[k].from) / viLen;
+      if (Math.abs(a - b) > 0.12) return false;
+    }
+    return true;
   }
 
   function litAiParas(range) {
     var body = document.getElementById("ai-body");
     if (!body || !aiPane) return;
+    clearPhrases(body);
+    aiAnchor = null;
     var vis = body.querySelectorAll(".ai-para");
     var prose = document.querySelector(".readsplit .read .prose");
     var paras = prose ? prose.children : [];
@@ -1542,16 +1570,146 @@
       /* The whole paragraph, narrowed at each end by where the selection
          actually starts and stops. A paragraph in the middle of a long
          selection is not narrowed at either. */
-      var ens = sentences(paraText(paras[i]));
-      var a = 0, b = ens.length - 1;
-      if (i === from) a = sentenceAt(ens, offsetIn(paras[i], range.startContainer, range.startOffset), false);
-      if (i === to) b = sentenceAt(ens, offsetIn(paras[i], range.endContainer, range.endOffset), true);
-      if (b < a) b = a;
-      var pair = pairSpan(a, b, ens.length, spans.length);
-      var got = pair ? litSpans(spans, pair.from, pair.to) : litSpans(spans, 0, spans.length - 1);
+      var en = paraText(paras[i]);
+      var ens = sentences(en);
+      var s0 = i === from ? offsetIn(paras[i], range.startContainer, range.startOffset) : 0;
+      var s1 = i === to ? offsetIn(paras[i], range.endContainer, range.endOffset) : en.length;
+      if (s0 < 0) s0 = 0;
+      if (s1 < s0) s1 = s0;
+      if (from === to && en.length) aiAnchor = { p: i, mid: (s0 + s1) / 2 / en.length };
+
+      var vtext = (vis[i].querySelector(".vi") || {}).textContent || "";
+      var vcuts = sentences(vtext);
+      var pair;
+      if (ens.length === spans.length && sharesAgree(ens, vcuts, en.length, vtext.length)) {
+        /* Counted the same and shaped the same: paired in order, exactly. */
+        pair = { from: sentenceAt(ens, s0, false), to: sentenceAt(ens, s1, true) };
+      } else {
+        /* Otherwise the index is no measure of anything. The model does not
+           spread a difference evenly over a paragraph: it breaks one long
+           English sentence in two, at that sentence, and it runs two short
+           ones together, at those. Where the words fall in the paragraph is
+           the better measure — a long English sentence is a long stretch of
+           the Vietnamese too — and it is right on both sides of a break. */
+        var span = en.length || 1;
+        var v0 = Math.floor(s0 / span * vtext.length);
+        var v1 = Math.ceil(s1 / span * vtext.length);
+        pair = { from: sentenceAtChar(vcuts, v0),
+                 to: sentenceAtChar(vcuts, Math.max(v0, v1 - 1)) };
+      }
+      if (pair.to < pair.from) pair.to = pair.from;
+      var got = spans.length ? litSpans(spans, pair.from, pair.to) : null;
       if (!first) first = got || vis[i];
     }
     if (first) showAiPara(body, first);
+  }
+
+  /* ---- the Vietnamese for the very words selected --------------------------
+
+     A sentence is as fine as the pairing above can go: the model translated a
+     paragraph at a time and never said which of its words answers which. But
+     for a word or two, the card that opens over the selection has already
+     found out — it has the notebook's Vietnamese for them, or the
+     translator's. If those words are in the Vietnamese paragraph, near where
+     the selection sits in the English, they are the answer, and they are lit
+     instead of the sentence around them. If they are not — the translator
+     chose a different word in context, which happens — the sentence stays
+     lit, which is still true, only coarser. */
+  var PHRASE_MAX = 4;             // words; past that the selection is the phrase
+  var alignRun = 0;
+
+  function alignPhrase(text) {
+    var run = ++alignRun;
+    if (!aiAnchor || countWords(text) > PHRASE_MAX) return;
+    var found = lookupText(text);
+    var cands = found ? viCands(found.senses.map(function (s) { return s.vi; })) : [];
+    if (cands.length && litAiPhrase(cands)) return;
+    machineTranslate(text).then(function (got) {
+      if (run !== alignRun) return;          // something else selected since
+      litAiPhrase(viCands([got && got.text]));
+    }, function () { /* no translator here: the sentence stays lit */ });
+  }
+
+  /* The renderings a gloss offers, one by one: "lộ tuổi / thể hiện tuổi" is
+     two, "(cuộc/buổi) hẹn" is "hẹn". Longest first, so the fullest rendering
+     wins a near tie. */
+  function viCands(list) {
+    var out = [];
+    (list || []).forEach(function (v) {
+      String(v || "").replace(/\([^)]*\)/g, " ").split(/[\/,;]/)
+        .forEach(function (bit) {
+          var t = bit.replace(/\s+/g, " ").trim();
+          if (t.length >= 2 && out.indexOf(t) < 0) out.push(t);
+        });
+    });
+    return out.sort(function (a, b) { return b.length - a.length; });
+  }
+
+  function isLetter(ch) { return !!ch && ch.toLowerCase() !== ch.toUpperCase(); }
+
+  function litAiPhrase(cands) {
+    var body = document.getElementById("ai-body");
+    if (!body || !aiAnchor || !cands || !cands.length) return false;
+    var vp = body.querySelectorAll(".ai-para")[aiAnchor.p];
+    var vi = vp && vp.querySelector(".vi");
+    if (!vi) return false;
+    var text = vi.textContent, low = text.toLowerCase();
+    var want = aiAnchor.mid * text.length;
+    /* Near where it should be, not anywhere: a word as common as "của" is in
+       every paragraph, and the one wanted is the one beside the reader's. */
+    var reach = Math.max(80, text.length * 0.4);
+    var best = null;
+    for (var c = 0; c < cands.length; c++) {
+      var needle = String(cands[c]).toLowerCase();
+      if (needle.length < 2) continue;
+      for (var i = low.indexOf(needle); i > -1; i = low.indexOf(needle, i + 1)) {
+        // whole words only, never the middle of a longer one
+        if (isLetter(low.charAt(i - 1)) || isLetter(low.charAt(i + needle.length))) continue;
+        var d = Math.abs(i + needle.length / 2 - want);
+        if (d > reach) continue;
+        if (!best || d < best.d - 12 || (d <= best.d + 12 && needle.length > best.n)) {
+          best = { at: i, n: needle.length, d: d };
+        }
+      }
+    }
+    if (!best) return false;
+    litSpans(vi.querySelectorAll(".vs"), -1, -1);   // the sentence steps back
+    wrapChars(vi, best.at, best.at + best.n, "vp");
+    var lit = vi.querySelector(".vp");
+    if (lit) showAiPara(body, lit);
+    return true;
+  }
+
+  /* Characters [from, to) of an element's text, each text node's share of them
+     in a span of its own. */
+  function wrapChars(host, from, to, cls) {
+    var walk = document.createTreeWalker(host, 4);   // NodeFilter.SHOW_TEXT
+    var seen = 0, t, parts = [];
+    while ((t = walk.nextNode())) {
+      var len = t.textContent.length;
+      var a = Math.max(from, seen), b = Math.min(to, seen + len);
+      if (a < b) parts.push({ node: t, a: a - seen, b: b - seen });
+      seen += len;
+      if (seen >= to) break;
+    }
+    parts.forEach(function (x) {
+      var mid = x.node;
+      if (x.a > 0) mid = mid.splitText(x.a);
+      if (x.b - x.a < mid.textContent.length) mid.splitText(x.b - x.a);
+      var wrap = el("span", cls);
+      mid.parentNode.insertBefore(wrap, mid);
+      wrap.appendChild(mid);
+    });
+  }
+
+  function clearPhrases(body) {
+    var old = body.querySelectorAll(".vp");
+    for (var k = 0; k < old.length; k++) {
+      var n = old[k], host = n.parentNode;
+      while (n.firstChild) host.insertBefore(n.firstChild, n);
+      host.removeChild(n);
+      host.normalize();          // the sentence is one text node again
+    }
   }
 
   function litSpans(spans, from, to) {
@@ -4183,6 +4341,7 @@
       markSpot = spotOf(range);       // where the button in the card would mark
       var text = String(sel).trim();
       if (!text || text.length > LOOKUP_MAX) { hideLookup(); return; }
+      alignPhrase(text);              // and the Vietnamese for these very words
       var rect = null;
       try { rect = range ? range.getBoundingClientRect() : null; }
       catch (err) { rect = null; }
