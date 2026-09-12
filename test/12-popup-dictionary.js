@@ -110,9 +110,17 @@ const mk = store => boot({
      yi.indexOf('yin') < yi.indexOf('be flying blind'),
      yi.slice(0, 6).join(', '));
 
+  /* Words, not meanings. A word can come up by one of its other names -- a
+     spelling in its note, or the term a sense opens with -- and when it does
+     the name is shown under it, so every row still says what matched. */
+  const yiRows = [...doc.querySelectorAll('.pd-hit')].map(h => ({
+    w: wordOf(h.querySelector('.pd-w')),
+    via: (h.querySelector('.pd-via') || {}).textContent || '',
+  }));
+  const says = r => r.w.toLowerCase().includes('yi') || r.via.toLowerCase().includes('yi');
   ok('  it looks up words, not meanings',
-     yi.every(x => x.toLowerCase().includes('yi')),
-     yi.filter(x => !x.toLowerCase().includes('yi')).join(', ') || 'every result contains it');
+     yiRows.every(says),
+     yiRows.filter(r => !says(r)).map(r => r.w).join(', ') || 'every result says it');
 
   typeIn('dinh cao');
   ok('  so a Vietnamese meaning finds nothing here',
