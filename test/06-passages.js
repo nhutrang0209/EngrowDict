@@ -361,8 +361,9 @@ ok('the shell itself stays light', shell.replace(/\r\n/g, '\n').length < 370000,
      card().querySelector('.picked')?.textContent === long,
      (card().querySelector('.picked')?.textContent || '').slice(0, 40));
   ok('  and a paragraph is still too much to ask one card for', (() => {
-     const para = data.readings[0].paras[0].text;
-     return para.length > 300;
+     /* Whichever passage has one: the sheet is edited, and the paragraph that
+        opens the first passage has been a single short line before now. */
+     return data.readings.some(r => r.paras.some(x => x.text.length > 300));
   })(), 'a paragraph runs past the cap');
 
   // the notebook holds advanced vocabulary, so ordinary words miss and the

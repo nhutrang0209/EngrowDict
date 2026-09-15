@@ -2983,6 +2983,19 @@
      English like any other, so the sheet needs to know nothing new about it —
      no redeploy of the script for the sake of one heading — and it costs no
      extra call, because that batch was being sent anyway. */
+  /* Who did the translating, as a line to put in the header. More than one
+     hand can be in it — the model until it stopped answering, the translator
+     after that — and the column should say so rather than pick one. */
+  function noteSource(name) {
+    if (!name || !aiPane) return;
+    if (!aiPane.from) aiPane.from = aiPane.by ? [aiPane.by] : [];
+    if (aiPane.by && aiPane.by.indexOf(name) > -1) return;
+    aiPane.from.push(name);
+    aiPane.by = aiPane.from.length > 1
+      ? aiPane.from.slice(0, -1).join(", ") + " and " + aiPane.from[aiPane.from.length - 1]
+      : aiPane.from[0];
+  }
+
   function runAiTranslate(r) {
     var want = r.id;
     var lines = [r.title].concat(r.paras.map(function (p) { return stripMarks(p.text); }));
@@ -2990,6 +3003,50 @@
 
     function fill(k, said) {
       if (k === 0) aiPane.title = said; else aiPane.paras[k - 1] = said;
+    }
+
+    function landed(from, count) {
+      // the count is of paragraphs; the title is not one of them
+      aiPane.done = Math.min(r.paras.length, Math.max(0, at - 1));
+      aiKeep(r);                                        // as far as it has got
+      drawDetail();
+      syncAiScroll();
+      next();
+    }
+
+    /* The model is somebody else's server, and a busy one answers 503. Google
+       Translate is not as good and does not pretend to be, but a passage left
+       half translated is worse than one translated plainly — so the rest goes
+       that way, and the header says whose words they are.
+
+       The rest, not just the lines it refused: a model that is overloaded now
+       will be overloaded a second later, and asking it again for every batch
+       only makes the reader wait for the same answer. Press ↻ to try it. */
+    function byMachine(from, batch) {
+      var got = [], via = "";
+      var seq = Promise.resolve();
+      batch.forEach(function (line, i) {
+        seq = seq.then(function () {
+          return translateLong(line, "en", "vi").then(function (one) {
+            got[i] = one.text;
+            via = one.via || via;
+          }, function () { got[i] = ""; });
+        });
+      });
+      seq.then(function () {
+        if (!aiPane || aiPane.id !== want) return;
+        var any = false;
+        got.forEach(function (one, i) { if (one) { fill(from + i, one); any = true; } });
+        if (!any) {
+          // nobody would answer: this is the failure it always was
+          aiPane.state = aiPane.paras.length ? "part" : "failed";
+          aiPane.msg = aiPane.why || "It would not answer.";
+          drawDetail();
+          return;
+        }
+        noteSource(via || "Google Translate");
+        landed(from, batch.length);
+      });
     }
 
     function next() {
@@ -3003,21 +3060,17 @@
       }
       var from = at, batch = lines.slice(at, at + AI_BATCH);
       at += batch.length;
+      if (aiPane.machine) { byMachine(from, batch); return; }
       callSheet({ action: "aitranslate", paras: batch }).then(function (res) {
         if (!aiPane || aiPane.id !== want) return;
         (res.paras || []).forEach(function (one, i) { fill(from + i, one); });
-        aiPane.by = res.by || aiPane.by || "the model";
-        // the count is of paragraphs; the title is not one of them
-        aiPane.done = Math.min(r.paras.length, Math.max(0, at - 1));
-        aiKeep(r);                                        // as far as it has got
-        drawDetail();
-        syncAiScroll();
-        next();
+        noteSource(res.by || "the model");
+        landed(from, batch.length);
       }, function (err) {
         if (!aiPane || aiPane.id !== want) return;
-        aiPane.state = aiPane.paras.length ? "part" : "failed";
-        aiPane.msg = (err && err.message) ? err.message : String(err);
-        drawDetail();
+        aiPane.why = (err && err.message) ? err.message : String(err);
+        aiPane.machine = true;
+        byMachine(from, batch);
       });
     }
     next();
@@ -3032,11 +3085,20 @@
       var said = (res.paras || [])[0];
       if (!said) return;
       aiPane.title = said;
-      aiPane.by = aiPane.by || res.by || "the model";
+      noteSource(res.by || "the model");
       aiKeep(r);
       drawDetail();
       syncAiScroll();
-    }, function () { /* the paragraphs are the point; a heading can wait */ });
+    }, function () {
+      translateLong(r.title, "en", "vi").then(function (got) {
+        if (!aiPane || aiPane.id !== want || !got || !got.text) return;
+        aiPane.title = got.text;
+        noteSource(got.via || "Google Translate");
+        aiKeep(r);
+        drawDetail();
+        syncAiScroll();
+      }, function () { /* the paragraphs are the point; a heading can wait */ });
+    });
   }
 
   function aiPaneView(r) {
@@ -3061,7 +3123,7 @@
     again.disabled = aiPane.state === "working";
     again.addEventListener("click", function () {
       aiPane = { id: r.id, state: "working", paras: [], by: "", msg: "",
-                 done: 0, title: "" };
+                 done: 0, title: "", from: [], machine: false, why: "" };
       aiShut(r, false);
       drawDetail();
       runAiTranslate(r);
@@ -3084,6 +3146,13 @@
       if (aiPane.state === "part") {
         body.appendChild(el("p", "ai-none",
           "It stopped partway: " + aiPane.msg + " Press ↻ to ask for the rest."));
+      }
+      /* Not a failure, so not in the colour of one: the passage is all here,
+         and the line says which of it the model did not do. */
+      if (aiPane.machine && aiPane.state !== "failed" && aiPane.state !== "part") {
+        body.appendChild(el("p", "ai-note",
+          "The model would not answer, so the rest of this is machine "
+          + "translation. Press ↻ to ask it again."));
       }
       /* The heading, over its own column. Not an .ai-para: the paragraphs are
          numbered against the English ones on the other side, and everything

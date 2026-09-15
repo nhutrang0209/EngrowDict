@@ -326,31 +326,45 @@ const openMenu = g => {
     .map((n, k) => (n.classList.contains('lit') ? k : -1)).filter(k => k > -1);
   const anyLit = () => viParas().reduce((n, _, i) => n + litIn(i).length, 0);
 
-  const first = ownText(eng()[0]);
+  /* Whichever paragraph has a sentence break in it. The sheet is edited, and
+     the passage that opens it has had a one-sentence opening paragraph before
+     now: the test needs a paragraph to tell two sentences apart in, not that
+     particular one. */
+  const opener = (() => {
+    const all = eng();
+    for (let i = 0; i < all.length; i++) {
+      const t = ownText(all[i]);
+      const at = t.indexOf('. ') + 1;
+      if (at > 0 && at < t.length - 1) return i;
+    }
+    return 0;
+  })();
+  const first = ownText(eng()[opener]);
   const stop = first.indexOf('. ') + 1;
-  ok('  the passage opens with more than one sentence, so there is something to tell apart',
-     stop > 0 && stop < first.length - 1, 'first stop at ' + stop + ' of ' + first.length);
+  ok('  a paragraph of more than one sentence, so there is something to tell apart',
+     stop > 0 && stop < first.length - 1,
+     'paragraph ' + opener + ', first stop at ' + stop + ' of ' + first.length);
 
   /* Which spans exactly depends on how the two sides divide up: four
      Vietnamese sentences against three English ones means the first English
      one covers more than one of them. What must hold whatever the passage is:
      the opening is lit, the end is not, and it is not the whole paragraph. */
-  pickChars(eng()[0], 0, Math.max(4, Math.floor(stop / 2)));
+  pickChars(eng()[opener], 0, Math.max(4, Math.floor(stop / 2)));
   await wait(40);
   ok('half of the opening sentence lights the opening, not the whole paragraph',
-     litIn(0)[0] === 0 && litIn(0).indexOf(3) === -1 && litIn(0).length < 4,
-     litIn(0).join() || 'none');
+     litIn(opener)[0] === 0 && litIn(opener).indexOf(3) === -1 && litIn(opener).length < 4,
+     litIn(opener).join() || 'none');
 
-  pickChars(eng()[0], 0, first.length);
+  pickChars(eng()[opener], 0, first.length);
   await wait(40);
   ok('  and the whole paragraph does light the whole paragraph',
-     litIn(0).join() === '0,1,2,3', litIn(0).join() || 'none');
+     litIn(opener).join() === '0,1,2,3', litIn(opener).join() || 'none');
 
-  pickChars(eng()[0], first.length - 20, first.length);
+  pickChars(eng()[opener], first.length - 20, first.length);
   await wait(40);
   ok('  a few words at the end light the end, and leave the opening alone',
-     litIn(0).length > 0 && litIn(0).indexOf(0) === -1,
-     litIn(0).join() || 'none');
+     litIn(opener).length > 0 && litIn(opener).indexOf(0) === -1,
+     litIn(opener).join() || 'none');
 
   const pick = (from, to) => {
     const range = doc.createRange();
@@ -493,19 +507,24 @@ const openMenu = g => {
 
   /* Built from the English as it is on screen, before the translation is
      asked for, so the two sides line up the way a real answer would. */
-  const en0 = own(engP()[0]);
+  const p0idx = engP().findIndex(n => {
+    const t = own(n);
+    return appSentences(t).length >= 2 && lateWords(t).length >= 3;
+  });
+  const en0 = own(engP()[p0idx > -1 ? p0idx : 0]);
   const cuts0 = appSentences(en0);
-  ok('the English opening has more than one sentence to build a Vietnamese from',
-     cuts0.length >= 2, cuts0.length + ' sentences');
+  ok('a paragraph with more than one sentence, and words late in it to select',
+     p0idx > -1 && cuts0.length >= 2,
+     'paragraph ' + p0idx + ', ' + cuts0.length + ' sentences');
   viFor[en0] = breakOnly(cuts0, 'tớiđích zamu');
 
   // a later paragraph long enough for a break and a join both
-  const joinAt = engP().findIndex((n, i) => i > 0 && appSentences(own(n)).length >= 4);
+  const joinAt = engP().findIndex((n, i) => i !== p0idx && appSentences(own(n)).length >= 4);
   const enJ = joinAt > -1 ? own(engP()[joinAt]) : '';
   const cutsJ = joinAt > -1 ? appSentences(enJ) : [];
   if (joinAt > -1) viFor[enJ] = breakAndJoin(cutsJ);
-  ok('  and a later paragraph long enough to break one sentence and join two',
-     joinAt > 0, joinAt > 0 ? 'paragraph ' + joinAt + ', ' + cutsJ.length + ' sentences'
+  ok('  and another long enough to break one sentence and join two',
+     joinAt > -1, joinAt > -1 ? 'paragraph ' + joinAt + ', ' + cutsJ.length + ' sentences'
        : 'none in this passage');
 
   openMenu(ph);
@@ -531,7 +550,7 @@ const openMenu = g => {
   };
   const litVs = (i) => [...viP()[i].querySelectorAll('.vs')]
     .map((n, k) => (n.classList.contains('lit') ? k : -1)).filter(k => k > -1);
-  const phrase = () => viP()[0].querySelector('.vp');
+  const phrase = () => viP()[p0idx].querySelector('.vp');
   /* English sentence k is Vietnamese sentence k + 1 once the opening one has
      been broken in two. */
   const brokenOpening = (cuts, at) => {
@@ -542,20 +561,20 @@ const openMenu = g => {
   };
 
   ok('the Vietnamese came back one sentence longer than the English, as the model breaks them',
-     (viP()[0].querySelector('.vi') || {}).textContent === viFor[en0] &&
-     viP()[0].querySelectorAll('.vs').length === cuts0.length + 1,
-     viP()[0].querySelectorAll('.vs').length + ' Vietnamese against ' + cuts0.length + ' English');
+     (viP()[p0idx].querySelector('.vi') || {}).textContent === viFor[en0] &&
+     viP()[p0idx].querySelectorAll('.vs').length === cuts0.length + 1,
+     viP()[p0idx].querySelectorAll('.vs').length + ' Vietnamese against ' + cuts0.length + ' English');
 
   /* A word in the middle of the second English sentence. It is the third
      Vietnamese one, since the first English sentence became two. */
   const mid0 = midWordOf(en0, cuts0[1]);
-  selectChars(engP()[0], mid0.at, mid0.at + mid0.w.length);
+  selectChars(engP()[p0idx], mid0.at, mid0.at + mid0.w.length);
   await wait(150);
   ok('a word in the second English sentence lights the third Vietnamese one, and only that',
-     litVs(0).join() === '2',
-     JSON.stringify(mid0.w) + ' lit ' + (litVs(0).join() || 'nothing') + ', wanted 2');
+     litVs(p0idx).join() === '2',
+     JSON.stringify(mid0.w) + ' lit ' + (litVs(p0idx).join() || 'nothing') + ', wanted 2');
 
-  if (joinAt > 0) {
+  if (joinAt > -1) {
     ok('  a break and a join come out the same count on both sides',
        viP()[joinAt].querySelectorAll('.vs').length === cutsJ.length,
        viP()[joinAt].querySelectorAll('.vs').length + ' against ' + cutsJ.length);
@@ -576,42 +595,110 @@ const openMenu = g => {
 
   /* a word whose Vietnamese is not in the paragraph: the sentence stays lit,
      and it is the sentence the word is in, not that one and the one before */
-  selectChars(engP()[0], words[1].at, words[1].at + words[1].w.length);
+  selectChars(engP()[p0idx], words[1].at, words[1].at + words[1].w.length);
   await wait(150);
   ok('a word late in a paragraph lights the one Vietnamese sentence it is in',
-     litVs(0).join() === String(brokenOpening(cuts0, words[1].at)) && !phrase(),
-     litVs(0).join() + ', wanted ' + brokenOpening(cuts0, words[1].at)
+     litVs(p0idx).join() === String(brokenOpening(cuts0, words[1].at)) && !phrase(),
+     litVs(p0idx).join() + ', wanted ' + brokenOpening(cuts0, words[1].at)
        + (phrase() ? ' and no phrase' : ''));
 
   /* a word whose Vietnamese is there: those words, and not the sentence */
-  const vtext = viP()[0].querySelector('.vi').textContent;
-  selectChars(engP()[0], words[0].at, words[0].at + words[0].w.length);
+  const vtext = viP()[p0idx].querySelector('.vi').textContent;
+  selectChars(engP()[p0idx], words[0].at, words[0].at + words[0].w.length);
   await wait(150);
   ok('a word whose Vietnamese is in the paragraph lights those very words',
      !!phrase() && phrase().textContent === 'tớiđích',
      phrase() ? phrase().textContent : 'nothing narrower than a sentence');
-  ok('  and the sentence around them steps back', litVs(0).length === 0, litVs(0).join());
+  ok('  and the sentence around them steps back', litVs(p0idx).length === 0, litVs(p0idx).join());
   ok('  with the Vietnamese itself left exactly as it was',
-     viP()[0].querySelector('.vi').textContent === vtext, 'text intact');
+     viP()[p0idx].querySelector('.vi').textContent === vtext, 'text intact');
 
   /* "đích" is a whole Vietnamese word, and here it is only the end of a longer
      made-up one: that is not a match, and the sentence stands in for it */
-  selectChars(engP()[0], words[2].at, words[2].at + words[2].w.length);
+  selectChars(engP()[p0idx], words[2].at, words[2].at + words[2].w.length);
   await wait(150);
   ok('  a rendering found only inside a longer word is not taken for it',
-     !phrase() && litVs(0).length === 1, phrase() ? phrase().textContent : litVs(0).join());
+     !phrase() && litVs(p0idx).length === 1, phrase() ? phrase().textContent : litVs(p0idx).join());
 
   ph.window.getSelection().removeAllRanges();
-  engP()[0].dispatchEvent(new ph.window.Event('mouseup', { bubbles: true }));
+  engP()[p0idx].dispatchEvent(new ph.window.Event('mouseup', { bubbles: true }));
   await wait(60);
   ok('letting the selection go takes the words out of the wash again',
-     !phrase() && litVs(0).length === 0 &&
-     [...viP()[0].querySelectorAll('.vs')].every(n => n.childNodes.length === 1),
+     !phrase() && litVs(p0idx).length === 0 &&
+     [...viP()[p0idx].querySelectorAll('.vs')].every(n => n.childNodes.length === 1),
      'sentences whole');
 
   ok('the very words wear the same wash as a sentence',
      /\.ai-para \.vp \{[^}]*background: var\(--lit\)/.test(read('app.css')),
      'one wash');
+
+  /* --- when the model will not answer --------------------------------------
+     Gemini is somebody else's server, and a busy one answers 503. The reader
+     was left with a red error where the passage should have been and half a
+     translation under it. Google Translate is not as good and does not
+     pretend to be, but a passage translated plainly beats a passage broken
+     off — so the rest goes that way, and the header says whose words are
+     whose. */
+  const postsF = [];
+  const fb = page(unlockedStore(CFG), postsF,
+    () => ({ ok: false, error: 'Gemini answered 503 for gemini-3-flash-preview' }),
+    (q) => 'MÁY: ' + q.slice(0, 12));
+  await wait(900);
+  click(fb.window, fb.doc.getElementById('tab-passages'));
+  await wait(40);
+  click(fb.window, fb.doc.querySelector('.hit'));
+  await wait(60);
+  openMenu(fb);
+  click(fb.window, fb.doc.getElementById('passage-ai'));
+  await wait(1500);
+
+  const fbSaid = () => [...fb.doc.querySelectorAll('.ai-para .vi')].map(n => n.textContent);
+  const fbBy = () => (fb.doc.getElementById('ai-by') || {}).textContent || '';
+  ok('a model that will not answer does not leave the passage half translated',
+     fbSaid().length > 0 && fbSaid().every(t => t.indexOf('MÁY:') === 0),
+     fbSaid().slice(0, 2).join(' | ') || 'nothing');
+  ok('  and the heading is translated too',
+     /^MÁY:/.test((fb.doc.querySelector('.ai-h1') || {}).textContent || ''),
+     (fb.doc.querySelector('.ai-h1') || {}).textContent || 'no title');
+  ok('  the column says who did it, and does not claim the model did',
+     /Google Translate/.test(fbBy()) && !/Gemini/.test(fbBy()), fbBy());
+  ok('  it is said as a note, not as the error it used to be',
+     !!fb.doc.querySelector('.ai-note') && !fb.doc.querySelector('.ai-none'),
+     (fb.doc.querySelector('.ai-note') || {}).textContent
+       || (fb.doc.querySelector('.ai-none') || {}).textContent || 'nothing said');
+  ok('    in a quiet colour rather than the colour of a failure',
+     /\.ai-note \{[^}]*color: var\(--muted\)/.test(read('app.css')), 'muted');
+  ok('  and the model is not asked again batch after batch while it is down',
+     postsF.filter(x => x.body.action === 'aitranslate').length === 1,
+     postsF.filter(x => x.body.action === 'aitranslate').length + ' asks');
+  ok('  what came back is kept, so coming back does not translate it again',
+     /MÁY:/.test(fb.store['engrowdict:aitr:v1'] || ''), 'kept');
+
+  /* --- the model until it stops, the translator after ---------------------- */
+  const postsM = [];
+  let modelAsks = 0;
+  const mix = page(unlockedStore(CFG), postsM, (body) => {
+    modelAsks++;
+    if (modelAsks > 1) return { ok: false, error: 'Gemini answered 503' };
+    return { ok: true, by: 'Gemini',
+      paras: (body.paras || []).map((_, i) => 'Mô hình ' + i + '.') };
+  }, (q) => 'MÁY: ' + q.slice(0, 12));
+  await wait(900);
+  click(mix.window, mix.doc.getElementById('tab-passages'));
+  await wait(40);
+  click(mix.window, mix.doc.querySelector('.hit'));
+  await wait(60);
+  openMenu(mix);
+  click(mix.window, mix.doc.getElementById('passage-ai'));
+  await wait(1800);
+
+  const mixSaid = [...mix.doc.querySelectorAll('.ai-para .vi')].map(n => n.textContent);
+  const mixBy = (mix.doc.getElementById('ai-by') || {}).textContent || '';
+  ok('a passage the model started and gave up on is finished by the translator',
+     mixSaid.some(t => /^Mô hình /.test(t)) && mixSaid.some(t => /^MÁY:/.test(t)),
+     mixSaid.slice(0, 5).join(' | '));
+  ok('  and the header names both hands, in the order they worked',
+     /Gemini and Google Translate/.test(mixBy), mixBy);
 
   /* --- asking again, and closing ------------------------------------------ */
   posts.length = 0;
@@ -779,7 +866,7 @@ const openMenu = g => {
   const gridsPath = path.join(__dirname, 'grids.json');
   if (!fs.existsSync(gridsPath)) {
     ok('skipped the script side: no grids.json yet', true);
-    done(a.errs.concat(b.errs, c.errs, later.errs, ph.errs));
+    done(a.errs.concat(b.errs, c.errs, later.errs, ph.errs, fb.errs, mix.errs));
     return;
   }
   const grids = JSON.parse(fs.readFileSync(gridsPath, 'utf8'));
@@ -856,5 +943,5 @@ const openMenu = g => {
   ok('with no key in the script it says which menu item sets one',
      bare.ok === false && /Key for the Vietnamese column/.test(bare.error), bare.error);
 
-  done(a.errs.concat(b.errs, c.errs, later.errs, ph.errs));
+  done(a.errs.concat(b.errs, c.errs, later.errs, ph.errs, fb.errs, mix.errs));
 })();
