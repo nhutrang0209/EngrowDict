@@ -3275,6 +3275,38 @@ a.btn[hidden] { display: none; }
     return true;
   }
 
+  /* A long sentence is a poor answer to one word. Where the exact words cannot
+     be found, the clause they fall in is a better answer than the whole
+     sentence around it: a list like "cày ruộng, cắt băng từ sông hoặc chèo
+     thuyền xuôi dòng suối" answers "tilling" with its first item rather than
+     with all three. Only for a sentence long enough to be worth cutting, and
+     only where the cut leaves more than one piece to choose between. */
+  var CLAUSE_MIN = 14;        // shorter than this is a fragment, not a clause
+  var CLAUSE_LONG = 90;       // a sentence shorter than this is answer enough
+
+  function clauseAt(text, cut, want) {
+    if (!cut || cut.to - cut.from < CLAUSE_LONG) return null;
+    var parts = [], at = cut.from, i;
+    for (i = cut.from; i < cut.to; i++) {
+      if (",;:—–".indexOf(text.charAt(i)) > -1 && i + 1 - at >= CLAUSE_MIN) {
+        parts.push({ from: at, to: i });
+        at = i + 1;
+      }
+    }
+    if (!parts.length || cut.to - at >= CLAUSE_MIN) parts.push({ from: at, to: cut.to });
+    else parts[parts.length - 1].to = cut.to;
+    if (parts.length < 2) return null;
+    for (i = 0; i < parts.length; i++) {
+      if (want < parts[i].to || i === parts.length - 1) {
+        var a = parts[i].from, b = parts[i].to;
+        while (a < b && /\s/.test(text.charAt(a))) a++;
+        while (b > a && /\s/.test(text.charAt(b - 1))) b--;
+        return b > a ? { from: a, to: b } : null;
+      }
+    }
+    return null;
+  }
+
   function litAiParas(range) {
     var body = document.getElementById("ai-body");
     if (!body || !aiPane) return;
@@ -3325,7 +3357,23 @@ a.btn[hidden] { display: none; }
                  to: sentenceAtChar(vcuts, Math.max(v0, v1 - 1)) };
       }
       if (pair.to < pair.from) pair.to = pair.from;
-      var got = spans.length ? litSpans(spans, pair.from, pair.to) : null;
+
+      /* One word selected, one sentence lit, and that sentence three hundred
+         characters long: true, and no use. The clause it falls in is cut out
+         instead, unless the exact words turn up later, which is finer still. */
+      var narrow = null;
+      if (from === to && pair.from === pair.to && aiAnchor && spans.length &&
+          countWords(range ? String(range) : "") <= PHRASE_MAX) {
+        narrow = clauseAt(vtext, vcuts[pair.from], aiAnchor.mid * vtext.length);
+      }
+      var got;
+      if (narrow) {
+        litSpans(spans, -1, -1);
+        wrapChars(vis[i].querySelector(".vi"), narrow.from, narrow.to, "vp");
+        got = vis[i].querySelector(".vp");
+      } else {
+        got = spans.length ? litSpans(spans, pair.from, pair.to) : null;
+      }
       if (!first) first = got || vis[i];
     }
     if (first) showAiPara(body, first);
@@ -3400,7 +3448,8 @@ a.btn[hidden] { display: none; }
       }
     }
     if (!best) return false;
-    litSpans(vi.querySelectorAll(".vs"), -1, -1);   // the sentence steps back
+    clearPhrases(body);                            // the clause steps back too
+    litSpans(vi.querySelectorAll(".vs"), -1, -1);   // and so does the sentence
     wrapChars(vi, best.at, best.at + best.n, "vp");
     var lit = vi.querySelector(".vp");
     if (lit) showAiPara(body, lit);

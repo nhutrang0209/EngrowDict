@@ -523,6 +523,23 @@ const openMenu = g => {
   const enJ = joinAt > -1 ? own(engP()[joinAt]) : '';
   const cutsJ = joinAt > -1 ? appSentences(enJ) : [];
   if (joinAt > -1) viFor[enJ] = breakAndJoin(cutsJ);
+
+  /* A third paragraph, translated as one long sentence of three clauses: a
+     sentence is a poor answer to one word when the sentence is a list. */
+  const listAt = engP().findIndex((n, i) =>
+    i !== p0idx && i !== joinAt && own(n).split(/\s+/).length >= 12);
+  const enL = listAt > -1 ? own(engP()[listAt]) : '';
+  const CLAUSES = ['motMOT', 'haiHAI', 'baBA'];
+  if (listAt > -1) {
+    const each = Math.max(30, Math.floor(enL.length / 3));
+    viFor[enL] = CLAUSES.map((tag, i) => {
+      let t = (i === 0 ? 'Zlnh' : '') + ' zamô';
+      while (t.length < each - tag.length - 2) t += ' zamô';
+      return (t + ' ' + tag).trim();
+    }).join(', ') + '.';
+  }
+  ok('  and a third translated as one sentence of three clauses',
+     listAt > -1, listAt > -1 ? 'paragraph ' + listAt : 'none in this passage');
   ok('  and another long enough to break one sentence and join two',
      joinAt > -1, joinAt > -1 ? 'paragraph ' + joinAt + ', ' + cutsJ.length + ' sentences'
        : 'none in this passage');
@@ -619,6 +636,32 @@ const openMenu = g => {
   await wait(150);
   ok('  a rendering found only inside a longer word is not taken for it',
      !phrase() && litVs(p0idx).length === 1, phrase() ? phrase().textContent : litVs(p0idx).join());
+
+  /* --- a word in a list, where the clause is the answer -------------------
+     "tilling" lit three hundred characters of Vietnamese: the whole of a
+     sentence that listed tilling fields, cutting ice from a river and
+     paddling down a stream. True, and no use. */
+  if (listAt > -1) {
+    const mids = [];
+    const reL = /[A-Za-z]{4,}/g;
+    let mm;
+    while ((mm = reL.exec(enL))) mids.push({ w: mm[0], at: mm.index });
+    const midL = mids.reduce((best, x) =>
+      Math.abs(x.at - enL.length / 2) < Math.abs(best.at - enL.length / 2) ? x : best, mids[0]);
+    selectChars(engP()[listAt], midL.at, midL.at + midL.w.length);
+    await wait(150);
+    const cut = viP()[listAt].querySelector('.vp');
+    const whole = viP()[listAt].querySelector('.vi').textContent;
+    ok('one word in a listing sentence lights the clause, not the sentence',
+       !!cut && cut.textContent.length < whole.length * 0.6,
+       cut ? JSON.stringify(cut.textContent) : 'the whole sentence');
+    ok('  and it is the clause the word falls in',
+       !!cut && cut.textContent.indexOf(CLAUSES[1]) > -1 &&
+       cut.textContent.indexOf(CLAUSES[0]) < 0 && cut.textContent.indexOf(CLAUSES[2]) < 0,
+       cut ? JSON.stringify(cut.textContent) : 'nothing');
+    ok('    with the Vietnamese itself untouched by the cutting',
+       viP()[listAt].querySelector('.vi').textContent === whole, 'text intact');
+  }
 
   ph.window.getSelection().removeAllRanges();
   engP()[p0idx].dispatchEvent(new ph.window.Event('mouseup', { bubbles: true }));

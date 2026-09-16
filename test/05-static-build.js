@@ -17,7 +17,7 @@ const mk = () => boot({
 });
 
 (async () => {
-  // 370 KB, not 140: the Books tab and the reader added about seven, putting a
+  // 378 KB, not 140: the Books tab and the reader added about seven, putting a
   // book on the site for every device another three, the Auto Fill box in the
   // word form two more, keeping your place in a passage another four, the key
   // for the Vietnamese column one, the forms on the rail — hidden, dragged and
@@ -32,7 +32,9 @@ const mk = () => boot({
   // is four more, and lighting the very words a selection translates to,
   // with the sentences paired by where they fall rather than by count, six,
   // and finding a word by its other names -- a spelling, the other side of
-  // the Atlantic, a term a sense opens with -- six more.
+  // the Atlantic, a term a sense opens with -- six more, and falling back to
+  // Google Translate when the model will not answer, with a clause lit
+  // where the very words cannot be found, three.
   //
   // Measured as it ships. build.py writes whatever newline the machine it ran
   // on prefers, and git puts them all back to one byte on the way in, so a
@@ -40,7 +42,7 @@ const mk = () => boot({
   // downloads — count those and the budget is a platform away from meaning
   // anything.
   const shipped = shell.replace(/\r\n/g, '\n').length;
-  ok('the shell is small', shipped < 370000, Math.round(shipped / 1024) + ' KB');
+  ok('the shell is small', shipped < 378000, Math.round(shipped / 1024) + ' KB');
   ok('the shell embeds no data',
      !shell.includes('<script type="application/json" id="base">'));
   ok('the shell points at data.json', shell.includes('href="data.json"'));
