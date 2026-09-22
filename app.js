@@ -6343,6 +6343,92 @@
   }
 
   /* ---- page chrome ---------------------------------------------------------- */
+  /* ---- light and dark -------------------------------------------------------
+
+     The stylesheet has had both palettes all along, and followed the machine:
+     dark when the system was dark. What it lacked was a way to disagree with
+     the system — reading in bed on a laptop set to light, or in a bright room
+     on a phone set to dark. The choice is kept here. With none made, the
+     system still decides, and a system that changes its mind is followed.
+
+     The head of the page reads the same key before anything is drawn, so a
+     reader who chose dark does not get a white flash while the script loads. */
+  var THEME_KEY = "engrowdict:theme:v1";
+  var THEME_INK = { light: "#eef0ec", dark: "#0a0f0c" };   // the browser's bar
+  var themeWatched = false;
+
+  function themeChosen() {
+    try {
+      var t = localStorage.getItem(THEME_KEY);
+      return t === "dark" || t === "light" ? t : "";
+    } catch (err) { return ""; }
+  }
+
+  function systemTheme() {
+    try {
+      return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches
+        ? "dark" : "light";
+    } catch (err) { return "light"; }
+  }
+
+  function themeNow() { return themeChosen() || systemTheme(); }
+
+  function applyTheme(t) {
+    var root = document.documentElement;
+    if (t) root.setAttribute("data-theme", t); else root.removeAttribute("data-theme");
+    /* The browser's own bar reads the meta, not the page: its two tags follow
+       the system, and are made to agree with a choice that does not. */
+    if (t) {
+      var metas = document.querySelectorAll("meta[name=theme-color]");
+      for (var i = 0; i < metas.length; i++) metas[i].setAttribute("content", THEME_INK[t]);
+    }
+    paintThemeButton();
+  }
+
+  function toggleTheme() {
+    var next = themeNow() === "dark" ? "light" : "dark";
+    try { localStorage.setItem(THEME_KEY, next); } catch (err) { /* this visit only */ }
+    applyTheme(next);
+  }
+
+  var MOON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"'
+    + ' stroke-width="2" stroke-linecap="round" stroke-linejoin="round"'
+    + ' aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+  var SUN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"'
+    + ' stroke-width="2" stroke-linecap="round" stroke-linejoin="round"'
+    + ' aria-hidden="true"><circle cx="12" cy="12" r="5"/>'
+    + '<line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>'
+    + '<line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>'
+    + '<line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>'
+    + '<line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>'
+    + '<line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>'
+    + '<line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>';
+
+  /* The button shows where it will take you — a moon while it is light, a sun
+     while it is dark — and says whether dark is on, which is what a screen
+     reader wants to hear about a switch. */
+  function paintThemeButton() {
+    var b = document.getElementById("theme-btn");
+    if (!b) return;
+    var dark = themeNow() === "dark";
+    b.innerHTML = dark ? SUN : MOON;
+    b.title = dark ? "Switch to light mode" : "Switch to dark mode";
+    b.setAttribute("aria-label", "Dark mode");
+    b.setAttribute("aria-pressed", String(dark));
+  }
+
+  function watchSystemTheme() {
+    if (themeWatched) return;
+    themeWatched = true;
+    try {
+      var mq = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)");
+      if (!mq) return;
+      var follow = function () { if (!themeChosen()) paintThemeButton(); };
+      if (mq.addEventListener) mq.addEventListener("change", follow);
+      else if (mq.addListener) mq.addListener(follow);
+    } catch (err) { /* no media queries here: the choice alone decides */ }
+  }
+
   var qInput;
   var searchBox, topRow, actsBox, listPane, lookupBox;
 
@@ -6466,8 +6552,17 @@
     gear.addEventListener("click", function () { openSettings(); });
     acts.appendChild(gear);
 
+    /* Last in the bar, after the gear: Sync keeps its place beside Settings. */
+    var theme = el("button", "btn btn-icon");
+    theme.type = "button";
+    theme.id = "theme-btn";
+    theme.addEventListener("click", toggleTheme);
+    acts.appendChild(theme);
+
     top.appendChild(acts);
     app.appendChild(top);
+    applyTheme(themeChosen());        // now it is on the page, to be painted
+    watchSystemTheme();
 
     var hint = addToHomeHint();
     if (hint) app.appendChild(hint);

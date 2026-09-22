@@ -47,6 +47,13 @@ FONTS = ("https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..6
 
 HEAD = (
     '<title>EngrowDict</title>\n'
+    # the reader's choice of light or dark, before anything is drawn: the
+    # app sets it again once it runs, but that is a white flash later
+    '<script>try{var t=localStorage.getItem("engrowdict:theme:v1");'
+    'if(t==="dark"||t==="light"){document.documentElement.setAttribute("data-theme",t);'
+    'var m=document.querySelectorAll("meta[name=theme-color]");'
+    'for(var i=0;i<m.length;i++)m[i].setAttribute("content",t==="dark"?"#0a0f0c":"#eef0ec")}'
+    '}catch(e){}</script>\n'
     '<link rel="preconnect" href="https://fonts.googleapis.com">\n'
     '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n'
     '<link rel="stylesheet" href="' + FONTS + '">\n'
