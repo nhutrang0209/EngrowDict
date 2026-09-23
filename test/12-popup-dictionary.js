@@ -258,6 +258,37 @@ const mk = store => boot({
      pop().style.left + ' / ' + pop().style.top);
   ok('  and remembers where it was put', !!store[POP_KEY], store[POP_KEY]);
 
+  /* --- and the place it was put is not a place on this screen only --------
+
+     A pair of pixel coordinates chosen on a wide window is off the side of a
+     narrow one: the window is still drawn, still takes the keystrokes, and
+     nobody can see it. So what is kept is where the reader put it, and where
+     it lands is that pulled back inside whatever window there is now. */
+  const widen = n => {
+    Object.defineProperty(w, 'innerWidth', { value: n, configurable: true });
+    w.dispatchEvent(new w.Event('resize'));
+  };
+  const leftOf = () => parseFloat(pop().style.left);
+
+  head.dispatchEvent(new w.MouseEvent('mousedown', { clientX: 300, clientY: 100, bubbles: true }));
+  doc.dispatchEvent(new w.MouseEvent('mousemove', { clientX: 1200, clientY: 220, bubbles: true }));
+  doc.dispatchEvent(new w.MouseEvent('mouseup', { bubbles: true }));
+  const far = leftOf();
+  ok('dragged to the far side of a wide window, it stays inside it',
+     far > 400 && far + 360 <= 1024, pop().style.left);
+
+  widen(900);
+  ok('the window narrowing pulls it back inside rather than leaving it off the side',
+     leftOf() < far && leftOf() + 360 <= 900,
+     leftOf() + ' in ' + 900);
+
+  widen(1024);
+  ok('  and widening it again puts it back where it was put',
+     leftOf() === far, leftOf() + ' against ' + far);
+
+  ok('  and what the reader chose is what is kept, not where it had to go',
+     JSON.parse(store[POP_KEY]).left === far + 'px', store[POP_KEY]);
+
   /* --- closing ------------------------------------------------------------ */
   click(w, doc.querySelector('.pd-x'));
   ok('the × closes it', pop().hidden);
@@ -306,6 +337,35 @@ const mk = store => boot({
      b.doc.getElementById('popdict').style.left === JSON.parse(store[POP_KEY]).left,
      b.doc.getElementById('popdict').style.left);
 
+  /* --- and on a phone it keeps no place at all -----------------------------
+
+     Narrower than the breakpoint the stylesheet lays the window along the
+     bottom edge, which is the only place it fits. A left in pixels from a
+     drag on a desktop would quietly override that, so it is not carried
+     across: what is kept is still kept, and read again the next time there is
+     a window wide enough to honour it. */
+  const c = boot({
+    html: shell, full: true, store, width: 600, speech: true,
+    url: 'https://nhutrang0209.github.io/EngrowDict/',
+    dataFile: 'docs/data.json',
+  });
+  await wait(900);
+  click(c.window, c.doc.getElementById('tab-passages'));
+  await wait(40);
+  click(c.window, c.doc.querySelector('.hit'));
+  await wait(60);
+  const cbtn = c.doc.getElementById('popdict-btn');
+  ok('on a narrow window the button stands in for the box in the bar',
+     !!cbtn && !cbtn.hidden, cbtn ? 'button' : 'no button');
+  click(c.window, cbtn);
+  await wait(40);
+  const cpop = c.doc.getElementById('popdict');
+  ok('  and the window opens with no place of its own, for the stylesheet to dock it',
+     !cpop.hidden && !cpop.style.left && !cpop.style.top && !cpop.style.right,
+     JSON.stringify(cpop.getAttribute('style')));
+  ok('  while what was chosen on the wide window is still there for it',
+     JSON.parse(store[POP_KEY]).left === far + 'px', store[POP_KEY]);
+
   /* --- the word, said out loud ------------------------------------------ */
   const said = doc.querySelector('#popdict .pd-head-word .say');
   ok('the floating dictionary says the word too',
@@ -315,5 +375,5 @@ const mk = store => boot({
   ok('  in an English voice, like everywhere else',
      w.spoken.some(x => / @en-GB\/GB$/.test(x)), w.spoken.join(' | '));
 
-  done(a.errs.concat(b.errs));
+  done(a.errs.concat(b.errs, c.errs));
 })();

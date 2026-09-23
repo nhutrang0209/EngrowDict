@@ -2721,6 +2721,11 @@ a.btn[hidden] { display: none; }
      instead: type, pick, read, drag it out of the way. */
   var POP_KEY = "engrowdict:pop:v1";
   var popEl = null, popPicked = null, popHits = [], popAt = -1;
+  /* Where the reader dragged the window to, read once and kept here: the
+     place is consulted on every draw, and a store read per keystroke to
+     learn something that only changes when a drag ends is a store read
+     nobody needed. Undefined until it has been looked for. */
+  var popPut;
 
   function popOpen() { return !!popEl && !popEl.hidden; }
 
@@ -2806,21 +2811,71 @@ a.btn[hidden] { display: none; }
     });
     document.addEventListener("mousemove", function (ev) {
       if (!drag) return;
-      var maxL = (window.innerWidth || 1200) - w.offsetWidth - 6;
-      var maxT = (window.innerHeight || 800) - 40;
-      w.style.left = Math.min(Math.max(6, ev.clientX - drag.x), Math.max(6, maxL)) + "px";
-      w.style.top = Math.min(Math.max(6, ev.clientY - drag.y), Math.max(6, maxT)) + "px";
+      var at = inWindow(ev.clientX - drag.x, ev.clientY - drag.y, w);
+      w.style.left = at.left + "px";
+      w.style.top = at.top + "px";
       w.style.right = "auto";
       w.style.bottom = "auto";
     });
     document.addEventListener("mouseup", function () {
       if (!drag) return;
       drag = null;
+      popPut = { left: w.style.left, top: w.style.top };
       try {
-        localStorage.setItem(POP_KEY, JSON.stringify({ left: w.style.left, top: w.style.top }));
+        localStorage.setItem(POP_KEY, JSON.stringify(popPut));
       } catch (err) { /* ignore */ }
     });
     return w;
+  }
+
+  /* A corner pulled back inside the window. The whole of it, not a strip of
+     the header: a window you can see the edge of is a window you can drag
+     again, and one hanging off the bottom by its title bar is not. */
+  function inWindow(left, top, w) {
+    var vw = window.innerWidth || 1200, vh = window.innerHeight || 800;
+    var maxL = vw - (w.offsetWidth || 360) - 6;
+    var maxT = vh - (w.offsetHeight || 200) - 6;
+    return {
+      left: Math.round(Math.min(Math.max(6, left), Math.max(6, maxL))),
+      top: Math.round(Math.min(Math.max(6, top), Math.max(6, maxT)))
+    };
+  }
+
+  /* Where the window is drawn, worked out afresh every time it is opened and
+     every time the window it floats in changes size.
+
+     Dragging it keeps the place it was put, because that was a decision and
+     the reader should not have to make it twice. But a place is a pair of
+     numbers from the screen it was chosen on, and a window dragged to the
+     right-hand edge of a wide screen is a window nobody can find on a narrow
+     one — off the side, drawn where it always was, invisible and still taking
+     the keystrokes. So what is kept is the intention, and where it lands is
+     that intention pulled back inside whatever window there is now. Widen the
+     page again and it goes back where it was put.
+
+     Narrower than the phone rule, nothing is kept at all: there the stylesheet
+     lays the window along the bottom edge, the only place it fits, and an
+     inline left from a drag on a desktop would quietly override it — which is
+     narrowScreen(), the same width the stylesheet changes its mind at. */
+  function popHome() {
+    if (!popEl || popEl.hidden) return;
+    if (popPut === undefined) {
+      try { popPut = JSON.parse(localStorage.getItem(POP_KEY) || "{}"); }
+      catch (err) { popPut = null; }
+    }
+    var put = narrowScreen() ? null : popPut;
+    if (!put || !put.left) {
+      popEl.style.left = "";
+      popEl.style.top = "";
+      popEl.style.right = "";
+      popEl.style.bottom = "";
+      return;
+    }
+    var at = inWindow(parseFloat(put.left) || 0, parseFloat(put.top) || 0, popEl);
+    popEl.style.left = at.left + "px";
+    popEl.style.top = at.top + "px";
+    popEl.style.right = "auto";
+    popEl.style.bottom = "auto";
   }
 
   /* One walk, whichever half of the window is showing. On the results it moves
@@ -2839,7 +2894,16 @@ a.btn[hidden] { display: none; }
     if (on && on.scrollIntoView) on.scrollIntoView({ block: "nearest" });
   }
 
+  /* Drawn, then settled. What is in the window decides how tall it is, and
+     how tall it is decides whether the corner it was put at still leaves the
+     whole of it on the screen — so the one follows the other, on every draw
+     and not only when it opens. */
   function drawPopDict() {
+    fillPopDict();
+    popHome();
+  }
+
+  function fillPopDict() {
     var body = document.getElementById("pd-body");
     var inp = popQ();
     var sbox = document.getElementById("pd-search");
@@ -2946,10 +3010,11 @@ a.btn[hidden] { display: none; }
     if (!popEl) {
       popEl = buildPopDict();
       document.getElementById("app").appendChild(popEl);
-      try {
-        var s = JSON.parse(localStorage.getItem(POP_KEY) || "{}");
-        if (s.left) { popEl.style.left = s.left; popEl.style.top = s.top; popEl.style.right = "auto"; }
-      } catch (err) { /* ignore */ }
+      /* The window it floats in can change size under it — a laptop docked to
+         a monitor, a phone turned on its side, a browser window dragged
+         narrower while the window is open. Each of those moves where the
+         corner it was put at is. */
+      window.addEventListener("resize", popHome);
     }
     popEl.hidden = false;
     var inp = popQ();
