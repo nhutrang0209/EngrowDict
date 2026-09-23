@@ -87,6 +87,12 @@ const metas = g => [...g.doc.querySelectorAll('meta[name=theme-color]')]
   await wait(20);
   ok('  and the tick has moved to it', ticked(a).join(', ') === 'Slate',
      ticked(a).join(', ') || 'none');
+  /* A tick beside every name says no more than no tick at all: the list
+     shipped that way for an afternoon, marked up correctly and unreadable. */
+  const showing = r => a.window.getComputedStyle(r.querySelector('.tick')).visibility !== 'hidden';
+  ok('    and it is the only tick showing, which is what makes it a tick',
+     rows(a).filter(showing).map(named).join(', ') === 'Slate',
+     rows(a).filter(showing).map(named).join(', ') || 'none showing');
 
   click(a.window, rows(a).find(r => named(r) === 'System'));
   await wait(30);

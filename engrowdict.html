@@ -635,7 +635,9 @@ body.resizing { cursor: col-resize; user-select: none; }
   border: 1px solid; display: inline-flex; align-items: center; justify-content: center;
 }
 .theme-item .sw i { width: 7px; height: 7px; border-radius: 50%; display: block; }
-.theme-item .tick { margin-left: auto; padding-left: 10px; color: var(--accent); }
+/* Hidden rather than absent, so the names do not shift as the tick moves. */
+.theme-item .tick { margin-left: auto; padding-left: 10px; color: var(--accent); visibility: hidden; }
+.theme-item[aria-checked="true"] .tick { visibility: visible; }
 .theme-item[aria-checked="true"] { font-weight: 600; }
 
 /* ---- opening screen ----------------------------------------------------- */
