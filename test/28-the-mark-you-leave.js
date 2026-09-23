@@ -139,7 +139,8 @@ async function openFirstPassage(g) {
   })(), (b.doc.querySelector('.read .hint') || {}).textContent);
 
   ok('the dot is red, and its own colour in either theme',
-     (read('app.css').match(/--mark:/g) || []).length === 3 &&
+     (read('app.css').match(/--mark:/g) || []).length ===
+       (read('app.css').match(/--ground:/g) || []).length &&
      /\.readmark \{[^}]*background: var\(--mark\)/.test(read('app.css')),
      'a colour of its own');
   ok('  and the button wears the same dot it will leave',

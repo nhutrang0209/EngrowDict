@@ -400,7 +400,8 @@ const openMenu = g => {
     const rule = css.slice(css.indexOf('.ai-para .vs {'), css.indexOf('.ai-para .vs {') + 300);
     return /box-decoration-break: clone/.test(rule) &&
       /\.ai-para \.vs\.lit \{ background: var\(--lit\)/.test(css) &&
-      /^\s*--lit:/m.test(css) && css.match(/^\s*--lit:/gm).length === 3;
+      /^\s*--lit:/m.test(css) &&
+      css.match(/^\s*--lit:/gm).length === css.match(/^\s*--ground:/gm).length;
   })(), 'washed, and a colour of its own in every theme');
 
   /* --- the very words, and the right sentence however the model divides ----

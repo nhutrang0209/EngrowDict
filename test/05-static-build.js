@@ -34,7 +34,11 @@ const mk = () => boot({
   // and finding a word by its other names -- a spelling, the other side of
   // the Atlantic, a term a sense opens with -- six more, and falling back to
   // Google Translate when the model will not answer, with a clause lit
-  // where the very words cannot be found, three.
+  // where the very words cannot be found, three. A palette to read in is
+  // five: the stylesheet had two and followed the machine, and now there
+  // are five to choose between, each written once and measured before it
+  // was written -- which paid a kilobyte back, since the six buttons that
+  // each carried their own dark override now read one tone.
   //
   // Measured as it ships. build.py writes whatever newline the machine it ran
   // on prefers, and git puts them all back to one byte on the way in, so a
@@ -42,7 +46,7 @@ const mk = () => boot({
   // downloads — count those and the budget is a platform away from meaning
   // anything.
   const shipped = shell.replace(/\r\n/g, '\n').length;
-  ok('the shell is small', shipped < 378000, Math.round(shipped / 1024) + ' KB');
+  ok('the shell is small', shipped < 383000, Math.round(shipped / 1024) + ' KB');
   ok('the shell embeds no data',
      !shell.includes('<script type="application/json" id="base">'));
   ok('the shell points at data.json', shell.includes('href="data.json"'));

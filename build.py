@@ -50,9 +50,13 @@ HEAD = (
     # the reader's choice of light or dark, before anything is drawn: the
     # app sets it again once it runs, but that is a white flash later
     '<script>try{var t=localStorage.getItem("engrowdict:theme:v1");'
-    'if(t==="dark"||t==="light"){document.documentElement.setAttribute("data-theme",t);'
+    'if(t==="light")t="paper";if(t==="dark")t="slate";'
+    'var p={paper:"#eef0ec",sepia:"#e7ddc8",slate:"#151917",'
+    'nord:"#2e3440",midnight:"#0a0d0c"};'
+    'if(!p[t])t=matchMedia("(prefers-color-scheme: dark)").matches?"slate":"paper";'
+    'document.documentElement.setAttribute("data-theme",t);'
     'var m=document.querySelectorAll("meta[name=theme-color]");'
-    'for(var i=0;i<m.length;i++)m[i].setAttribute("content",t==="dark"?"#151917":"#eef0ec")}'
+    'for(var i=0;i<m.length;i++)m[i].setAttribute("content",p[t]);'
     '}catch(e){}</script>\n'
     '<link rel="preconnect" href="https://fonts.googleapis.com">\n'
     '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n'

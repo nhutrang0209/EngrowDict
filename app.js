@@ -6343,52 +6343,72 @@
   }
 
   /* ---- page chrome ---------------------------------------------------------- */
-  /* ---- light and dark -------------------------------------------------------
+  /* ---- the look of the page -------------------------------------------------
 
-     The stylesheet has had both palettes all along, and followed the machine:
-     dark when the system was dark. What it lacked was a way to disagree with
-     the system — reading in bed on a laptop set to light, or in a bright room
-     on a phone set to dark. The choice is kept here. With none made, the
-     system still decides, and a system that changes its mind is followed.
+     Five palettes and the machine's own choice. Paper is the stylesheet's
+     base; the rest are written over it by a data-theme on <html>, which the
+     head of the page sets before anything is drawn — so a reader in dark is
+     not shown a white page while this file loads.
 
-     The head of the page reads the same key before anything is drawn, so a
-     reader who chose dark does not get a white flash while the script loads. */
+     Choosing nothing means the machine decides, as it did before there was
+     anything to choose. That is settled here rather than in a media query,
+     so each palette is written once in the stylesheet and has no second
+     copy to drift away from. */
   var THEME_KEY = "engrowdict:theme:v1";
-  var THEME_INK = { light: "#eef0ec", dark: "#151917" };   // the browser's bar
+  var THEMES = [
+    { id: "paper",    name: "Paper",    dark: false,
+      page: "#eef0ec", edge: "#dfe4de", dot: "#0d6b4f" },
+    { id: "sepia",    name: "Sepia",    dark: false,
+      page: "#e7ddc8", edge: "#d8cbb0", dot: "#3f6b46" },
+    { id: "slate",    name: "Slate",    dark: true,
+      page: "#151917", edge: "#2f3733", dot: "#57bd93" },
+    { id: "nord",     name: "Nord",     dark: true,
+      page: "#2e3440", edge: "#4c566a", dot: "#88c0d0" },
+    { id: "midnight", name: "Midnight", dark: true,
+      page: "#0a0d0c", edge: "#222927", dot: "#4e9d80" }
+  ];
+  var themeMenu = null;                 // the button and its list, once built
   var themeWatched = false;
 
+  function themeOf(id) {
+    for (var i = 0; i < THEMES.length; i++) if (THEMES[i].id === id) return THEMES[i];
+    return null;
+  }
+
+  /* "light" and "dark" are what the first version of this switch kept. */
   function themeChosen() {
     try {
       var t = localStorage.getItem(THEME_KEY);
-      return t === "dark" || t === "light" ? t : "";
+      if (t === "light") t = "paper";
+      if (t === "dark") t = "slate";
+      return themeOf(t) ? t : "";
     } catch (err) { return ""; }
   }
 
   function systemTheme() {
     try {
-      return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches
-        ? "dark" : "light";
-    } catch (err) { return "light"; }
+      return window.matchMedia
+        && window.matchMedia("(prefers-color-scheme: dark)").matches ? "slate" : "paper";
+    } catch (err) { return "paper"; }
   }
 
   function themeNow() { return themeChosen() || systemTheme(); }
 
-  function applyTheme(t) {
-    var root = document.documentElement;
-    if (t) root.setAttribute("data-theme", t); else root.removeAttribute("data-theme");
-    /* The browser's own bar reads the meta, not the page: its two tags follow
-       the system, and are made to agree with a choice that does not. */
-    if (t) {
-      var metas = document.querySelectorAll("meta[name=theme-color]");
-      for (var i = 0; i < metas.length; i++) metas[i].setAttribute("content", THEME_INK[t]);
-    }
+  function applyTheme() {
+    var t = themeOf(themeNow()) || THEMES[0];
+    document.documentElement.setAttribute("data-theme", t.id);
+    /* The browser's own bar reads the meta, not the page. */
+    var metas = document.querySelectorAll("meta[name=theme-color]");
+    for (var i = 0; i < metas.length; i++) metas[i].setAttribute("content", t.page);
     paintThemeButton();
   }
 
-  function toggleTheme() {
-    var next = themeNow() === "dark" ? "light" : "dark";
-    try { localStorage.setItem(THEME_KEY, next); } catch (err) { /* this visit only */ }
-    applyTheme(next);
+  function pickTheme(id) {
+    try {
+      if (id) localStorage.setItem(THEME_KEY, id);
+      else localStorage.removeItem(THEME_KEY);
+    } catch (err) { /* this visit only */ }
+    applyTheme();
   }
 
   var MOON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"'
@@ -6404,17 +6424,18 @@
     + '<line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>'
     + '<line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>';
 
-  /* The button shows where it will take you — a moon while it is light, a sun
-     while it is dark — and says whether dark is on, which is what a screen
-     reader wants to hear about a switch. */
+  /* The button says which way the page is lit now — a sun on a dark page, a
+     moon on a light one — and the list says which palette that is. */
   function paintThemeButton() {
-    var b = document.getElementById("theme-btn");
-    if (!b) return;
-    var dark = themeNow() === "dark";
-    b.innerHTML = dark ? SUN : MOON;
-    b.title = dark ? "Switch to light mode" : "Switch to dark mode";
-    b.setAttribute("aria-label", "Dark mode");
-    b.setAttribute("aria-pressed", String(dark));
+    if (!themeMenu) return;
+    var t = themeOf(themeNow()) || THEMES[0], chosen = themeChosen();
+    themeMenu.trigger.innerHTML = t.dark ? SUN : MOON;
+    themeMenu.trigger.title = "Theme: "
+      + (chosen ? t.name : "System, which is " + t.name + " here");
+    themeMenu.trigger.setAttribute("aria-label", "Theme");
+    themeMenu.rows.forEach(function (r) {
+      r.el.setAttribute("aria-checked", r.id === chosen ? "true" : "false");
+    });
   }
 
   function watchSystemTheme() {
@@ -6423,10 +6444,57 @@
     try {
       var mq = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)");
       if (!mq) return;
-      var follow = function () { if (!themeChosen()) paintThemeButton(); };
+      var follow = function () { if (!themeChosen()) applyTheme(); };
       if (mq.addEventListener) mq.addEventListener("change", follow);
       else if (mq.addListener) mq.addListener(follow);
     } catch (err) { /* no media queries here: the choice alone decides */ }
+  }
+
+  /* A palette in the list shows itself: the page it paints, ringed in its
+     own rule, with a dot of its accent. Quicker to read than five words
+     for grey. System shows the two it chooses between. */
+  function themeSwatch(page, edge, dot) {
+    var sw = el("span", "sw");
+    sw.style.background = page;
+    sw.style.borderColor = edge;
+    if (dot) {
+      var d = document.createElement("i");
+      d.style.background = dot;
+      sw.appendChild(d);
+    }
+    return sw;
+  }
+
+  function buildThemeMenu() {
+    var m = makeMenu("", "Theme");
+    m.trigger.className = "btn btn-icon";
+    m.trigger.id = "theme-btn";
+    m.menu.id = "theme-menu";
+    m.menu.setAttribute("role", "menu");
+    m.rows = [];
+
+    function row(id, name, sw) {
+      var b = el("button", "menu-item theme-item");
+      b.type = "button";
+      b.setAttribute("role", "menuitemradio");
+      b.setAttribute("data-theme-id", id);
+      b.appendChild(sw);
+      b.appendChild(document.createTextNode(name));
+      b.appendChild(el("span", "tick", "✓"));
+      b.addEventListener("click", function () { m.close(); pickTheme(id); });
+      m.menu.appendChild(b);
+      m.rows.push({ id: id, el: b });
+    }
+
+    row("", "System", themeSwatch(
+      "linear-gradient(135deg, #eef0ec 50%, #151917 50%)", "#9aa49e", ""));
+    m.menu.appendChild(el("div", "menu-sep"));
+    THEMES.forEach(function (t) {
+      row(t.id, t.name, themeSwatch(t.page, t.edge, t.dot));
+    });
+
+    themeMenu = m;
+    return m.wrap;
   }
 
   var qInput;
@@ -6553,15 +6621,11 @@
     acts.appendChild(gear);
 
     /* Last in the bar, after the gear: Sync keeps its place beside Settings. */
-    var theme = el("button", "btn btn-icon");
-    theme.type = "button";
-    theme.id = "theme-btn";
-    theme.addEventListener("click", toggleTheme);
-    acts.appendChild(theme);
+    acts.appendChild(buildThemeMenu());
 
     top.appendChild(acts);
     app.appendChild(top);
-    applyTheme(themeChosen());        // now it is on the page, to be painted
+    applyTheme();                     // now it is on the page, to be painted
     watchSystemTheme();
 
     var hint = addToHomeHint();
