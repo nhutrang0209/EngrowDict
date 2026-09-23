@@ -35,8 +35,10 @@ ok('  and the same entries as the published data',
    anything. It was 320,000 and the shell had grown to within 350 bytes of it,
    close enough that the next comment written would have tripped it — and a
    budget met by writing fewer comments buys nobody a faster page. What it is
-   for is noticing the day something large gets pasted in. */
-ok('the shell itself stays light', shell.replace(/\r\n/g, '\n').length < 383000,
+   for is noticing the day something large gets pasted in. It went to 383,000
+   for the palettes and to 400,000 for the highlighter, both times because a
+   feature had landed and not because the shell had quietly put on weight. */
+ok('the shell itself stays light', shell.replace(/\r\n/g, '\n').length < 400000,
    Math.round(shell.length / 1024) + ' KB');
 
 /* --- and they work in the page ------------------------------------------ */

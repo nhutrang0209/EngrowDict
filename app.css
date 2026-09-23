@@ -23,6 +23,7 @@ ol, ul { padding: 0; list-style: none; }
   --accent-soft: #dff0e6;
   --accent-line: #0d6b4f;
   --mark:        #d0342c;   /* the dot you leave where you stopped reading */
+  --hl:          #fbe6a2;   /* the wash you leave on words worth keeping */
   --lit:         #a5dfc2;   /* the wash behind the sentence being looked at */
   --lit-ink:     #0c2a1e;
   --flag:        #b04a2b;
@@ -83,6 +84,7 @@ ol, ul { padding: 0; list-style: none; }
   --accent-soft: #dde7d3;
   --accent-line: #3f6b46;
   --mark:        #a83c2a;
+  --hl:          #ecd28a;
   --lit:         #e3cf92;
   --lit-ink:     #33291a;
   --flag:        #9c4a22;
@@ -121,6 +123,7 @@ ol, ul { padding: 0; list-style: none; }
   --accent-soft: #1b3127;
   --accent-line: #57bd93;
   --mark:        #f07f72;
+  --hl:          #4d431f;
   --lit:         #2f6b50;
   --lit-ink:     #e2ece7;
   --flag:        #d8926f;
@@ -148,6 +151,7 @@ ol, ul { padding: 0; list-style: none; }
   --accent-soft: #3a4a57;
   --accent-line: #88c0d0;
   --mark:        #e2938a;
+  --hl:          #5b5334;
   --lit:         #4c5f72;
   --lit-ink:     #eceff4;
   --flag:        #d0928a;
@@ -176,6 +180,7 @@ ol, ul { padding: 0; list-style: none; }
   --accent-soft: #13261f;
   --accent-line: #4e9d80;
   --mark:        #c8685d;
+  --hl:          #3a3218;
   --lit:         #204534;
   --lit-ink:     #c8d4ce;
   --flag:        #b07a5e;
@@ -1143,6 +1148,46 @@ dialog::backdrop { background: rgba(8, 14, 11, .5); backdrop-filter: blur(2px); 
   outline: none; transform: scale(1.15);
   box-shadow: 0 0 0 5px color-mix(in srgb, var(--mark) 26%, transparent);
 }
+
+/* The marks a reader leaves on the words themselves. As many to a passage as
+   the passage deserves — the dot above answers where you stopped, and this
+   answers what was worth stopping at, which is a different question and not
+   one with a single answer.
+
+   A wash, not a fill: the letters keep the ink they were read in, so a
+   highlighted line is the same line, noticed. One highlight can be several
+   marks where it runs through an italic or a link, and the shadow under each
+   is what closes the hairline between two of them so they read as one. */
+mark.hl {
+  background: var(--hl);
+  color: inherit;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px var(--hl);
+  cursor: pointer;
+  transition: box-shadow .14s ease;
+}
+mark.hl:hover {
+  box-shadow: 0 0 0 1px var(--hl), 0 0 0 3px color-mix(in srgb, var(--hl) 45%, transparent);
+}
+/* The dot, where it falls inside one, keeps its own ring rather than the
+   wash's — two marks on the same words, each still legible as itself. */
+mark.hl .readmark { box-shadow: 0 0 0 3px color-mix(in srgb, var(--mark) 22%, transparent); }
+
+/* The button that leaves one, in the card that opens over a selection, and
+   the one that takes it off beside it. The first wears the wash it will lay,
+   so what it does needs no explaining; the second is quiet, because a reader
+   reaching for it already knows which highlight they meant. */
+.lookup .hl-row { margin-top: 9px; }
+.lookup .glosses + .hl-row, .lookup .row + .hl-row { margin-top: 7px; }
+.lookup .hl-btn {
+  background: var(--hl); border-color: transparent; color: var(--ink);
+}
+.lookup .hl-btn:hover {
+  border-color: color-mix(in srgb, var(--hl) 70%, var(--ink));
+  background: var(--hl);
+}
+.lookup .hl-off { color: var(--muted); }
+.lookup .hl-off:hover { color: var(--ink); }
 
 /* What has been picked out on the English side, picked out here too — by the
    sentence, so a phrase does not light the whole paragraph it sits in. A wash

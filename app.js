@@ -2529,6 +2529,288 @@
     return b;
   }
 
+
+  /* ---- the highlighter ----------------------------------------------------
+
+     The dot above says where you stopped. This says what was worth stopping
+     at, and unlike the dot there may be as many as the passage deserves.
+
+     It is kept the way the dot is kept — a paragraph, and characters into it,
+     rather than anything about the screen — because that is the only anchor
+     that survives the things that move text around: the translation column
+     opening beside the passage, the divider being dragged, a phone turning on
+     its side, the serif arriving late. An offset into the words is the same
+     offset at any width.
+
+     Two ends rather than one, and merged with whatever is already washed
+     under them, so highlighting a sentence twice leaves one highlight, and
+     highlighting the word after an existing one grows it rather than laying a
+     second beside it with a seam down the middle.
+
+     Held per passage and per chapter, under the same key the reading place
+     uses, so a book's third chapter is not its fourth. */
+  var HL_KEY = "engrowdict:hl:v1";
+  var hilites = null;
+  /* What the open card would wash, or unwash: the selection as a list of
+     paragraph ranges. Null whenever the selection was not in something being
+     read — the Translate tab shares this card. */
+  var hlSpan = null;
+
+  function readHilites() {
+    if (hilites) return hilites;
+    try { hilites = JSON.parse(localStorage.getItem(HL_KEY) || "{}"); }
+    catch (err) { hilites = {}; }
+    if (!hilites || typeof hilites !== "object") hilites = {};
+    return hilites;
+  }
+
+  function hilitesOf(key) {
+    var got = key ? readHilites()[key] : null;
+    return (got && got.length) ? got : [];
+  }
+
+  function keepHilites(key, list) {
+    if (!key) return;
+    var all = readHilites();
+    if (list && list.length) all[key] = list; else delete all[key];
+    try { localStorage.setItem(HL_KEY, JSON.stringify(all)); }
+    catch (err) { /* private mode: they last as long as the page does */ }
+  }
+
+  /* ---- ranges, as arithmetic ---------------------------------------------
+
+     A highlight is {p, from, to}: a paragraph, and the half-open run of
+     characters in it. Everything below works on lists of those, kept sorted,
+     kept apart and kept out of each other — which is what makes a second
+     highlight over the first one highlight rather than two. */
+  function packRanges(list) {
+    var out = [];
+    list.slice().sort(function (a, b) {
+      return a.p - b.p || a.from - b.from;
+    }).forEach(function (r) {
+      if (r.to <= r.from) return;
+      var last = out[out.length - 1];
+      /* Touching counts as overlapping: a run that starts where the last one
+         ended is the same stretch of words, not two. */
+      if (last && last.p === r.p && r.from <= last.to) {
+        if (r.to > last.to) last.to = r.to;
+      } else out.push({ p: r.p, from: r.from, to: r.to });
+    });
+    return out;
+  }
+
+  /* What is left of `list` once everything in `span` is taken out of it. Used
+     both ways round: to unwash a stretch, and to ask how much of a selection
+     is not washed yet. */
+  function lessRanges(list, span) {
+    var keep = list.slice();
+    (span || []).forEach(function (s) {
+      var next = [];
+      keep.forEach(function (r) {
+        if (r.p !== s.p || s.to <= r.from || s.from >= r.to) { next.push(r); return; }
+        if (s.from > r.from) next.push({ p: r.p, from: r.from, to: s.from });
+        if (s.to < r.to) next.push({ p: r.p, from: s.to, to: r.to });
+      });
+      keep = next;
+    });
+    return keep;
+  }
+
+  function rangeLen(list) {
+    var n = 0;
+    (list || []).forEach(function (r) { n += r.to - r.from; });
+    return n;
+  }
+
+  /* A selection, as paragraph ranges. Across two paragraphs it is two of
+     them: the tail of the first and the head of the second, and never the gap
+     between, which is not text and would wash the space above the line.
+
+     The ends are pulled in off any whitespace they landed on. A drag that
+     overshoots the full stop is a drag that meant the sentence, and a wash
+     running past the last word shows as a stripe with nothing under it. */
+  function spanOf(range) {
+    if (!range || range.collapsed || !placeKey()) return null;
+    var prose = document.querySelector(".detail .prose");
+    if (!prose) return null;
+    var paras = prose.children;
+    var a = proseIndex(range.startContainer, paras);
+    var b = proseIndex(range.endContainer, paras);
+    if (a < 0 || b < 0) return null;
+    if (b < a) { var swap = a; a = b; b = swap; }
+    var out = [];
+    for (var p = a; p <= b; p++) {
+      var para = paras[p];
+      var text = paraText(para);
+      var from = p === a ? offsetIn(para, range.startContainer, range.startOffset) : 0;
+      var to = p === b ? offsetIn(para, range.endContainer, range.endOffset) : text.length;
+      if (from < 0 || to < 0) continue;
+      while (from < to && /\s/.test(text.charAt(from))) from++;
+      while (to > from && /\s/.test(text.charAt(to - 1))) to--;
+      if (to > from) out.push({ p: p, from: from, to: to });
+    }
+    return out.length ? out : null;
+  }
+
+  /* The whole of the highlight a piece of wash belongs to. One highlight can
+     be several marks — it splits wherever it runs through an italic, a link
+     or the dot — so the piece that was clicked is looked up in what is kept,
+     rather than taken at its own width. */
+  function hiliteAt(node) {
+    var span = null;
+    try {
+      var r = document.createRange();
+      r.selectNodeContents(node);
+      span = spanOf(r);
+    } catch (err) { span = null; }
+    if (!span) return null;
+    var out = [];
+    hilitesOf(placeKey()).forEach(function (h) {
+      span.forEach(function (s) {
+        if (h.p === s.p && h.from < s.to && h.to > s.from && out.indexOf(h) < 0) out.push(h);
+      });
+    });
+    return out.length ? out : null;
+  }
+
+  /* The wash that was clicked, from whatever was under the pointer. */
+  function washUnder(node) {
+    while (node && node !== document.body) {
+      if (node.nodeType === 1 && node.className
+          && String(node.className).split(/\s+/).indexOf("hl") > -1) return node;
+      node = node.parentNode;
+    }
+    return null;
+  }
+
+  /* ---- putting it on the page --------------------------------------------
+
+     A paragraph at a time, over its own text nodes rather than by rebuilding
+     it, so a highlight that runs through an italic or a link keeps the italic
+     and the link: each piece is wrapped where it lies. */
+  function washPara(para, runs) {
+    var label = para.querySelector && para.querySelector(".pmark");
+    var walk = document.createTreeWalker(para, 4);   // NodeFilter.SHOW_TEXT
+    var nodes = [], t;
+    while ((t = walk.nextNode())) {
+      if (label && label.contains(t)) continue;
+      nodes.push(t);
+    }
+    var seen = 0;
+    nodes.forEach(function (node) {
+      var from = seen, to = seen + node.textContent.length;
+      seen = to;
+      var parts = [];
+      runs.forEach(function (r) {
+        var s = Math.max(r.from, from), e = Math.min(r.to, to);
+        if (e > s) parts.push({ s: s - from, e: e - from });
+      });
+      /* From the end backwards, so that splitting one piece off leaves the
+         offsets of the pieces before it exactly where they were. */
+      parts.sort(function (x, y) { return y.s - x.s; });
+      parts.forEach(function (q) {
+        if (q.e < node.textContent.length) node.splitText(q.e);
+        var piece = q.s > 0 ? node.splitText(q.s) : node;
+        var m = el("mark", "hl");
+        m.title = "Highlighted. Click to take it off.";
+        piece.parentNode.insertBefore(m, piece);
+        m.appendChild(piece);
+      });
+    });
+  }
+
+  /* Off again, leaving the words joined back up the way they were found. */
+  function unwash(prose) {
+    var marks = prose.querySelectorAll("mark.hl");
+    for (var i = 0; i < marks.length; i++) {
+      var m = marks[i], host = m.parentNode;
+      while (m.firstChild) host.insertBefore(m.firstChild, m);
+      host.removeChild(m);
+      host.normalize();          // the two halves of the split text, rejoined
+    }
+  }
+
+  /* Taken off and put on again wherever they belong — the same move the dot
+     makes, and for the same reason: redrawing the passage would do it too,
+     and would put the reader back at the top of it. The dot goes on last, so
+     it is never buried under a wash laid after it. */
+  function paintHilites(prose) {
+    prose = prose || document.querySelector(".detail .prose");
+    if (!prose) return;
+    unwash(prose);
+    var by = {};
+    hilitesOf(placeKey()).forEach(function (r) {
+      (by[r.p] = by[r.p] || []).push(r);
+    });
+    Object.keys(by).forEach(function (p) {
+      var para = prose.children[p];
+      if (!para) return;
+      washPara(para, by[p].sort(function (a, b) { return a.from - b.from; }));
+    });
+    paintMark(prose);
+  }
+
+  function afterWash() {
+    hideLookup();
+    var sel = window.getSelection && window.getSelection();
+    if (sel) sel.removeAllRanges();
+    dimAiParas();
+    paintHilites(document.querySelector(".detail .prose"));
+  }
+
+  function washOn(span) {
+    var key = placeKey();
+    if (!key || !span) return;
+    keepHilites(key, packRanges(hilitesOf(key).concat(span)));
+    afterWash();
+  }
+
+  function washOff(span) {
+    var key = placeKey();
+    if (!key || !span) return;
+    keepHilites(key, lessRanges(hilitesOf(key), span));
+    afterWash();
+  }
+
+  /* The last row of the card, under whatever else it had to offer. A reader
+     marks a line because it matters to them, not because the notebook had
+     anything to say about it, so the button is there whether or not the rest
+     of the card found something.
+
+     Which of the two it offers is read off the page rather than asked: words
+     with nothing washed under them can be highlighted, words already washed
+     can be cleared, and a selection that is half one and half the other gets
+     both — because either is a thing somebody might have meant by it. */
+  function hlRow(host) {
+    var key = placeKey();
+    if (!hlSpan || !key) return;
+    var bare = lessRanges(hlSpan, hilitesOf(key));
+    var open = rangeLen(bare), whole = rangeLen(hlSpan);
+    if (!whole) return;
+    var row = el("div", "row hl-row");
+    if (open > 0) {
+      var on = el("button", "btn hl-btn", "Highlight");
+      on.type = "button";
+      on.id = "highlight-this";
+      on.title = "Keep these words marked";
+      (function (span) {
+        on.addEventListener("click", function () { washOn(span); });
+      }(hlSpan));
+      row.appendChild(on);
+    }
+    if (open < whole) {
+      var off = el("button", "btn hl-off", "Remove highlight");
+      off.type = "button";
+      off.id = "unhighlight-this";
+      off.title = "Take the mark off these words";
+      (function (span) {
+        off.addEventListener("click", function () { washOff(span); });
+      }(hlSpan));
+      row.appendChild(off);
+    }
+    host.appendChild(row);
+  }
+
   function readingView(r, lead) {
     var w = el("div", "read");
     /* Beside a translation the button sits in a header of its own, the twin of
@@ -2550,13 +2832,14 @@
       (lead || "Passage " + r.index) + " · " + fmt(words) + " words"));
     var hint = el("p", "hint",
       "Select any word or phrase to see what the notebook has on it — English "
-      + "to Vietnamese, and the red dot in that card marks how far you have read.");
+      + "to Vietnamese. The red dot in that card marks how far you have read, "
+      + "and Highlight under it keeps the words marked, as many as you like.");
     w.appendChild(hint);
     var prose = el("div", "prose");
     r.paras.forEach(function (x) { prose.appendChild(proseNode(x)); });
     prose.addEventListener("mouseup", onSelectInProse);
     prose.addEventListener("touchend", onSelectInProse);
-    paintMark(prose);
+    paintHilites(prose);
     w.appendChild(prose);
     return w;
   }
@@ -4578,21 +4861,42 @@
   var LOOKUP_MAX = 300;
   var lookupCard = null;
 
-  function onSelectInProse() {
+  function onSelectInProse(ev) {
+    /* Where the pointer came down, before the selection is looked at: a click
+       on a highlight with nothing selected is a reader pointing at one of
+       their own marks, and the only thing they can mean by it is take it off.
+       Read now because the card, once it opens, is what they will be clicking
+       next. */
+    var washed = ev && washUnder(ev.target);
     // let the browser settle the selection first
     setTimeout(function () {
       var sel = window.getSelection && window.getSelection();
-      if (!sel || sel.isCollapsed) { hideLookup(); dimAiParas(); return; }
+      if (!sel || sel.isCollapsed) {
+        if (washed) return offerUnwash(washed);
+        hideLookup();
+        dimAiParas();
+        return;
+      }
       var range = null;
       try { range = sel.getRangeAt(0); } catch (err) { range = null; }
       litAiParas(range);
       markSpot = spotOf(range);       // where the button in the card would mark
+      hlSpan = spanOf(range);         // and what the highlighter would wash
       var text = String(sel).trim();
-      if (!text || text.length > LOOKUP_MAX) { hideLookup(); return; }
+      var far = null;
+      try { far = range ? range.getBoundingClientRect() : null; }
+      catch (err) { far = null; }
+      if (!text) { hideLookup(); return; }
+      /* Too long to be a question about a phrase — but a reader who has just
+         dragged over a whole paragraph has said something all the same, which
+         is that those are the words they want kept. The card comes back with
+         only the highlighter in it. */
+      if (text.length > LOOKUP_MAX) {
+        if (hlSpan) showLookup(text, far, true); else hideLookup();
+        return;
+      }
       alignPhrase(text);              // and the Vietnamese for these very words
-      var rect = null;
-      try { rect = range ? range.getBoundingClientRect() : null; }
-      catch (err) { rect = null; }
+      var rect = far;
       if (popOpen()) {
         var inp = popQ();
         inp.value = text;
@@ -4609,7 +4913,25 @@
     if (lookupCard) lookupCard.hidden = true;
   }
 
-  function showLookup(text, rect) {
+  /* A highlight pressed with nothing selected. The card opens on it the way
+     it opens on a selection, so taking one off is the same two steps as
+     putting one on — and a press that was only a press, because the reader
+     was finding their line with a finger, costs a card they can close rather
+     than a highlight they have to put back. */
+  function offerUnwash(node) {
+    hlSpan = hiliteAt(node);
+    if (!hlSpan) { hideLookup(); dimAiParas(); return; }
+    markSpot = null;
+    var rect = null;
+    try { rect = node.getBoundingClientRect(); } catch (err) { rect = null; }
+    showLookup(node.textContent || "", rect, true);
+  }
+
+  /* `brief` is the card with the highlighter and nothing else: what opens
+     over a paragraph, or over a highlight being pressed. Neither is a
+     question about a word, and answering one with a translation of four
+     hundred characters would bury the one button that was wanted. */
+  function showLookup(text, rect, brief) {
     if (!lookupCard) {
       lookupCard = el("div", "lookup");
       lookupCard.id = "lookup";
@@ -4633,6 +4955,18 @@
     close.setAttribute("aria-label", "Close");
     close.addEventListener("click", hideLookup);
     lookupCard.appendChild(close);
+
+    if (brief) {
+      /* A line of it, so the card says which words it is open on without
+         reprinting the paragraph they came from. */
+      var some = text.replace(/\s+/g, " ").trim();
+      if (some.length > 88) some = some.slice(0, 87).replace(/\s\S*$/, "") + "…";
+      lookupCard.appendChild(el("div", "picked line", some));
+      hlRow(lookupCard);
+      lookupCard.hidden = false;
+      place(lookupCard, rect);
+      return;
+    }
 
     var found = lookupText(text);
 
@@ -4711,6 +5045,10 @@
       row.appendChild(open);
       lookupCard.appendChild(row);
     }
+
+    /* Last, under everything the card already offered: the reader's own mark
+       on the words, which is theirs to leave whatever the notebook said. */
+    hlRow(lookupCard);
 
     lookupCard.hidden = false;
     place(lookupCard, rect);
