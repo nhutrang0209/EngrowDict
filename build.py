@@ -52,7 +52,7 @@ HEAD = (
     '<script>try{var t=localStorage.getItem("engrowdict:theme:v1");'
     'if(t==="dark"||t==="light"){document.documentElement.setAttribute("data-theme",t);'
     'var m=document.querySelectorAll("meta[name=theme-color]");'
-    'for(var i=0;i<m.length;i++)m[i].setAttribute("content",t==="dark"?"#0a0f0c":"#eef0ec")}'
+    'for(var i=0;i<m.length;i++)m[i].setAttribute("content",t==="dark"?"#151917":"#eef0ec")}'
     '}catch(e){}</script>\n'
     '<link rel="preconnect" href="https://fonts.googleapis.com">\n'
     '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n'
@@ -72,7 +72,7 @@ PWA_HEAD = (
     '<meta name="apple-mobile-web-app-title" content="EngrowDict">\n'
     '<meta name="apple-mobile-web-app-status-bar-style" content="default">\n'
     '<meta name="theme-color" media="(prefers-color-scheme: light)" content="#eef0ec">\n'
-    '<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0a0f0c">\n'
+    '<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#151917">\n'
 )
 
 REGISTER = (

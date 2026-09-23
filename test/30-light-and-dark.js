@@ -51,7 +51,7 @@ const theme = g => g.doc.documentElement.getAttribute('data-theme');
      btn(a).title);
   const metas = [...a.doc.querySelectorAll('meta[name=theme-color]')];
   ok('  the browser’s own bar is told as well, since it reads the meta and not the page',
-     metas.length > 0 && metas.every(m => m.getAttribute('content') === '#0a0f0c'),
+     metas.length > 0 && metas.every(m => m.getAttribute('content') === '#151917'),
      metas.map(m => m.getAttribute('content')).join(', ') || 'no meta');
 
   click(a.window, btn(a));
@@ -83,6 +83,49 @@ const theme = g => g.doc.documentElement.getAttribute('data-theme');
      /:root\[data-theme="dark"\] \{/.test(css) &&
      /:root:not\(\[data-theme="light"\]\)/.test(css),
      'dark forced, light forced, and the system between');
+
+  /* --- dark that can be read for an hour ------------------------------------
+     White letters on a near-black page bloom at their edges, and reading
+     through that is an hour of squinting. The first dark palette here was
+     16:1 — brighter than anything an editor ships. These hold it where VS
+     Code holds its own: a page that is dark grey, text that is light grey,
+     about 11:1, which is still well inside AAA. */
+  const rgb = h => [1, 3, 5].map(i => parseInt(h.substr(i, 2), 16));
+  const lin = c => { c /= 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+  const lum = h => { const [r, g, b] = rgb(h).map(lin); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+  const ratio = (f, b) => (Math.max(lum(f), lum(b)) + 0.05) / (Math.min(lum(f), lum(b)) + 0.05);
+  const star = h => { const y = lum(h); return y > 0.008856 ? 116 * y ** (1 / 3) - 16 : 903.3 * y; };
+
+  const forced = css.slice(css.indexOf(':root[data-theme="dark"] {'));
+  const tone = n => (new RegExp('--' + n + ':\\s*(#[0-9a-f]{6})').exec(forced) || [])[1];
+
+  const onPane = ratio(tone('ink'), tone('surface'));
+  ok('dark text is lighter than its page by about as much as VS Code makes it',
+     onPane >= 7 && onPane <= 12, onPane.toFixed(1) + ':1, wanted 7 to 12');
+  ok('  the page is dark grey, not the black that white letters bloom against',
+     star(tone('ground')) >= 6 && star(tone('ground')) <= 14,
+     'L* ' + star(tone('ground')).toFixed(1) + ', wanted 6 to 14');
+  ok('  and the text is light grey, not white',
+     star(tone('ink')) >= 74 && star(tone('ink')) <= 88,
+     'L* ' + star(tone('ink')).toFixed(1) + ', wanted 74 to 88');
+  ok('  quiet text is still quiet, and still readable',
+     ratio(tone('muted'), tone('surface')) >= 4.5 &&
+     ratio(tone('muted'), tone('surface')) < onPane,
+     ratio(tone('muted'), tone('surface')).toFixed(1) + ':1');
+  ok('  and the ochre and the mark carry against the page as well',
+     ratio(tone('term'), tone('surface')) >= 4.5 &&
+     ratio(tone('mark'), tone('surface')) >= 4.5,
+     'ochre ' + ratio(tone('term'), tone('surface')).toFixed(1)
+       + ':1, mark ' + ratio(tone('mark'), tone('surface')).toFixed(1) + ':1');
+
+  /* Two copies of the palette, one for the choice and one for the system.
+     They are only worth having if they say the same thing. */
+  const tidy = s => s.replace(/\s+/g, ' ').trim();
+  const bodyOf = at => tidy(css.slice(css.indexOf('{', at) + 1, css.indexOf('}', at)));
+  ok('the forced palette and the one the system gets are the same palette',
+     bodyOf(css.indexOf(':root[data-theme="dark"]')) ===
+     bodyOf(css.indexOf(':root:not([data-theme="light"])')),
+     'in step');
 
   done(a.errs.concat(b.errs));
 })();

@@ -6354,7 +6354,7 @@
      The head of the page reads the same key before anything is drawn, so a
      reader who chose dark does not get a white flash while the script loads. */
   var THEME_KEY = "engrowdict:theme:v1";
-  var THEME_INK = { light: "#eef0ec", dark: "#0a0f0c" };   // the browser's bar
+  var THEME_INK = { light: "#eef0ec", dark: "#151917" };   // the browser's bar
   var themeWatched = false;
 
   function themeChosen() {

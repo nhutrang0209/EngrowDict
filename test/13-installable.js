@@ -52,7 +52,7 @@ function pngSize(rel) {
      /viewport-fit=cover/.test(index));
   ok('  the tab colour follows the theme, both ways',
      /theme-color" media="\(prefers-color-scheme: light\)" content="#eef0ec"/.test(index) &&
-     /theme-color" media="\(prefers-color-scheme: dark\)" content="#0a0f0c"/.test(index));
+     /theme-color" media="\(prefers-color-scheme: dark\)" content="#151917"/.test(index));
   ok('  the manifest is linked and the worker registered',
      /<link rel="manifest" href="manifest\.webmanifest">/.test(index) &&
      /navigator\.serviceWorker\.register\("sw\.js"\)/.test(index));

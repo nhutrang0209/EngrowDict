@@ -43,58 +43,64 @@ ol, ul { padding: 0; list-style: none; }
   --list-w: 348px;
   --top-h: 62px;
 }
+  /* Dark is not black, and its text is not white. Paper read in a dark room
+     is a dark grey page with light grey ink; white letters on near-black
+     bloom at their edges, and an hour of reading is an hour of squinting.
+     The pairs below sit where VS Code puts its own: a page at L* 8, a pane
+     at L* 12, text at L* 84, about 11:1 rather than the 16:1 this used to
+     be. Well inside AAA, without the glare. Test 30 holds them there. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --ground:      #0a0f0c;
-    --surface:     #141a17;
-    --raised:      #1a221e;
-    --sunk:        #101613;
-    --tint:        #131a16;
-    --ink:         #e9efeb;
-    --ink-2:       #bcc7c1;
-    --muted:       #8b9a93;
-    --faint:       #667770;
-    --rule:        #26302b;
-    --hair:        #1c2420;
-    --accent:      #52c396;
-    --accent-hi:   #7cdcb6;
-    --accent-soft: #163126;
-    --accent-line: #52c396;
-    --mark:        #ff7a6e;
-    --lit:         #2c6a4e;
-    --lit-ink:     #eaf6f0;
-    --flag:        #e0906f;
-    --flag-soft:   #2c1d17;
-    --term:        #d9a520;
-    --ring:        0 0 0 3px rgba(82, 195, 150, .2);
+    --ground:      #151917;
+    --surface:     #1c211e;
+    --raised:      #232925;
+    --sunk:        #111513;
+    --tint:        #191e1b;
+    --ink:         #ccd4cf;
+    --ink-2:       #a8b2ad;
+    --muted:       #86918b;
+    --faint:       #67726c;
+    --rule:        #2f3733;
+    --hair:        #242b27;
+    --accent:      #57bd93;
+    --accent-hi:   #7ccfad;
+    --accent-soft: #1b3127;
+    --accent-line: #57bd93;
+    --mark:        #f07f72;
+    --lit:         #2f6b50;
+    --lit-ink:     #e2ece7;
+    --flag:        #d8926f;
+    --flag-soft:   #2e1f19;
+    --term:        #cfa23c;
+    --ring:        0 0 0 3px rgba(87, 189, 147, .2);
     --lift-1:      0 1px 2px rgba(0, 0, 0, .5);
     --lift-2:      0 2px 6px rgba(0, 0, 0, .5), 0 10px 24px -12px rgba(0, 0, 0, .7);
     --lift-3:      0 4px 10px rgba(0, 0, 0, .6), 0 26px 60px -28px rgba(0, 0, 0, .95);
   }
 }
 :root[data-theme="dark"] {
-  --ground:      #0a0f0c;
-  --surface:     #141a17;
-  --raised:      #1a221e;
-  --sunk:        #101613;
-  --tint:        #131a16;
-  --ink:         #e9efeb;
-  --ink-2:       #bcc7c1;
-  --muted:       #8b9a93;
-  --faint:       #667770;
-  --rule:        #26302b;
-  --hair:        #1c2420;
-  --accent:      #52c396;
-  --accent-hi:   #7cdcb6;
-  --accent-soft: #163126;
-  --accent-line: #52c396;
-  --mark:        #ff7a6e;
-  --lit:         #2c6a4e;
-  --lit-ink:     #eaf6f0;
-  --flag:        #e0906f;
-  --flag-soft:   #2c1d17;
-  --term:        #d9a520;
-  --ring:        0 0 0 3px rgba(82, 195, 150, .2);
+  --ground:      #151917;
+  --surface:     #1c211e;
+  --raised:      #232925;
+  --sunk:        #111513;
+  --tint:        #191e1b;
+  --ink:         #ccd4cf;
+  --ink-2:       #a8b2ad;
+  --muted:       #86918b;
+  --faint:       #67726c;
+  --rule:        #2f3733;
+  --hair:        #242b27;
+  --accent:      #57bd93;
+  --accent-hi:   #7ccfad;
+  --accent-soft: #1b3127;
+  --accent-line: #57bd93;
+  --mark:        #f07f72;
+  --lit:         #2f6b50;
+  --lit-ink:     #e2ece7;
+  --flag:        #d8926f;
+  --flag-soft:   #2e1f19;
+  --term:        #cfa23c;
+  --ring:        0 0 0 3px rgba(87, 189, 147, .2);
   --lift-1:      0 1px 2px rgba(0, 0, 0, .5);
   --lift-2:      0 2px 6px rgba(0, 0, 0, .5), 0 10px 24px -12px rgba(0, 0, 0, .7);
   --lift-3:      0 4px 10px rgba(0, 0, 0, .6), 0 26px 60px -28px rgba(0, 0, 0, .95);
