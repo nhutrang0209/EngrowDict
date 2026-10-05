@@ -77,6 +77,16 @@ function boot(opts) {
       if (opts.width) {
         Object.defineProperty(w, 'innerWidth', { value: opts.width, configurable: true });
       }
+      if (opts.height) {
+        Object.defineProperty(w, 'innerHeight', { value: opts.height, configurable: true });
+      }
+      // jsdom has no visual viewport, and the phone layout reads it to tell
+      // whether the keyboard is up: what is left over against what there is
+      if (opts.visual) {
+        const vv = new w.EventTarget();
+        vv.height = opts.visual;
+        Object.defineProperty(w, 'visualViewport', { configurable: true, value: vv });
+      }
       // jsdom brings no WebCrypto, and the shared links are AES-GCM
       if (!w.crypto || !w.crypto.subtle) {
         Object.defineProperty(w, 'crypto', {

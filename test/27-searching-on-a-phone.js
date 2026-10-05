@@ -96,5 +96,62 @@ async function open(g, word) {
      box(wide).classList.contains('in-list'),
      box(wide).parentNode.className);
 
-  done(g.errs.concat(wide.errs));
+  /* --- and with the keyboard up ------------------------------------------
+
+     A phone is 640 points tall and the keyboard takes 300 of them, with
+     another 45 for the suggestions above it. The furniture over the list — the
+     name of the page and its buttons, the A-to-Z strip, the two rows of
+     filters — was taking nearly all of what was left, and the reader typing a
+     word was shown one row of the answer.
+
+     Hung on the keyboard rather than on the box having focus, because a tap on
+     a row blurs the box first: furniture coming back at that moment would
+     slide the row out from under the thumb. */
+  const k = boot({
+    html: shell, full: true, width: 390, height: 640, visual: 640,
+    url: 'https://nhutrang0209.github.io/EngrowDict/',
+    dataFile: 'docs/data.json',
+  });
+  await wait(900);
+  const keys = () => k.doc.body.dataset.keys;
+  const keyboard = h => {
+    k.window.visualViewport.height = h;
+    k.window.visualViewport.dispatchEvent(new k.window.Event('resize'));
+  };
+
+  ok('with no keyboard up the phone shows everything it always did',
+     keys() === undefined, String(keys()));
+
+  keyboard(295);                     // 640 less a keyboard and its suggestions
+  ok('the keyboard coming up is noticed, without being asked about',
+     keys() === 'up', String(keys()));
+
+  keyboard(640);
+  ok('  and putting it away gives the furniture back',
+     keys() === undefined, String(keys()));
+
+  /* A wide window has the room, so nothing is taken off it — a laptop with an
+     on-screen keyboard is still a laptop. */
+  const kw = boot({
+    html: shell, full: true, width: 1400, height: 900, visual: 900,
+    url: 'https://nhutrang0209.github.io/EngrowDict/',
+    dataFile: 'docs/data.json',
+  });
+  await wait(900);
+  kw.window.visualViewport.height = 420;
+  kw.window.visualViewport.dispatchEvent(new kw.window.Event('resize'));
+  ok('on a window wide enough to have the room, nothing is folded away',
+     kw.doc.body.dataset.keys === undefined, String(kw.doc.body.dataset.keys));
+
+  ok('what goes is what is not the answer, and the box and the tabs are not it',
+     /body\[data-keys="up"\] \.brand,[\s\S]{0,200}\.chips \{ display: none; \}/.test(css)
+     && !/body\[data-keys="up"\][\s\S]{0,200}\.search \{ display: none/.test(css)
+     && !/body\[data-keys="up"\][\s\S]{0,200}\.nav \{ display: none/.test(css),
+     'brand, acts, alpha and chips');
+  ok('  and it is the phone rule that says so, not every screen',
+     css.indexOf('body[data-keys="up"]')
+       > css.indexOf('@media (max-width: 760px)'),
+     'inside the phone rule');
+
+  done(g.errs.concat(wide.errs, k.errs, kw.errs));
 })();

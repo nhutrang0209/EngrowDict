@@ -1496,6 +1496,22 @@ a.btn[hidden] { display: none; }
   .brand { order: 1; }
   .acts { order: 2; margin-left: auto; }
   .search { order: 3; flex-basis: 100%; max-width: none; }
+
+  /* ---- with the keyboard up -------------------------------------------- */
+  /* Three hundred points of the phone are keyboard and another forty-five are
+     the strip of suggestions over it. Of what is left, the furniture above the
+     list was taking nearly all of it and the reader was shown one row of the
+     answer. While the keyboard is up, what is not the answer goes: the name of
+     the page and the buttons beside it, the A-to-Z strip — which is the other
+     way of finding a word, not this one — and the filters, two rows deep,
+     narrowing a list nobody can see yet. The box stays, the tabs stay, and so
+     does the line that counts the matches. Everything is back the moment the
+     keyboard is put away. */
+  body[data-keys="up"] .brand,
+  body[data-keys="up"] .acts,
+  body[data-keys="up"] .alpha,
+  body[data-keys="up"] .chips { display: none; }
+  body[data-keys="up"] .top { padding: 8px 14px; }
   .list { border-left: 0; border-right: 0; }
   .detail-inner { padding: 26px 18px 72px; }
   /* Reading takes the whole phone, and the passage runs up under the bar: a
@@ -3204,6 +3220,50 @@ a.btn[hidden] { display: none; }
 
   function topBar() {
     return document.querySelector(".top");
+  }
+
+  /* ---- the screen a phone has left once the keyboard is up ----------------
+
+     A phone is 640 points tall and the keyboard takes 300 of them, with
+     another 45 for the strip of suggestions above it. What was left for the
+     list was the bar, the tabs, the A-to-Z strip, the filters and the line
+     that counts the matches — about 290 points of furniture — and then one
+     row of the answer. A reader typing a word was being shown everything
+     except the words.
+
+     So while the keyboard is up, the things that are not the answer go. The
+     name of the page and the buttons beside it are not what was asked for.
+     The A-to-Z strip is the other way of finding a word, not this one. The
+     filters narrow a list nobody can see yet, and they are two rows deep. The
+     box being typed in stays, the tabs stay — a search wants to say which
+     thing it is searching — and so does the count, which is the first part of
+     the answer to arrive.
+
+     Hung on the keyboard rather than on the box having focus, which is the
+     same thing to a reader and not the same thing at all to a finger: a tap
+     on a row blurs the box first, and furniture coming back at that moment
+     would slide the row out from under the thumb and land the tap on its
+     neighbour. The keyboard is still up at that point, and still up until
+     after the tap has been dealt with. */
+  var KEYS_UP = 0.75;   /* of the window: below this much left, it is up */
+
+  function watchKeys() {
+    var vv = window.visualViewport;
+    if (!vv || !vv.addEventListener) return;
+    function settle() {
+      /* The visual viewport is what is left after the keyboard; the window is
+         what there would be without one. Their ratio says the keyboard is up
+         without asking the browser a question it has no answer for. */
+      var up = narrowScreen()
+        && vv.height > 0
+        && vv.height < (window.innerHeight || vv.height) * KEYS_UP;
+      if (up === (document.body.dataset.keys === "up")) return;
+      if (up) document.body.dataset.keys = "up";
+      else delete document.body.dataset.keys;
+      measureBar();          // the bar is a row shorter without the buttons
+    }
+    vv.addEventListener("resize", settle);
+    settle();
   }
 
   /* The bar's own height, given to the stylesheet: the passage is padded by it
@@ -8823,6 +8883,7 @@ a.btn[hidden] { display: none; }
     watchTop(detail);
     detail.addEventListener("scroll", syncAiScroll, { passive: true });
     measureBar();
+    watchKeys();
     // the bar is a different height once its own fonts arrive
     if (document.fonts && document.fonts.ready && document.fonts.ready.then) {
       document.fonts.ready.then(measureBar);
