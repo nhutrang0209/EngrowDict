@@ -186,10 +186,19 @@ function fakeSheet(rows) {
       for (let i = 0; i < n; i++) g.splice(at - 1, 0, ['', '', '', '']);
     },
     deleteRows: (at, n) => { g.splice(at - 1, n); },
+    // how a tab is set out is not what any of this is checking, so the calls
+    // are taken and dropped — but they have to be takeable, or the script
+    // that makes a tab for itself throws on the first one
+    setFrozenRows: () => sheet,
+    setColumnWidth: () => sheet,
     insertRowsAfter: (at, n) => {
       for (let i = 0; i < n; i++) g.splice(at, 0, ['', '', '', '']);
     },
     getRange: (row, col, nRows, nCols) => {
+      if (typeof row === 'string') {        // getRange('A:A'), a whole column
+        const only = { setVerticalAlignment: () => only, setWrap: () => only };
+        return only;
+      }
       nRows = nRows === undefined ? 1 : nRows;
       nCols = nCols === undefined ? 1 : nCols;
       const at = { row, col, nRows, nCols };
@@ -207,6 +216,8 @@ function fakeSheet(rows) {
           }
         },
         merge: () => { log.merges.push(at); },
+        setVerticalAlignment: function () { return this; },
+        setWrap: function () { return this; },
         setRichTextValue: v => { log.rich.push({ at, value: v }); },
         setBorder: (top, left, bottom, right, vertical, horizontal, color, style) => {
           log.borders.push({ at, top, left, bottom, right, vertical, horizontal, color, style });
@@ -232,6 +243,12 @@ function appsScriptSandbox(grids, props, others) {
     return m;
   };
   const sheets = tabs(grids);
+  /* A tab the script makes for itself, which is how the questions tab arrives
+     in a sheet that was written before there were any. */
+  const addSheet = name => {
+    sheets[name] = fakeSheet([]);
+    return sheets[name];
+  };
   const books = {};
   for (const id of Object.keys(others || {})) books[id] = tabs(others[id]);
 
@@ -309,7 +326,10 @@ function appsScriptSandbox(grids, props, others) {
       },
     },
     SpreadsheetApp: {
-      getActiveSpreadsheet: () => ({ getSheetByName: n => sheets[n] || null }),
+      getActiveSpreadsheet: () => ({
+        getSheetByName: n => sheets[n] || null,
+        insertSheet: n => addSheet(n),
+      }),
       getUi: () => ({
         showModalDialog: (out, title) => { shown.dialog = { out, title }; },
         alert: function () { shown.alert = [].slice.call(arguments); },
@@ -317,7 +337,10 @@ function appsScriptSandbox(grids, props, others) {
       }),
       openById: id => {
         if (!books[id]) throw new Error('No spreadsheet with the id ' + id);
-        return { getSheetByName: n => books[id][n] || null };
+        return {
+          getSheetByName: n => books[id][n] || null,
+          insertSheet: n => (books[id][n] = fakeSheet([])),
+        };
       },
       newTextStyle: textStyle,
       newRichTextValue: richText,

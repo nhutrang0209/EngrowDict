@@ -576,6 +576,11 @@
 
   /* ---- search ------------------------------------------------------------ */
   function pool() {
+    /* The Questions tab is the passages that have any. A set of questions
+       belongs to one passage and has no life apart from it, so there is no
+       second list of things to keep in step with the first — there is the
+       one list, read through a narrower window. */
+    if (view === "quiz") return READINGS.filter(hasQuiz);
     if (view === "read") return READINGS;
     if (view === "book") return BOOKS;
     if (view === "translate") return [];      // nothing here is a list of things
@@ -765,13 +770,18 @@
 
   function select(id, keepScroll) {
     if (aiPane && aiPane.id !== id) aiPane = null;   // another passage, another one
+    if (quizOpen && quizOpen !== id) quizOpen = null;
     selectedId = id;
-    if (view === "read" && !aiPane) restoreAiPane(byId[id]);
+    if (onPassage() && !aiPane) restoreAiPane(byId[id]);
     /* One id space for three kinds of thing, so what comes back is checked
        against what the view can draw. A word selected while the passages were
        on screen was handed to the passage renderer, which read a passage's
        text off a word and threw — leaving the pane cleared and empty. */
-    if (view === "read") selectedRead = passageOrNothing(byId[id]);
+    if (onPassage()) selectedRead = passageOrNothing(byId[id]);
+    /* Picked out of the Questions tab, the questions are the errand: the pane
+       is open before it is asked for, because asking again for the thing just
+       chosen is a step with nothing at the end of it. */
+    if (view === "quiz" && hasQuiz(selectedRead)) quizOpen = selectedRead.id;
     if (view === "book") { selectedBook = bookOrNothing(byId[id]); openChapter = 0; }
     var ns = windowBox.querySelectorAll(".hit");
     for (var i = 0; i < ns.length; i++) {
@@ -823,7 +833,16 @@
   }
 
   /* ---- detail pane -------------------------------------------------------- */
+  /* The Passages tab and the Questions tab are two windows onto the same
+     thing: a passage, open to be read. Everything about having one open — the
+     place kept in it, the mark, the highlights, where the search box lives,
+     the menu over it — is the same in both, and asks this rather than naming
+     one of them. What differs is the list on the left and what is offered to
+     be added, and those name the tab outright. */
+  function onPassage() { return view === "read" || view === "quiz"; }
+
   function passageOrNothing(x) { return x && x.paras ? x : null; }
+  function hasQuiz(x) { return !!(x && x.paras && String(x.quiz || "").trim()); }
   function bookOrNothing(x) { return x && x.chapters ? x : null; }
 
   function drawDetail() {
@@ -831,7 +850,7 @@
     var host = document.getElementById("detail-inner");
     host.textContent = "";
     // a passage runs the full width; an entry keeps a narrower measure
-    var wide = (view === "read" && selectedRead)
+    var wide = (onPassage() && selectedRead)
       || (view === "book" && selectedBook && openChapter)
       || view === "translate";
     host.className = "detail-inner" + (wide ? " wide" : "");
@@ -840,15 +859,28 @@
       paintTranslation();      // it fills nodes by id, so only once they are in
       return;
     }
-    if (view === "read") {
-      if (selectedRead && aiPane && aiPane.id === selectedRead.id) {
-        // two columns want the whole pane: the margin a single column reads
-        // better for is a strip of nothing between the translation and the edge
+    if (onPassage()) {
+      var panes = rightPanes(selectedRead);
+      if (selectedRead && panes.length) {
+        // the columns want the whole pane: the margin a single column reads
+        // better for is a strip of nothing between the last of them and the edge
         host.className = "detail-inner wide split";
         var split = el("div", "readsplit");
         split.appendChild(readingView(selectedRead));
-        split.appendChild(aiSplitter());
-        split.appendChild(aiPaneView(selectedRead));
+        if (panes.length > 1 && tightWindow()) {
+          /* No room for three columns of prose, so the two that would share
+             the right-hand one take turns in it instead. Three columns none
+             of which can hold a line is worse than two that can. */
+          split.dataset.panes = "1";
+          split.appendChild(paneSplitter("ai"));
+          split.appendChild(sharedPane(selectedRead, panes));
+        } else {
+          split.dataset.panes = String(panes.length);
+          panes.forEach(function (which) {
+            split.appendChild(paneSplitter(which));
+            split.appendChild(paneView(which, selectedRead, null));
+          });
+        }
         host.appendChild(split);
       } else {
         host.appendChild(selectedRead ? readingView(selectedRead) : blankView());
@@ -1357,7 +1389,7 @@
 
   /* What the pane is showing, if it is showing something you read at all. */
   function placeKey() {
-    if (view === "read" && selectedRead) return "r:" + selectedRead.id;
+    if (onPassage() && selectedRead) return "r:" + selectedRead.id;
     if (view === "book" && selectedBook && openChapter) {
       return "b:" + selectedBook.slug + ":" + openChapter;
     }
@@ -2049,8 +2081,13 @@
 
   function keepOpen() {
     var all = readOpened();
-    if (view === "read") {
-      if (selectedRead) all.read = selectedRead.id; else delete all.read;
+    if (onPassage()) {
+      /* A slot per tab. They hold the same kind of thing and would fit in
+         one, but a passage opened to answer questions on it is not the one
+         left open to be read, and coming back to either should find what was
+         left there rather than what the other tab did last. */
+      var slot = view === "quiz" ? "quiz" : "read";
+      if (selectedRead) all[slot] = selectedRead.id; else delete all[slot];
     } else if (view === "book") {
       if (selectedBook) all.book = { id: selectedBook.id, chapter: openChapter || 0 };
       else delete all.book;
@@ -2060,10 +2097,14 @@
 
   function reopen() {
     var all = readOpened();
-    if (view === "read" && all.read && passageOrNothing(byId[all.read])) {
-      select(all.read);
-      showDetail();
-      return true;
+    if (onPassage()) {
+      var was = view === "quiz" ? all.quiz : all.read;
+      var got = was && passageOrNothing(byId[was]);
+      if (got && (view !== "quiz" || hasQuiz(got))) {
+        select(was);
+        showDetail();
+        return true;
+      }
     }
     if (view === "book" && all.book && bookOrNothing(byId[all.book.id])) {
       select(all.book.id);
@@ -2076,8 +2117,8 @@
 
   /* Where the dictionary was opened from, remembered so it can be got back to. */
   function markPlace() {
-    if (view === "read" && selectedRead) {
-      cameFrom = { view: "read", id: selectedRead.id, chapter: 0,
+    if (onPassage() && selectedRead) {
+      cameFrom = { view: view, id: selectedRead.id, chapter: 0,
                    label: selectedRead.title };
     } else if (view === "book" && selectedBook && openChapter) {
       cameFrom = { view: "book", id: selectedBook.id, chapter: openChapter,
@@ -2162,7 +2203,8 @@
     setListOpen(s.open !== false);
     // room for the names on a wide screen, icons alone where it is tighter
     setNavOpen(typeof s.nav === "boolean" ? s.nav : (window.innerWidth || 1200) >= 1100);
-    aiWidth(Math.min(AI_MAX, Math.max(AI_MIN, s.ai || AI_DEFAULT)));
+    paneWidth("ai", s.ai || PANE.ai.def);
+    paneWidth("quiz", s.quizw || PANE.quiz.def);
   }
 
   function buildResizer() {
@@ -2228,6 +2270,7 @@
      rather than a switch on one place. */
   var TABS = [["vocab", "Dictionary", "tab-dictionary"],
               ["read", "Passages", "tab-passages"],
+              ["quiz", "Questions", "tab-questions"],
               ["book", "Books", "tab-books"],
               ["translate", "Translate", "tab-translate"]];
 
@@ -2237,7 +2280,10 @@
     vocab: '<path d="M2.6 3.4h3.6a2 2 0 0 1 1.8 1.1 2 2 0 0 1 1.8-1.1h3.6v9.2H9.8a2 2 0 0 0-1.8 1 2 2 0 0 0-1.8-1H2.6z"/><path d="M8 4.5v8.1"/>',
     read: '<rect x="3.2" y="2.6" width="9.6" height="10.8" rx="1.6"/><path d="M5.6 5.8h4.8M5.6 8h4.8M5.6 10.2h3"/>',
     book: '<rect x="2.6" y="3" width="3.2" height="10" rx="1"/><rect x="6.4" y="3" width="3.2" height="10" rx="1"/><path d="M10.6 4.3l2.4.6-1.9 8.2-2.4-.6z"/>',
-    translate: '<circle cx="8" cy="8" r="5.4"/><path d="M2.7 8h10.6"/><path d="M8 2.6c1.5 1.6 2.3 3.5 2.3 5.4S9.5 12 8 13.4C6.5 12 5.7 9.9 5.7 8s.8-3.8 2.3-5.4z"/>'
+    translate: '<circle cx="8" cy="8" r="5.4"/><path d="M2.7 8h10.6"/><path d="M8 2.6c1.5 1.6 2.3 3.5 2.3 5.4S9.5 12 8 13.4C6.5 12 5.7 9.9 5.7 8s.8-3.8 2.3-5.4z"/>',
+    /* A sheet with a question on it: the same page the passages wear, with
+       the lines turned into a query rather than a paragraph. */
+    quiz: '<rect x="3.2" y="2.6" width="9.6" height="10.8" rx="1.6"/><path d="M6.4 6.2a1.6 1.6 0 1 1 1.9 1.6v1.1"/><path d="M8.3 11.1h.01"/>'
   };
 
   /* The places to be, down the side rather than across the top: the bar was
@@ -2328,6 +2374,10 @@
         bs[i].setAttribute("aria-selected", String(bs[i].dataset.view === view));
         var v = bs[i].dataset.view;
         bs[i].hidden = (v === "read" && !READINGS.length)
+          /* A place with nothing in it and no way to put anything there is
+             not a place. The questions are there once a passage carries a
+             set, or once this copy is one that may write them. */
+          || (v === "quiz" && !READINGS.some(hasQuiz) && !mayAdd())
           || (v === "book" && !BOOKS.length && !canAddBooks())
           // the artifact copy has no way out to a translator, so it says so by
           // not offering the place at all
@@ -2341,7 +2391,7 @@
     document.body.dataset.solo = view === "translate" ? "on" : "off";
     if (searchBox) searchBox.hidden = view === "translate";
     if (qInput) {
-      qInput.placeholder = view === "read" ? "Search by name or by a word inside…"
+      qInput.placeholder = onPassage() ? "Search by name or by a word inside…"
         : view === "book" ? "Search the shelf by title or author…"
         : "Search a word, a meaning, or Vietnamese…";
     }
@@ -2415,7 +2465,7 @@
      handlers, the "/" shortcut and whatever is half-typed in it. */
   function placeSearch() {
     if (!searchBox || !topRow || !listPane) return;
-    var inList = view === "read" && !narrowScreen();
+    var inList = onPassage() && !narrowScreen();
     var want = inList ? listPane : topRow;
     var before = inList ? listPane.firstChild : actsBox;
     if (searchBox.parentNode === want && searchBox.nextSibling === before) return;
@@ -2438,7 +2488,7 @@
      the bar never carries two search boxes at once, nor none. */
   function placeLookup() {
     if (!lookupBox || !topRow || !actsBox) return;
-    var want = view === "read" && !narrowScreen();
+    var want = onPassage() && !narrowScreen();
     if (want === lookupBarOn()) return;
     if (want) topRow.insertBefore(lookupBox, actsBox);
     else {
@@ -2927,8 +2977,8 @@
        are two columns whose first lines are level, which is the whole reason
        for reading them side by side. On its own the passage keeps the button
        floating over the prose, where it costs no room. */
-    var beside = view === "read" && aiPane && aiPane.id === r.id;
-    if (view === "read" && (mayAdd() || beside)) {
+    var beside = onPassage() && rightPanes(r).length > 0;
+    if (onPassage() && (mayAdd() || beside)) {
       var nav = el("div", "entry-nav" + (beside ? " read-head" : ""));
       if (beside) nav.appendChild(el("span", "ai-title", "English"));
       nav.appendChild(el("span", "grow"));
@@ -3291,21 +3341,7 @@
 
      It is asked for, never automatic: it costs a call to somebody's API key,
      and a reader who wants to read the English first should be allowed to. */
-  var AI_MIN = 280, AI_MAX = 760, AI_DEFAULT = 420;
   var aiPane = null;             // { id, state, paras, by, msg }
-
-  function aiWidth(px) {
-    document.documentElement.style.setProperty("--ai-w", Math.round(px) + "px");
-  }
-
-  function saveAiWidth() {
-    try {
-      var s = JSON.parse(localStorage.getItem(LIST_KEY) || "{}");
-      s.ai = parseInt(document.documentElement.style.getPropertyValue("--ai-w"), 10)
-        || AI_DEFAULT;
-      localStorage.setItem(LIST_KEY, JSON.stringify(s));
-    } catch (err) { /* private mode */ }
-  }
 
   /* A passage is a thousand words and the model is asked for all of them, so
      it is asked a few paragraphs at a time and each answer is put up as it
@@ -3542,12 +3578,12 @@
     });
   }
 
-  function aiPaneView(r) {
+  function aiPaneView(r, tabs) {
     var w = el("aside", "aipane");
     w.id = "ai-pane";
 
     var head = el("div", "ai-head");
-    head.appendChild(el("span", "ai-title", "Vietnamese"));
+    head.appendChild(tabs || el("span", "ai-title", "Vietnamese"));
     var howFar = aiPane.done && r.paras.length
       ? "translating… " + aiPane.done + " of " + r.paras.length : "translating…";
     var by = el("span", "ai-by",
@@ -3624,10 +3660,96 @@
     return w;
   }
 
-  /* The rule between the two columns, dragged to give one of them more room. */
-  function aiSplitter() {
+  /* ---- what stands beside the passage -------------------------------------
+
+     Two things want the room to the right of a passage: what it says in
+     Vietnamese, and the questions set on it. Either, both or neither, because
+     they answer different wants — one is for a passage being understood and
+     the other for one being tested on, and a reader doing both at once is
+     doing the thing the two of them together are for.
+
+     Which are open is not a setting. It is which of them has been asked for
+     on this passage: the translation says so by aiPane, the questions by the
+     passage they were opened on. Both are forgotten when another passage is
+     opened, which is the right answer to "did I want this here too?". */
+  var quizOpen = null;              // the passage whose questions are showing
+
+  /* About this much window, and three columns of prose can each hold a line
+     of it. Under it they cannot, so the two on the right take turns. */
+  var THREE_WIDE = 1200;
+  var rightTab = "quiz";            // which of them the shared column shows
+
+  function tightWindow() { return (window.innerWidth || 1200) < THREE_WIDE; }
+
+  function rightPanes(r) {
+    var out = [];
+    if (!r) return out;
+    if (aiPane && aiPane.id === r.id) out.push("ai");
+    if (quizOpen === r.id && hasQuiz(r)) out.push("quiz");
+    return out;
+  }
+
+  function paneView(which, r, tabs) {
+    return which === "ai" ? aiPaneView(r, tabs) : quizPaneView(r, tabs);
+  }
+
+  /* The right-hand column when there is only room for one of them: the two
+     names where the pane's own name would have been, so the strip that says
+     what this column is is also the thing that changes it. */
+  function sharedPane(r, panes) {
+    if (panes.indexOf(rightTab) < 0) rightTab = panes[0];
+    var tabs = el("span", "pane-tabs");
+    panes.forEach(function (which) {
+      var b = el("button", "pane-tab", which === "ai" ? "Vietnamese" : "Questions");
+      b.type = "button";
+      b.id = "pane-tab-" + which;
+      b.setAttribute("aria-pressed", String(rightTab === which));
+      b.addEventListener("click", function () {
+        if (rightTab === which) return;
+        rightTab = which;
+        drawDetail();
+      });
+      tabs.appendChild(b);
+    });
+    return paneView(rightTab, r, tabs);
+  }
+
+  /* The widths of the panes to the right of a passage, and the rules between
+     them. One function for both because they are the same rule: it stands to
+     the left of a pane and drags that pane wider, and which pane that is, is
+     the only thing either of them knows that the other does not. */
+  var PANE = {
+    ai:   { v: "--ai-w", id: "ai-pane", key: "ai", min: 280, max: 760, def: 420 },
+    quiz: { v: "--q-w", id: "quiz-pane", key: "quizw", min: 300, max: 760, def: 440 }
+  };
+
+  function paneWidth(which, px) {
+    var p = PANE[which];
+    document.documentElement.style.setProperty(
+      p.v, Math.round(Math.min(p.max, Math.max(p.min, px))) + "px");
+  }
+
+  function paneWidthNow(which) {
+    var p = PANE[which];
+    return parseInt(document.documentElement.style.getPropertyValue(p.v), 10) || p.def;
+  }
+
+  function savePaneWidth(which) {
+    try {
+      var s = JSON.parse(localStorage.getItem(LIST_KEY) || "{}");
+      s[PANE[which].key] = paneWidthNow(which);
+      localStorage.setItem(LIST_KEY, JSON.stringify(s));
+    } catch (err) { /* private mode */ }
+  }
+
+  /* The rule between two columns, dragged to give the one on its right more
+     room. Measured off that pane's own right-hand edge rather than the split's,
+     which is the same number while it is the last column and is not once there
+     is another one past it. */
+  function paneSplitter(which) {
     var bar = el("div", "aisplit");
-    bar.id = "ai-split";
+    bar.id = which === "ai" ? "ai-split" : "quiz-split";
+    bar.dataset.pane = which;
     bar.setAttribute("role", "separator");
     bar.setAttribute("aria-orientation", "vertical");
     bar.tabIndex = 0;
@@ -3635,17 +3757,16 @@
     var dragging = false;
     function move(ev) {
       if (!dragging) return;
-      var split = document.querySelector(".readsplit");
-      if (!split) return;
+      var pane = document.getElementById(PANE[which].id);
+      if (!pane) return;
       var x = ev.touches ? ev.touches[0].clientX : ev.clientX;
-      var right = split.getBoundingClientRect().right;
-      aiWidth(Math.min(AI_MAX, Math.max(AI_MIN, right - x)));
+      paneWidth(which, pane.getBoundingClientRect().right - x);
     }
     function stop() {
       if (!dragging) return;
       dragging = false;
       document.body.classList.remove("resizing");
-      saveAiWidth();
+      savePaneWidth(which);
     }
     bar.addEventListener("mousedown", function (ev) {
       dragging = true;
@@ -3658,13 +3779,12 @@
     document.addEventListener("touchmove", move, { passive: true });
     document.addEventListener("touchend", stop);
     bar.addEventListener("keydown", function (ev) {
-      var now = parseInt(
-        document.documentElement.style.getPropertyValue("--ai-w"), 10) || AI_DEFAULT;
-      if (ev.key === "ArrowLeft") aiWidth(Math.min(AI_MAX, now + 24));
-      else if (ev.key === "ArrowRight") aiWidth(Math.max(AI_MIN, now - 24));
+      var now = paneWidthNow(which);
+      if (ev.key === "ArrowLeft") paneWidth(which, now + 24);
+      else if (ev.key === "ArrowRight") paneWidth(which, now - 24);
       else return;
       ev.preventDefault();
-      saveAiWidth();
+      savePaneWidth(which);
     });
     return bar;
   }
@@ -4074,6 +4194,293 @@
     return bar;
   }
 
+
+  /* ---- writing a set of questions ----------------------------------------
+
+     Not the editor the passage gets. There the marks are scaffolding and the
+     box shows the passage the way it will be read, because what is being
+     written is prose and the marks are in the way of seeing it. Here the
+     marks are the thing: `? tfng` is not a decoration on a question, it is
+     what makes the next six lines questions. A box that hid them would be
+     hiding the only part of this anybody has to get right.
+
+     So: a plain box, the lines as they are, and a row of buttons that put in
+     the shapes nobody should have to remember — which is the same bargain the
+     passage editor strikes, made the other way up. */
+  var QUIZ_BITS = [
+    ["! ", "Instruction", "The line in the box over a task"],
+    ["? tfng", "True / False / Not given", "Each line below is a statement"],
+    ["? ynng", "Yes / No / Not given", "Each line below is a claim"],
+    ["? choice", "Multiple choice", "A question, then its answers as - lines"],
+    ["? notes", "Note completion", "Notes with ___{} blanks typed into"],
+    ["? summary", "Summary completion", "A summary with ___{} blanks in it"],
+    ["? match", "Matching", "Answered with the passage's own A, B, C"],
+    ["? short", "Short answer", "A question, an answer typed in"],
+    ["___{}", "Blank", "A numbered blank, and what it wants"],
+    ["* A ", "Word for the box", "One of the words a task picks from"],
+    [" = ", "Answer", "What this line's blank wants"]
+  ];
+
+  var editingQuiz = null;        // the passage whose questions are being written
+
+  function quizBox() { return document.getElementById("quiz-body"); }
+
+  function quizDialog() {
+    var dlg = document.createElement("dialog");
+    dlg.id = "quiz-dlg";
+
+    var head = el("div", "dlg-head");
+    var h = el("h2", null, "Add questions");
+    h.id = "quiz-head";
+    head.appendChild(h);
+    head.appendChild(el("p", null,
+      "Which passage they are on, then the questions themselves."));
+    dlg.appendChild(head);
+
+    var body = el("div", "dlg-body");
+
+    var pick = el("label", "field");
+    pick.appendChild(el("span", null, "The passage"));
+    var sel = el("select");
+    sel.id = "quiz-for";
+    pick.appendChild(sel);
+    body.appendChild(pick);
+
+    var f = el("div", "field");
+    f.appendChild(el("span", null, "The questions"));
+    f.appendChild(quizBits());
+    var box = el("textarea", "mono quiz-edit");
+    box.id = "quiz-body";
+    box.rows = 16;
+    box.spellcheck = false;
+    box.setAttribute("aria-label", "The questions");
+    f.appendChild(box);
+    f.appendChild(el("p", "hint",
+      "One task to a ? line. Numbers are not written: they are the order the "
+      + "blanks come in, so nothing can fall out of step."));
+    body.appendChild(f);
+    dlg.appendChild(body);
+
+    var foot = el("div", "dlg-foot");
+    var row = el("label", "checkrow");
+    row.id = "quiz-to-sheet-row";
+    var cb = el("input");
+    cb.type = "checkbox";
+    cb.id = "quiz-to-sheet";
+    cb.checked = true;
+    row.appendChild(cb);
+    row.appendChild(el("span", null, "Write straight into the sheet"));
+    foot.appendChild(row);
+    var msg = el("span", "dlg-msg");
+    msg.id = "quiz-msg";
+    foot.appendChild(msg);
+    foot.appendChild(el("span", "spacer2"));
+    var drop = el("button", "btn danger", "Remove");
+    drop.type = "button";
+    drop.id = "quiz-drop";
+    drop.addEventListener("click", dropQuiz);
+    foot.appendChild(drop);
+    var cancel = el("button", "btn", "Cancel");
+    cancel.type = "button";
+    cancel.addEventListener("click", function () { dlg.close(); });
+    foot.appendChild(cancel);
+    var save = el("button", "btn btn-primary", "Save questions");
+    save.type = "button";
+    save.id = "quiz-save";
+    save.addEventListener("click", saveQuiz);
+    foot.appendChild(save);
+    dlg.appendChild(foot);
+    return dlg;
+  }
+
+  /* The shapes, as buttons. Each drops its own text in at the caret, and the
+     ones that wrap something — the blank, the answer — leave the caret where
+     the writing goes next. */
+  function quizBits() {
+    var bar = el("div", "markbar quizbar");
+    QUIZ_BITS.forEach(function (bit) {
+      var b = el("button", "markbtn mb-w", bit[1]);
+      b.type = "button";
+      b.title = bit[2];
+      b.addEventListener("click", function () { putQuizBit(bit[0]); });
+      bar.appendChild(b);
+    });
+    return bar;
+  }
+
+  function putQuizBit(text) {
+    var box = quizBox();
+    if (!box) return;
+    var at = box.selectionStart, to = box.selectionEnd;
+    var all = box.value;
+    /* A line mark belongs at the start of its own line; an answer or a blank
+       belongs where the caret is. The difference is which of them makes sense
+       halfway through a sentence. */
+    var ownLine = text.charAt(0) === "?" || text.charAt(0) === "!"
+      || text.charAt(0) === "*";
+    var put = text;
+    if (ownLine) {
+      var head = all.slice(0, at);
+      if (head && head.charAt(head.length - 1) !== "\n") put = "\n" + put;
+      put += "\n";
+    }
+    box.value = all.slice(0, at) + put + all.slice(to);
+    /* Inside the braces of a blank, which is the only place a caret has
+       anywhere to be after one of these. */
+    var caret = at + put.length - (text === "___{}" ? 1 : 0);
+    box.focus();
+    box.setSelectionRange(caret, caret);
+  }
+
+  function quizMsg(text, tone) {
+    var msg = document.getElementById("quiz-msg");
+    if (!msg) return;
+    msg.className = "dlg-msg" + (tone ? " " + tone : "");
+    msg.textContent = text;
+  }
+
+  function openQuizForm(existing) {
+    if (!mayAdd()) { openSettings(true); return; }
+    var dlg = document.getElementById("quiz-dlg");
+    if (!dlg) return;
+    editingQuiz = existing || null;
+
+    /* Every passage is offered, with the ones that already carry a set said
+       to be carrying one — picking one of those is how they are edited, and
+       finding that out by saving over them would be finding it out too late. */
+    var sel = document.getElementById("quiz-for");
+    sel.textContent = "";
+    READINGS.forEach(function (r) {
+      var o = el("option", null, r.title + (hasQuiz(r) ? " — has questions" : ""));
+      o.value = r.id;
+      sel.appendChild(o);
+    });
+    if (existing) sel.value = existing.id;
+    sel.disabled = !!existing;
+
+    quizBox().value = existing ? String(existing.quiz || "") : "";
+    document.getElementById("quiz-head").textContent = existing && hasQuiz(existing)
+      ? "Edit the questions" : "Add questions";
+    document.getElementById("quiz-drop").hidden = !(existing && hasQuiz(existing));
+    var row = document.getElementById("quiz-to-sheet-row");
+    if (row) row.hidden = !canWriteSheet();
+    quizMsg("", "");
+    dlg.showModal();
+    (existing ? quizBox() : sel).focus();
+  }
+
+  /* What the form says, checked before anything is written: a set nobody can
+     answer is not a set, and the sheet is the wrong place to find that out. */
+  function readQuizForm() {
+    var sel = document.getElementById("quiz-for");
+    var r = byId[sel && sel.value];
+    if (!passageOrNothing(r)) return { err: "Pick the passage they are on." };
+    var text = String(quizBox().value || "").trim();
+    if (!text) return { err: "Write the questions themselves." };
+    var set = parseQuiz(text, quizMarks(r));
+    if (!set.slots.length) {
+      return { err: "Nothing in that can be answered. A task needs a ? line, "
+        + "and a note needs a ___{} blank." };
+    }
+    var blank = 0;
+    set.slots.forEach(function (x) { if (!x.ans) blank++; });
+    return { r: r, text: text, slots: set.slots.length, blank: blank };
+  }
+
+  function saveQuiz() {
+    var got = readQuizForm();
+    if (got.err) { quizMsg(got.err, ""); return; }
+    var tick = document.getElementById("quiz-to-sheet");
+    var toSheet = canWriteSheet() && (!tick || tick.checked);
+    var btn = document.getElementById("quiz-save");
+    btn.disabled = true;
+    quizMsg(toSheet ? "Writing them into the sheet…" : "Saving…", "warn");
+
+    var job = toSheet
+      ? callSheet({ action: "questions", passage: got.r.title, body: got.text })
+      : Promise.resolve({ ok: true });
+
+    job.then(function (res) {
+      btn.disabled = false;
+      if (!res || res.ok === false) {
+        quizMsg(res && res.error ? res.error : "Could not write them in.", "");
+        return;
+      }
+      got.r.quiz = got.text;
+      keepMyQuiz(got.r.title, got.text);
+      document.getElementById("quiz-dlg").close();
+      quizOpen = got.r.id;
+      if (onPassage()) { select(got.r.id); showDetail(); }
+      refresh();
+      syncViewButtons();
+      toast(plural(got.slots, "question", "questions") + " on “" + got.r.title + "”"
+        + (got.blank ? ", " + got.blank + " with no answer set" : ""));
+    }, function () {
+      btn.disabled = false;
+      quizMsg("Could not reach the sheet.", "");
+    });
+  }
+
+  function dropQuiz() {
+    var r = editingQuiz;
+    if (!r) return;
+    if (!window.confirm("Remove the questions on “" + r.title + "”?")) return;
+    var toSheet = canWriteSheet();
+    var job = toSheet
+      ? callSheet({ action: "questions", passage: r.title, body: "" })
+      : Promise.resolve({ ok: true });
+    job.then(function (res) {
+      if (!res || res.ok === false) {
+        quizMsg(res && res.error ? res.error : "Could not take them out.", "");
+        return;
+      }
+      delete r.quiz;
+      keepMyQuiz(r.title, "");
+      document.getElementById("quiz-dlg").close();
+      quizOpen = null;
+      if (view === "quiz") { selectedRead = null; refresh(); }
+      drawDetail();
+      syncViewButtons();
+      toast("The questions on “" + r.title + "” were removed");
+    }, function () { quizMsg("Could not reach the sheet.", ""); });
+  }
+
+  /* ---- a set written here, before the sheet sends it back -----------------
+
+     The same bargain the passages of your own strike: it is in the page at
+     once, it is on this device until a publish brings it down as one of the
+     sheet's own, and a copy that cannot write to a sheet at all keeps it here
+     and nowhere else. */
+  var MINE_QUIZ_KEY = "engrowdict:quizzes:v1";
+
+  function myQuizzes() {
+    try {
+      var raw = localStorage.getItem(MINE_QUIZ_KEY);
+      var all = raw ? JSON.parse(raw) : {};
+      return (all && typeof all === "object") ? all : {};
+    } catch (err) { return {}; }
+  }
+
+  function keepMyQuiz(title, text) {
+    var all = myQuizzes();
+    if (text) all[title] = text; else delete all[title];
+    try { localStorage.setItem(MINE_QUIZ_KEY, JSON.stringify(all)); }
+    catch (err) { /* private mode: it lasts as long as the page does */ }
+  }
+
+  /* Put back over whatever came down in data.json, because a set written here
+     a moment ago is newer than the build the page was served. A set the sheet
+     has since taken back is gone from both. */
+  function applyMyQuizzes() {
+    var mine = myQuizzes();
+    READINGS.forEach(function (r) {
+      if (Object.prototype.hasOwnProperty.call(mine, r.title)) {
+        if (mine[r.title]) r.quiz = mine[r.title];
+        else delete r.quiz;
+      }
+    });
+  }
+
   function passageDialog() {
     var dlg = document.createElement("dialog");
     dlg.id = "pass-dlg";
@@ -4262,6 +4669,437 @@
   }
 
   /* What can be done to a passage, behind the same one button an entry has. */
+
+  /* ---- the questions a passage carries ------------------------------------
+
+     A passage is one cell of the sheet and its shape lives in its own text.
+     The questions that go with it are another cell and work the same way:
+     marks rather than markup, so the sheet still reads as a page of questions
+     to anybody looking at it, parse_sheet.py and the sync carry a string and
+     need know nothing else, and the language below can be changed tomorrow
+     without a migration or a re-sync.
+
+     Four marks on top of the ones a passage already has — # for a heading,
+     - for a bullet, > for a step of indent, **bold** and the rest:
+
+       ! …             the line of instruction, the one in the box
+       ? tfng          opens a task, and says what kind it is
+       * A solution    an item in the box of words a task picks from
+       ___{Ridgeway}   a blank, carrying what it wants
+
+     and ` = FALSE` at the end of a question line, which is that line's blank
+     written the way an answer key writes it.
+
+     However many kinds of question a paper has, everything answerable is a
+     slot, and a slot is one of two things: a choice out of a set, or a word
+     to be typed. The kinds differ only in where the slots sit and what the
+     set is. So there are two shapes underneath — a list of questions, and a
+     body of text with blanks in it — and the seven kinds are those two with
+     different sets.
+
+     The slots are numbered straight through the set in the order they are
+     met. That is how a paper numbers 1 to 13 across four different kinds of
+     question, and it means nobody writing one types a number or keeps one in
+     step. */
+
+  var TFNG = ["TRUE", "FALSE", "NOT GIVEN"];
+  var YNNG = ["YES", "NO", "NOT GIVEN"];
+
+  /* What an answer key is allowed to say. Nobody marking thirteen statements
+     writes "NOT GIVEN" thirteen times, and the papers themselves print F and
+     NG, so the short forms are the ones to expect and the long ones the ones
+     to be lenient about. */
+  var SHORTHAND = {
+    T: "TRUE", F: "FALSE", NG: "NOT GIVEN", Y: "YES", N: "NO",
+    TRUE: "TRUE", FALSE: "FALSE", YES: "YES", NO: "NO", "NOT GIVEN": "NOT GIVEN"
+  };
+
+  /* shape: "list" — every line is a question, its slot at the end of it.
+     shape: "body" — the lines are prose, and the slots are the blanks in it. */
+  var QKINDS = {
+    tfng:    { shape: "list", opts: TFNG },
+    ynng:    { shape: "list", opts: YNNG },
+    choice:  { shape: "list", opts: null },   // lettered from its own options
+    match:   { shape: "list", opts: null },   // the bank, or the passage's letters
+    short:   { shape: "list", opts: null },   // typed
+    notes:   { shape: "body" },
+    summary: { shape: "body" },
+    table:   { shape: "body" }
+  };
+
+  function qShape(kind) {
+    return (QKINDS[kind] || QKINDS.notes).shape;
+  }
+
+  /* A, B, C … for the options under a stem and the items in a bank. */
+  function letterAt(i) {
+    return String.fromCharCode(65 + i);
+  }
+
+  /* An answer as it will be compared. Case and spacing are not what is being
+     tested, and a key that says "F" means the same as one that says "False". */
+  function ansOf(text, kind) {
+    var a = String(text == null ? "" : text).trim().replace(/\s+/g, " ");
+    if (kind === "tfng" || kind === "ynng") {
+      var up = a.toUpperCase();
+      return SHORTHAND[up] || up;
+    }
+    return a;
+  }
+
+  var BLANK_RE = /___\{([^}]*)\}|___/g;
+  /* The answer at the end of a question line. The last one on the line, so a
+     statement that happens to contain " = " keeps it. */
+  var TAIL_RE = /\s=\s([^=]*)$/;
+
+  function parseQuiz(text, paraMarks) {
+    var set = { tasks: [], slots: [] };
+    if (!text) return set;
+    var task = null;
+    /* A paper puts the heading over the task — "Questions 1-7", then what to
+       do with them — so the heading is written before the line that says what
+       kind they are. It is held until that line arrives rather than opening a
+       task of its own, which would make every set one task longer than it is
+       and put the heading in the wrong one. */
+    var held = [];
+
+    function open(kind) {
+      task = { kind: QKINDS[kind] ? kind : "notes", tell: "", bank: [], rows: [] };
+      while (held.length) {
+        var bit = held.shift();
+        if (bit.tell) task.tell = bit.tell; else task.rows.push(bit.row);
+      }
+      set.tasks.push(task);
+      return task;
+    }
+
+    /* The set a slot in this task chooses from, or null for one to be typed
+       in. A bank of words is an answer set wherever it appears, which is what
+       makes summary-with-a-list and note completion the same thing with and
+       without one. */
+    function pickFor(t) {
+      var k = QKINDS[t.kind] || {};
+      if (k.opts) return k.opts.slice();
+      if (t.bank.length) return t.bank.map(function (b) { return b.letter; });
+      if (t.kind === "match") return (paraMarks || []).slice();
+      return null;
+    }
+
+    function slot(ans) {
+      var s = { n: set.slots.length + 1, ans: ansOf(ans, task.kind), pick: pickFor(task) };
+      set.slots.push(s);
+      return s;
+    }
+
+    /* A line of body text, cut at its blanks: the words between them and the
+       slots themselves, in the order they are read. */
+    function partsOf(line) {
+      var parts = [], at = 0, m;
+      BLANK_RE.lastIndex = 0;
+      while ((m = BLANK_RE.exec(line))) {
+        if (m.index > at) parts.push(line.slice(at, m.index));
+        parts.push(slot(m[1] || ""));
+        at = m.index + m[0].length;
+      }
+      if (at < line.length) parts.push(line.slice(at));
+      return parts;
+    }
+
+    var lines = String(text).split(/\r?\n/);
+
+    /* A heading or an instruction belongs to the task it stands over, and the
+       line that says which task that is comes after it. So one of them is the
+       next task's whenever the next thing with anything in it is a ? line —
+       looked ahead for rather than guessed at, because a heading inside a page
+       of notes and a heading over the next group of questions are written the
+       same way, and only what follows them tells the two apart. */
+    function headsNext(i) {
+      for (var j = i + 1; j < lines.length; j++) {
+        var one = lines[j].trim();
+        if (!one) continue;
+        if (one.charAt(0) === "?") return true;
+        if (one.charAt(0) === "#" || one.charAt(0) === "!") continue;
+        return false;
+      }
+      return false;
+    }
+
+    lines.forEach(function (raw, i) {
+      var line = raw.replace(/\s+$/, "");
+      if (!line.trim()) return;
+      var m;
+
+      if ((m = /^\?\s*([A-Za-z]+)\s*$/.exec(line))) { open(m[1].toLowerCase()); return; }
+
+      var ahead = headsNext(i);
+      if ((m = /^!\s*(.*)$/.exec(line))) {
+        if (task && !ahead) task.tell = m[1].trim();
+        else held.push({ tell: m[1].trim() });
+        return;
+      }
+      if (!task || ahead) {
+        var h = blockOf(line);
+        if (h.kind === "h") {
+          held.push({ row: { kind: "h", depth: h.depth, parts: [h.text] } });
+          return;
+        }
+        if (!task) open("notes");       // a cell that starts straight in
+      }
+      if ((m = /^\*\s+(?:([A-Za-z])[.)]?\s+)?(.*)$/.exec(line))) {
+        task.bank.push({ letter: m[1] ? m[1].toUpperCase() : letterAt(task.bank.length),
+                         text: m[2].trim() });
+        return;
+      }
+
+      var b = blockOf(line);
+      if (b.kind === "h") { task.rows.push({ kind: "h", depth: b.depth, parts: [b.text] }); return; }
+
+      if (qShape(task.kind) === "body") {
+        task.rows.push({ kind: b.kind === "li" ? "li" : "p", depth: b.depth,
+                         parts: partsOf(b.text) });
+        return;
+      }
+
+      /* A list task. A bullet under a question is one of its answers — which
+         is what a multiple choice is — and anything else is a new question. */
+      var last = task.rows[task.rows.length - 1];
+      if (b.kind === "li" && last && last.kind === "q") {
+        last.opts.push(b.text);
+        /* The letters are the options there turn out to be, so the set is
+           settled again each time one more arrives. */
+        if (last.slot) {
+          last.slot.pick = last.opts.map(function (_, i) { return letterAt(i); });
+        }
+        return;
+      }
+
+      var tail = TAIL_RE.exec(b.text);
+      var said = tail ? b.text.slice(0, tail.index) : b.text;
+      var row = { kind: "q", depth: b.depth, parts: [said], opts: [] };
+      /* The question's own blank. A line with a blank written into it has
+         said where it wants one; a line without gets one at its end, which is
+         where a statement to be judged true or false carries it. */
+      BLANK_RE.lastIndex = 0;
+      if (BLANK_RE.test(said)) {
+        row.parts = partsOf(said);
+      } else {
+        row.slot = slot(tail ? tail[1] : "");
+      }
+      if (tail && row.slot) row.slot.ans = ansOf(tail[1], task.kind);
+      task.rows.push(row);
+    });
+
+    return set;
+  }
+
+  /* ---- what the reader sees ----------------------------------------------
+
+     The pane beside the passage, the way the translation is a pane beside the
+     passage: the same header, the same splitter, so a reader who has used one
+     has used the other. */
+  function quizMarks(r) {
+    return (r && r.paras ? r.paras : []).map(function (p) { return p.mark; })
+      .filter(function (m) { return !!m; });
+  }
+
+  function quizPaneView(r, tabs) {
+    var w = el("aside", "quizpane");
+    w.id = "quiz-pane";
+    var head = el("div", "ai-head");
+    head.appendChild(tabs || el("span", "ai-title", "Questions"));
+    head.appendChild(el("span", "grow"));
+    if (mayAdd()) {
+      var edit = el("button", "iconbtn", "✎");
+      edit.type = "button";
+      edit.id = "quiz-edit";
+      edit.title = "Edit these questions";
+      edit.addEventListener("click", function () { openQuizForm(r); });
+      head.appendChild(edit);
+    }
+    var x = el("button", "iconbtn", "×");
+    x.type = "button";
+    x.id = "quiz-close";
+    x.title = "Close the questions";
+    x.addEventListener("click", function () { quizOpen = null; drawDetail(); });
+    head.appendChild(x);
+    w.appendChild(head);
+    w.appendChild(quizBody(r));
+    return w;
+  }
+
+  function quizBody(r) {
+    var box = el("div", "quiz");
+    var set = parseQuiz(r && r.quiz, quizMarks(r));
+    if (!set.slots.length && !set.tasks.length) {
+      box.appendChild(el("p", "none", "No questions for this passage yet."));
+      return box;
+    }
+    set.tasks.forEach(function (t) { box.appendChild(taskNode(t, r)); });
+    return box;
+  }
+
+  function taskNode(t, r) {
+    var box = el("section", "task");
+    if (t.tell) box.appendChild(el("p", "tell", t.tell));
+    if (t.bank.length) {
+      var bank = el("div", "bank");
+      t.bank.forEach(function (b) {
+        var one = el("div", "bank-item");
+        one.appendChild(el("span", "bank-l", b.letter));
+        one.appendChild(el("span", "bank-t", b.text));
+        bank.appendChild(one);
+      });
+      box.appendChild(bank);
+    }
+    var body = el("div", "qbody" + (qShape(t.kind) === "body" ? " notes" : ""));
+    t.rows.forEach(function (row) { body.appendChild(rowNode(row, r)); });
+    box.appendChild(body);
+    return box;
+  }
+
+  function rowNode(row, r) {
+    if (row.kind === "h") {
+      var h = el("h3", "qhead" + (row.depth ? " in" + row.depth : ""));
+      inlineInto(h, String(row.parts[0] || ""));
+      return h;
+    }
+    var tag = row.kind === "q" ? "div" : (row.kind === "li" ? "li" : "p");
+    var node = el(tag, (row.kind === "q" ? "qrow" : "qline")
+      + (row.kind === "li" ? " bullet" : "") + (row.depth ? " in" + row.depth : ""));
+
+    if (row.kind === "q") {
+      node.appendChild(el("span", "qnum", String(firstSlot(row) || "") + "."));
+    }
+    var text = el("span", "qtext");
+    row.parts.forEach(function (bit) {
+      if (typeof bit === "string") inlineInto(text, bit);
+      else text.appendChild(slotNode(bit, r));
+    });
+    node.appendChild(text);
+
+    /* A multiple choice carries its own answers under it, lettered as they
+       were written. Anything else takes the set its task gave it. */
+    if (row.kind === "q" && row.slot) {
+      var opts = row.opts.length
+        ? row.opts.map(function (text, i) { return { v: letterAt(i), text: text }; })
+        : (row.slot.pick || []).map(function (v) { return { v: v, text: "" }; });
+      if (opts.length) node.appendChild(picker(row.slot, opts, r));
+      else node.appendChild(typeIn(row.slot, r));
+    }
+    return node;
+  }
+
+  function firstSlot(row) {
+    if (row.slot) return row.slot.n;
+    for (var i = 0; i < row.parts.length; i++) {
+      if (typeof row.parts[i] !== "string") return row.parts[i].n;
+    }
+    return 0;
+  }
+
+  /* A blank inside a line of notes: the number it answers, and room to put
+     the answer in. Lettered where the task hands it a set to choose from,
+     typed where it does not. */
+  function slotNode(s, r) {
+    var box = el("span", "gap");
+    box.appendChild(el("span", "gap-n", String(s.n)));
+    if (s.pick && s.pick.length) box.appendChild(pickOne(s, s.pick, r));
+    else box.appendChild(typeIn(s, r, true));
+    return box;
+  }
+
+  function picker(s, opts, r) {
+    var row = el("div", "opts");
+    opts.forEach(function (o) {
+      var b = el("button", "opt");
+      b.type = "button";
+      b.dataset.v = o.v;
+      if (o.text) {
+        b.appendChild(el("span", "opt-l", o.v));
+        var said = el("span", "opt-t");
+        inlineInto(said, o.text);
+        b.appendChild(said);
+      } else {
+        b.textContent = o.v;
+      }
+      b.setAttribute("aria-pressed", String(answerOf(r, s.n) === o.v));
+      b.addEventListener("click", function () {
+        var now = answerOf(r, s.n) === o.v ? "" : o.v;
+        keepAnswer(r, s.n, now);
+        var all = row.querySelectorAll(".opt");
+        for (var i = 0; i < all.length; i++) {
+          all[i].setAttribute("aria-pressed", String(!!now && all[i].dataset.v === now));
+        }
+      });
+      row.appendChild(b);
+    });
+    return row;
+  }
+
+  /* The same thing again, small, for a blank sitting inside a line rather
+     than under one. */
+  function pickOne(s, opts, r) {
+    var sel = el("select", "gap-pick");
+    sel.appendChild(el("option", null, "–"));
+    opts.forEach(function (v) {
+      var o = el("option", null, v);
+      o.value = v;
+      sel.appendChild(o);
+    });
+    sel.value = answerOf(r, s.n) || "";
+    sel.addEventListener("change", function () { keepAnswer(r, s.n, sel.value); });
+    return sel;
+  }
+
+  function typeIn(s, r, inline) {
+    var i = el("input", "gap-in" + (inline ? "" : " wide"));
+    i.type = "text";
+    i.autocomplete = "off";
+    i.spellcheck = false;
+    i.setAttribute("aria-label", "Answer for question " + s.n);
+    i.value = answerOf(r, s.n) || "";
+    i.addEventListener("input", function () { keepAnswer(r, s.n, i.value); });
+    return i;
+  }
+
+  /* ---- what the reader has put down --------------------------------------
+
+     Kept where the mark and the highlights are kept, under the same key the
+     reading place uses, because it is the same kind of thing: the reader's
+     own work on one passage, which belongs to them and not to the sheet. */
+  var ANS_KEY = "engrowdict:ans:v1";
+  var answers = null;
+
+  function readAnswers() {
+    if (answers) return answers;
+    try { answers = JSON.parse(localStorage.getItem(ANS_KEY) || "{}"); }
+    catch (err) { answers = {}; }
+    if (!answers || typeof answers !== "object") answers = {};
+    return answers;
+  }
+
+  function answerOf(r, n) {
+    var all = readAnswers()[quizKey(r)];
+    return (all && all[n]) || "";
+  }
+
+  function keepAnswer(r, n, v) {
+    var key = quizKey(r);
+    if (!key) return;
+    var all = readAnswers();
+    var mine = all[key] || (all[key] = {});
+    if (v) mine[n] = v; else delete mine[n];
+    if (!Object.keys(mine).length) delete all[key];
+    try { localStorage.setItem(ANS_KEY, JSON.stringify(all)); }
+    catch (err) { /* private mode: it lasts as long as the page does */ }
+  }
+
+  /* The passage, not the pane: the answers belong to the questions, and the
+     questions belong to one passage. */
+  function quizKey(r) {
+    return r && r.id ? "q:" + r.id : "";
+  }
+
   function passageMenu(r) {
     var m = makeMenu("☰", "Options for this passage");
     var edit = el("button", "menu-item", "Edit passage");
@@ -4280,6 +5118,19 @@
       openAiPane(r);
     });
     m.menu.appendChild(ai);
+    /* Questions sit beside the passage the way the translation does, and are
+       reached the same way. The item says which of the two things it will do,
+       because a passage with no questions on it yet is the common case and
+       "Questions" alone would promise some. */
+    var qs = el("button", "menu-item",
+      hasQuiz(r) ? "Questions" : "Add questions");
+    qs.type = "button";
+    qs.id = "passage-quiz";
+    qs.addEventListener("click", function () {
+      m.close();
+      if (hasQuiz(r)) { quizOpen = r.id; drawDetail(); } else openQuizForm(r);
+    });
+    if (hasQuiz(r) || mayAdd()) m.menu.appendChild(qs);
     var del = el("button", "menu-item danger", "Delete this passage");
     del.type = "button";
     del.id = "passage-delete";
@@ -5219,6 +6070,13 @@
       w.appendChild(el("p", "sub",
         "Every book is split into chapters. Open one and select any word or "
         + "phrase in it, the same as in a passage."));
+      return w;
+    }
+    if (view === "quiz") {
+      w.appendChild(el("p", "lead", "Pick a set of questions"));
+      w.appendChild(el("p", "sub",
+        "Each set belongs to one passage, and opens beside it. Passages with "
+        + "no questions on them are in the Passages tab."));
       return w;
     }
     if (view === "read") {
@@ -6387,8 +7245,10 @@
     if (fresh.readings && fresh.readings.length) {
       READINGS = fresh.readings;
       READINGS.forEach(function (r, i) { indexPassage(r, "r" + i); });
+      applyMyQuizzes();
       BASE = { entries: fresh.entries, readings: READINGS };
       selectedRead = null;
+      quizOpen = null;
     } else {
       BASE = { entries: fresh.entries, readings: BASE.readings || [] };
     }
@@ -6701,6 +7561,10 @@
     var box = document.getElementById("count");
     box.textContent = "";
     var q = query.trim();
+    if (view === "quiz") {
+      box.appendChild(document.createTextNode(plural(hits.length, "set", "sets")));
+      return;
+    }
     if (view === "read") {
       box.appendChild(document.createTextNode(plural(hits.length, "passage", "passages")));
       orderButtons(box);
@@ -6765,6 +7629,7 @@
       // what is added there is a passage
       add.hidden = !canWrite || view === "translate";
       add.textContent = !mayAdd() ? "Unlock to add"
+        : view === "quiz" ? "+ Add questions"
         : view === "read" ? "+ Add passage" : "+ Add word";
     }
     var addHere = document.getElementById("add-word-here");
@@ -7013,7 +7878,9 @@
     add.type = "button";
     add.id = "add-word";
     add.addEventListener("click", function () {
-      if (view === "read") openPassageForm(); else openForm(query.trim());
+      if (view === "quiz") openQuizForm();
+      else if (view === "read") openPassageForm();
+      else openForm(query.trim());
     });
     acts.appendChild(add);
 
@@ -7124,6 +7991,7 @@
     app.appendChild(buildRail());
     app.appendChild(buildDialog());
     app.appendChild(passageDialog());
+    app.appendChild(quizDialog());
     app.appendChild(buildSettings());
     refreshChrome();
     restoreList();
@@ -7139,7 +8007,16 @@
     if (document.fonts && document.fonts.ready && document.fonts.ready.then) {
       document.fonts.ready.then(measureBar);
     }
+    var wasTight = tightWindow();
     window.addEventListener("resize", function () {
+      /* The only width the passage pane cares about is the one where three
+         columns stop fitting, and it is only worth a redraw when it is
+         actually crossed — a redraw a pixel is a passage flickering under
+         somebody dragging their window. */
+      if (tightWindow() !== wasTight) {
+        wasTight = tightWindow();
+        if (onPassage() && rightPanes(selectedRead).length > 1) drawDetail();
+      }
       paint(true);
       placeSearch();               // the breakpoint decides which home it has
       placeLookup();
@@ -7954,6 +8831,7 @@
       r.mine = true;
       READINGS.push(indexPassage(r, "m" + i));
     });
+    applyMyQuizzes();
 
     var backup = readBackup();
     var known = {};

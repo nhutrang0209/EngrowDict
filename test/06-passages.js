@@ -37,13 +37,18 @@ ok('  and the same entries as the published data',
    budget met by writing fewer comments buys nobody a faster page. What it is
    for is noticing the day something large gets pasted in.
 
-   It has been raised for the palettes, for the highlighter, and again a day
-   later for two fixes that together came to five kilobytes — which is the
-   ceiling being set so close to the shell that ordinary work trips it, and a
-   ceiling that cries every week is one nobody reads. Twenty kilobytes of room
-   is enough to land a feature in and still be worth looking at when it goes
-   off. */
-ok('the shell itself stays light', shell.replace(/\r\n/g, '\n').length < 420000,
+   It has been raised four times now, twice in a week, and each time because
+   something had been built and not because anything had been pasted in. The
+   last two were set a feature's width above the shell, which is how a tripwire
+   ends up across the path everybody walks: the palettes wanted 15KB, the
+   highlighter 15KB, the questions 30KB, and every one of them read as a
+   failure before it read as a feature.
+
+   So the number below is not the shell plus a little. It is roughly the shell
+   plus the largest thing anybody has added to it, which is what the test is
+   watching for — and a figure it is worth going and looking at when it does
+   go off. */
+ok('the shell itself stays light', shell.replace(/\r\n/g, '\n').length < 480000,
    Math.round(shell.length / 1024) + ' KB');
 
 /* --- and they work in the page ------------------------------------------ */

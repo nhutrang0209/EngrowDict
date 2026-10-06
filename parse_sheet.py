@@ -190,6 +190,28 @@ for n, row in enumerate(wb['Reading Passage'].iter_rows(values_only=True)):
         readings.append(pend)
         pend = None
 
+# --- Reading Questions: one row per passage's set of questions ---
+# Keyed on the passage's title, not its number: the numbers are rewritten
+# whenever the passages are put in a different order, and a set of questions
+# that came loose from its passage every time one moved would be worse than
+# useless. The body is carried down as it was written — the shape of it lives
+# in the text, the way a passage's own formatting does, and the page is what
+# reads it.
+quizzes = {}
+if 'Reading Questions' in wb.sheetnames:
+    for n, row in enumerate(wb['Reading Questions'].iter_rows(values_only=True)):
+        if n < 1:
+            continue
+        row = list(row) + [None] * 3
+        title, body = flat(txt(row[0])), txt(row[1])
+        if title and body and body.strip():
+            quizzes[title.lower()] = body.strip()
+
+for r in readings:
+    got = quizzes.get(flat(r['title']).lower())
+    if got:
+        r['quiz'] = got
+
 for n, e in enumerate(entries):
     e['id'] = 's' + str(n)
 

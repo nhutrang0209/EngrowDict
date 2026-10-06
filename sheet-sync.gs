@@ -353,6 +353,15 @@ function doPost(e) {
         olock.releaseLock();
       }
     }
+    if (body.action === 'questions') {
+      var qlock = LockService.getScriptLock();
+      qlock.waitLock(20000);
+      try {
+        return out(writeQuestions(body.passage, body.body));
+      } finally {
+        qlock.releaseLock();
+      }
+    }
     if (body.action === 'aitranslate') return out(translatePassage(body.paras));
     if (body.action === 'passage') {
       var plock = LockService.getScriptLock();
@@ -963,6 +972,21 @@ function addPassage(p) {
   return { ok: true, index: next, row: at, paragraphs: lines.length };
 }
 
+/** A passage renamed keeps whatever questions were set on it. */
+function renameQuestions(was, now) {
+  var sh = book().getSheetByName(QTAB);
+  if (!sh || !was) return;
+  var last = sh.getLastRow();
+  if (last < 2) return;
+  var vals = sh.getRange(2, 1, last - 1, 1).getDisplayValues();
+  for (var i = 0; i < vals.length; i++) {
+    if (flat(vals[i][0]).toLowerCase() === was.toLowerCase()) {
+      sh.getRange(i + 2, 1).setValue(now);
+      return;
+    }
+  }
+}
+
 /** The rows one passage stands on: the numbered title, and the body under it. */
 function findPassage(sh, title) {
   var last = sh.getLastRow();
@@ -998,6 +1022,11 @@ function editPassage(was, p) {
       + '" among the passages. It may have been changed in the sheet since.' };
   }
   sh.getRange(at.row, 2).setValue(title);
+  /* The questions are keyed on the title, so a passage renamed here is one
+     whose questions would be left pointing at a name nothing answers to. */
+  if (flat(was && was.title).toLowerCase() !== title.toLowerCase()) {
+    renameQuestions(flat(was && was.title), title);
+  }
   if (at.bodyRow) {
     sh.getRange(at.bodyRow, 2).setValue(lines.join('\n'));
   } else {
@@ -1954,7 +1983,78 @@ function readingsFrom() {
       pend = null;
     }
   }
+  var quiz = quizzesFrom();
+  for (var k = 0; k < out.length; k++) {
+    var got = quiz[flat(out[k].title).toLowerCase()];
+    if (got) out[k].quiz = got;
+  }
   return out;
+}
+
+/* ------------------------------------------- the questions set on a passage */
+
+/* One row to a set: the passage it is on, and the whole of it in the cell
+ * beside. Keyed on the title rather than the number because the numbers are
+ * rewritten whenever the passages are put in another order, and a set that
+ * came loose from its passage every time one moved would be worse than no set
+ * at all. Mirrors parse_sheet.py, which is what the site is built from when it
+ * is built from a terminal instead. */
+var QTAB = 'Reading Questions';
+
+function quizzesFrom() {
+  var rows = grid(QTAB), by = {};
+  for (var i = 1; i < rows.length; i++) {
+    var title = flat(rows[i][0]), body = txt(rows[i][1]);
+    if (title && body) by[title.toLowerCase()] = body;
+  }
+  return by;
+}
+
+/** The tab, made if it is not there yet. A set written from the page is the
+ *  first anybody asks for, and asking them to add a tab by hand first is a
+ *  step with nothing in it. */
+function questionSheet(make) {
+  var sh = book().getSheetByName(QTAB);
+  if (sh || !make) return sh;
+  sh = book().insertSheet(QTAB);
+  sh.getRange(1, 1, 1, 2).setValues([['Passage', 'Questions']]);
+  sh.setFrozenRows(1);
+  sh.getRange('A:A').setVerticalAlignment('top');
+  sh.getRange('B:B').setVerticalAlignment('top').setWrap(true);
+  sh.setColumnWidth(1, 260);
+  sh.setColumnWidth(2, 720);
+  return sh;
+}
+
+/** Put a set in, change one, or — with an empty body — take one out. */
+function writeQuestions(passage, body) {
+  var title = flat(passage);
+  if (!title) return { ok: false, error: 'Which passage are they on?' };
+  var text = txt(body);
+
+  var rp = book().getSheetByName('Reading Passage');
+  if (rp && !findPassage(rp, title)) {
+    return { ok: false, error: 'There is no passage called "' + title + '".' };
+  }
+
+  var sh = questionSheet(!!text);
+  if (!sh) return { ok: true, removed: true };      // nothing there to take out
+
+  var last = sh.getLastRow();
+  var at = 0;
+  if (last > 1) {
+    var vals = sh.getRange(2, 1, last - 1, 1).getDisplayValues();
+    for (var i = 0; i < vals.length; i++) {
+      if (flat(vals[i][0]).toLowerCase() === title.toLowerCase()) { at = i + 2; break; }
+    }
+  }
+  if (!text) {
+    if (at) sh.deleteRows(at, 1);
+    return { ok: true, removed: true };
+  }
+  if (!at) at = sh.getLastRow() + 1;
+  sh.getRange(at, 1, 1, 2).setValues([[title, text]]);
+  return { ok: true, row: at, chars: text.length };
 }
 
 /* Some passages are the IELTS sort, with paragraphs lettered A, B, C… The
