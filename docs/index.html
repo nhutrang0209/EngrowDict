@@ -3646,7 +3646,13 @@ a.btn[hidden] { display: none; }
       range.setEnd(node, at);
     } catch (err) { return -1; }
     var mark = para.querySelector(".pmark");
-    return range.toString().length - (mark ? (mark.textContent || "").length : 0);
+    /* Never past the front of the paragraph's own words. A point at the very
+       start of a lettered paragraph sits before the A, so the count of what
+       is in front of it is shorter than the label, and the subtraction went
+       negative — which every caller reads as "not in the text at all". It is:
+       it is the first character of it. */
+    return Math.max(0, range.toString().length
+      - (mark ? (mark.textContent || "").length : 0));
   }
 
   /* Which sentence a point in the text falls in — the one it opens, or, for
