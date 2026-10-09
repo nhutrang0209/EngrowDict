@@ -6664,6 +6664,32 @@ a.btn[hidden] { display: none; }
     return { r: r, text: text, slots: set.slots.length, blank: blank };
   }
 
+  /* Why a write did not land, in the words of whatever refused it rather
+     than in one sentence that fits every refusal. "Could not reach the
+     sheet" was printed over a sheet that had been reached perfectly well and
+     had answered — and what it answered was the thing worth knowing.
+
+     The script in a sheet is a copy taken by hand, so it is older than this
+     page whenever this page has learnt something new. That is the one
+     refusal a reader cannot be expected to decode, so it is decoded here. */
+  function sheetWhy(err) {
+    var said = (err && err.message) || "";
+    if (/unknown request/i.test(said)) {
+      return "The sheet's Apps Script is older than this page: it does not "
+        + "know how to file questions yet. Open the sheet, Extensions → Apps "
+        + "Script, paste in the latest sheet-sync.gs and deploy it again.";
+    }
+    /* The last of these is what a reply with nothing in it comes back as, and
+       a reply with nothing in it is a sheet that may as well not have
+       answered. None of the three says anything a reader can act on, so all
+       three say the one thing they have in common. */
+    if (!said || /failed to fetch|networkerror|load failed/i.test(said)
+        || /^the sheet rejected the request$/i.test(said)) {
+      return "Could not reach the sheet.";
+    }
+    return said;
+  }
+
   function saveQuiz() {
     var got = readQuizForm();
     if (got.err) { quizMsg(got.err, ""); return; }
@@ -6677,12 +6703,7 @@ a.btn[hidden] { display: none; }
       ? callSheet({ action: "questions", passage: got.r.title, body: got.text })
       : Promise.resolve({ ok: true });
 
-    job.then(function (res) {
-      btn.disabled = false;
-      if (!res || res.ok === false) {
-        quizMsg(res && res.error ? res.error : "Could not write them in.", "");
-        return;
-      }
+    function land(why) {
       got.r.quiz = got.text;
       keepMyQuiz(got.r.title, got.text);
       document.getElementById("quiz-dlg").close();
@@ -6690,11 +6711,24 @@ a.btn[hidden] { display: none; }
       if (onPassage()) { select(got.r.id); showDetail(); }
       refresh();
       syncViewButtons();
-      toast(plural(got.slots, "question", "questions") + " on “" + got.r.title + "”"
-        + (got.blank ? ", " + got.blank + " with no answer set" : ""));
-    }, function () {
+      if (why) banner(why + " The questions are on this device, and will go "
+        + "into the sheet the next time one is saved.", null, null);
+      else {
+        toast(plural(got.slots, "question", "questions") + " on “" + got.r.title + "”"
+          + (got.blank ? ", " + got.blank + " with no answer set" : ""));
+      }
+    }
+
+    job.then(function () {
       btn.disabled = false;
-      quizMsg("Could not reach the sheet.", "");
+      land("");
+    }, function (err) {
+      /* Kept here even so. Fourteen questions are not typed out a second time
+         because a web app was not reachable, and the page has somewhere of
+         its own to put them — the same somewhere a passage written here waits
+         in until a publish brings it back down. */
+      btn.disabled = false;
+      land(sheetWhy(err));
     });
   }
 
@@ -6706,11 +6740,7 @@ a.btn[hidden] { display: none; }
     var job = toSheet
       ? callSheet({ action: "questions", passage: r.title, body: "" })
       : Promise.resolve({ ok: true });
-    job.then(function (res) {
-      if (!res || res.ok === false) {
-        quizMsg(res && res.error ? res.error : "Could not take them out.", "");
-        return;
-      }
+    function gone(why) {
       delete r.quiz;
       keepMyQuiz(r.title, "");
       document.getElementById("quiz-dlg").close();
@@ -6718,8 +6748,11 @@ a.btn[hidden] { display: none; }
       if (view === "quiz") { selectedRead = null; refresh(); }
       drawDetail();
       syncViewButtons();
-      toast("The questions on “" + r.title + "” were removed");
-    }, function () { quizMsg("Could not reach the sheet.", ""); });
+      if (why) banner(why + " They are off this device either way.", null, null);
+      else toast("The questions on “" + r.title + "” were removed");
+    }
+
+    job.then(function () { gone(""); }, function (err) { gone(sheetWhy(err)); });
   }
 
   /* ---- a set written here, before the sheet sends it back -----------------

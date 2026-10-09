@@ -648,6 +648,82 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
        .test(d2.doc.getElementById('quiz-msg').textContent),
      d2.doc.getElementById('quiz-msg').textContent);
 
+  /* --- when the sheet will not take them ----------------------------------
+
+     The script in a sheet is a copy taken by hand, so it is older than the
+     page whenever the page has learnt something new — and the refusal it
+     sends back for a word it does not know is the one thing a reader cannot
+     decode on their own. "Could not reach the sheet" was printed over a
+     sheet that had been reached perfectly well and had answered. */
+  const CFG = {
+    sheetUrl: 'https://docs.google.com/spreadsheets/d/ABC/edit',
+    webApp: 'https://script.google.com/macros/s/XYZ/exec',
+    key: 'a-secret-key',
+  };
+  function sheetSays(reply) {
+    const store = unlockedStore(CFG);
+    const g = mk(null, store);
+    g.window.fetch = () => Promise.resolve({
+      ok: true, status: 200, json: () => Promise.resolve(reply),
+    });
+    return g;
+  }
+
+  const old88 = sheetSays({ ok: false, error: 'Unknown request' });
+  await wait(900);
+  click(old88.window, tabQ(old88));
+  await wait(50);
+  click(old88.window, old88.doc.getElementById('add-word'));
+  await wait(40);
+  old88.doc.getElementById('quiz-for').value = 'r0';
+  old88.doc.getElementById('quiz-body').value = '? tfng 27\nA statement. = T';
+  click(old88.window, old88.doc.getElementById('quiz-save'));
+  await wait(120);
+
+  const why = old88.doc.getElementById('banner').textContent;
+  ok('a sheet whose script is older than the page is told so in those words',
+     /older than this page/.test(why) && /sheet-sync\.gs/.test(why), why.slice(0, 90));
+  ok('  and not told it could not be reached, which it plainly could',
+     !/could not reach/i.test(why), why.slice(0, 60));
+  ok('  while the questions are kept here rather than typed out again',
+     JSON.parse(old88.store['engrowdict:quizzes:v1'] || '{}')[base.readings[0].title]
+       === '? tfng 27\nA statement. = T'
+     && !!old88.doc.querySelector('#quiz-pane .qrow'),
+     old88.store['engrowdict:quizzes:v1']);
+  ok('  and the form is shut, because the writing is done either way',
+     !old88.doc.getElementById('quiz-dlg').open, 'shut');
+
+  const down = sheetSays(null);          // nothing came back at all
+  await wait(900);
+  click(down.window, tabQ(down));
+  await wait(50);
+  click(down.window, down.doc.getElementById('add-word'));
+  await wait(40);
+  down.doc.getElementById('quiz-for').value = 'r0';
+  down.doc.getElementById('quiz-body').value = '? tfng\nA statement. = T';
+  click(down.window, down.doc.getElementById('quiz-save'));
+  await wait(120);
+  ok('a sheet that answers nothing at all is the one that could not be reached',
+     /could not reach the sheet/i.test(down.doc.getElementById('banner').textContent),
+     down.doc.getElementById('banner').textContent.slice(0, 60));
+
+  const dark = mk(null, unlockedStore(CFG));
+  await wait(900);
+  dark.window.fetch = () => Promise.reject(new Error('Failed to fetch'));
+  click(dark.window, tabQ(dark));
+  await wait(50);
+  click(dark.window, dark.doc.getElementById('add-word'));
+  await wait(40);
+  dark.doc.getElementById('quiz-for').value = 'r0';
+  dark.doc.getElementById('quiz-body').value = '? tfng\nA statement. = T';
+  click(dark.window, dark.doc.getElementById('quiz-save'));
+  await wait(120);
+  ok('  as is a sheet there is no network to reach, and the set survives both',
+     /could not reach the sheet/i.test(dark.doc.getElementById('banner').textContent)
+     && !!JSON.parse(dark.store['engrowdict:quizzes:v1'] || '{}')[base.readings[0].title],
+     dark.doc.getElementById('banner').textContent.slice(0, 50));
+
   done(a.errs.concat(b.errs, c.errs, wide.errs, tight.errs, none.errs,
-                     w.errs, back.errs, late.errs, t.errs, d2.errs));
+                     w.errs, back.errs, late.errs, t.errs, d2.errs,
+                     old88.errs, down.errs, dark.errs));
 })();
