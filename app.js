@@ -874,8 +874,14 @@
           split.dataset.panes = "1";
           split.appendChild(paneSplitter("ai"));
           split.appendChild(sharedPane(selectedRead, panes));
+          /* Which pane is actually standing there, for the stylesheet. The
+             questions and the translation want different widths and stop
+             standing beside the passage at different widths, and the grid
+             cannot tell them apart from the number of them. */
+          split.dataset.pane = rightTab;
         } else {
           split.dataset.panes = String(panes.length);
+          split.dataset.pane = panes.join(" ");
           panes.forEach(function (which) {
             split.appendChild(paneSplitter(which));
             split.appendChild(paneView(which, selectedRead, null));

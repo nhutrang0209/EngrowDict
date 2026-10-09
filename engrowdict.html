@@ -1053,7 +1053,13 @@ dialog::backdrop { background: rgba(8, 14, 11, .5); backdrop-filter: blur(2px); 
 .detail-inner.split { max-width: none; padding-right: 18px; }
 .readsplit {
   display: grid; align-items: start;
-  grid-template-columns: minmax(0, 1fr) 7px var(--ai-w, 420px);
+  grid-template-columns: minmax(0, 1fr) 7px min(var(--ai-w, 420px), 46vw);
+}
+/* The width the reader dragged, until it would take half the window. A column
+   set at 440 on a wide screen is most of a narrow one, and the passage beside
+   it comes out four words to the line. */
+.readsplit[data-pane="quiz"] {
+  grid-template-columns: minmax(0, 1fr) 7px min(var(--q-w, 440px), 46vw);
 }
 .readsplit .read { max-width: none; padding-right: 30px; }
 .aisplit {
@@ -1223,14 +1229,21 @@ mark.hl .readmark { box-shadow: 0 0 0 3px color-mix(in srgb, var(--mark) 22%, tr
 
 @media (max-width: 900px) {
   /* Side by side stops being side by side long before a phone: the columns
-     stack, the English first, and the rule between them has nothing to do. */
-  .readsplit, .readsplit[data-panes="2"] { grid-template-columns: minmax(0, 1fr); }
-  .readsplit .read { padding-right: 0; }
-  .quizpane { border-left: 0; border-top: 1px solid var(--rule); }
+     stack, the English first, and the rule between them has nothing to do.
+
+     The questions are the exception, and stay beside the passage all the way
+     down to the phone rule. Stacked, they land under eight hundred words of
+     passage — which is not where a reader answering question 27 about the
+     opening paragraph can use them, and from the chair it reads as the
+     questions having gone. A narrow column of questions is still a column of
+     questions; one a thousand words below what it is asking about is not. */
+  .readsplit:not([data-pane~="quiz"]) { grid-template-columns: minmax(0, 1fr); }
+  .readsplit:not([data-pane~="quiz"]) .read { padding-right: 0; }
+  .readsplit:not([data-pane~="quiz"]) .aisplit { display: none; }
+  .readsplit[data-pane~="quiz"] .read { padding-right: 16px; }
   .quiz { padding: 4px 2px 40px; }
   .bank { grid-template-columns: 1fr; }
-  .aisplit { display: none; }
-  .aipane {
+  .readsplit:not([data-pane~="quiz"]) .aipane {
     position: static; max-height: none; padding-left: 0; margin-top: 30px;
     border-top: 1px solid var(--rule); padding-top: 16px;
   }
@@ -1451,6 +1464,17 @@ a.btn[hidden] { display: none; }
   .detail-inner { padding: 28px 28px 72px; }
 }
 @media (max-width: 760px) {
+  /* A phone has no second column to give anything, so here the questions
+     stack too. Everything above was about the band between a phone and a
+     laptop, which is where a window gets dragged narrower and the questions
+     used to go out from under the reader. */
+  .readsplit, .readsplit[data-panes="2"],
+  .readsplit[data-pane="quiz"] { grid-template-columns: minmax(0, 1fr); }
+  .readsplit[data-pane~="quiz"] .read { padding-right: 0; }
+  .readsplit[data-pane~="quiz"] .aisplit { display: none; }
+  .readsplit[data-pane~="quiz"] .quizpane {
+    border-left: 0; border-top: 1px solid var(--rule); margin-top: 26px;
+  }
   /* A rail down the side of a phone is width nobody has. It lies back down as
      a strip, with the names on it: there is no hovering for a tooltip here. */
   .work { grid-template-columns: 1fr; grid-template-rows: auto auto 1fr; }
@@ -1642,7 +1666,7 @@ a.btn[hidden] { display: none; }
    at the top of it says and does. */
 .readsplit[data-panes="2"] {
   grid-template-columns:
-    minmax(0, 1fr) 7px var(--ai-w, 420px) 7px var(--q-w, 440px);
+    minmax(0, 1fr) 7px min(var(--ai-w, 420px), 32vw) 7px min(var(--q-w, 440px), 32vw);
 }
 .quizpane {
   align-self: stretch; min-width: 0;
@@ -2784,8 +2808,14 @@ a.btn[hidden] { display: none; }
           split.dataset.panes = "1";
           split.appendChild(paneSplitter("ai"));
           split.appendChild(sharedPane(selectedRead, panes));
+          /* Which pane is actually standing there, for the stylesheet. The
+             questions and the translation want different widths and stop
+             standing beside the passage at different widths, and the grid
+             cannot tell them apart from the number of them. */
+          split.dataset.pane = rightTab;
         } else {
           split.dataset.panes = String(panes.length);
+          split.dataset.pane = panes.join(" ");
           panes.forEach(function (which) {
             split.appendChild(paneSplitter(which));
             split.appendChild(paneView(which, selectedRead, null));

@@ -773,7 +773,51 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
      /can: \['questions'\]/.test(read('sheet-sync.gs')),
      'the ping carries it');
 
+  /* --- the band between a phone and a laptop ------------------------------
+
+     A window dragged narrower used to put the questions under the passage,
+     and under eight hundred words of passage is not somewhere a reader
+     answering question 27 about the opening paragraph can reach. From the
+     chair it read as the questions having gone.
+
+     jsdom does no layout, so what is checked is the grid the stylesheet asks
+     for and the attribute the page hangs it on — which is the whole of the
+     mechanism either way. */
+  const band = mk(QUIZ, unlockedStore(), { width: 880 });
+  await wait(900);
+  click(band.window, tabQ(band));
+  await wait(50);
+  click(band.window, band.doc.querySelector('.hit'));
+  await wait(80);
+  ok('the split says which pane is standing in it, not only how many',
+     band.doc.querySelector('.readsplit').dataset.pane === 'quiz',
+     band.doc.querySelector('.readsplit').dataset.pane);
+
+  const css = read('app.css');
+  /* There is more than one block at each width — the forms have one of their
+     own — so it is the one that lays the split out that is wanted. */
+  const block = what => {
+    const open = '@media (max-width: ' + what + 'px) {';
+    for (let at = css.indexOf(open); at > -1; at = css.indexOf(open, at + 1)) {
+      const body = css.slice(at, css.indexOf('\n}\n', at));
+      if (body.indexOf('.readsplit') > -1) return body;
+    }
+    return '';
+  };
+  ok('between a phone and a laptop the translation stacks and the questions do not',
+     /:not\(\[data-pane~="quiz"\]\) \{ grid-template-columns: minmax\(0, 1fr\)/
+       .test(block(900))
+     && !/^\s*\.readsplit \{ grid-template-columns: minmax\(0, 1fr\)/m.test(block(900)),
+     'the questions keep their column');
+  ok('  and on a phone they stack too, there being no column to give them',
+     /\[data-pane="quiz"\] \{ grid-template-columns: minmax\(0, 1fr\)/.test(block(760)),
+     'stacked on a phone');
+  ok('  with the column never taking more than half the window it stands in',
+     /\[data-pane="quiz"\][\s\S]{0,120}min\(var\(--q-w[^)]*\), 46vw\)/.test(css),
+     'clamped');
+
   done(a.errs.concat(b.errs, c.errs, wide.errs, tight.errs, none.errs,
                      w.errs, back.errs, late.errs, t.errs, d2.errs,
-                     old88.errs, down.errs, dark.errs, stale.errs, fresh.errs));
+                     old88.errs, down.errs, dark.errs, stale.errs, fresh.errs,
+                     band.errs));
 })();
