@@ -512,7 +512,7 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
      'no leftovers');
 
   ok('it says how many it found and how many still want an answer',
-     /5 questions found/.test(tmsg()) && /5 still want an answer/.test(tmsg()),
+     /5 questions read/.test(tmsg()) && /5 still want an answer/.test(tmsg()),
      tmsg());
 
   click(t.window, t.doc.getElementById('quiz-tidy'));
@@ -590,6 +590,64 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
      JSON.stringify(t.store['engrowdict:ans:v1'] || null) === before,
      String(t.store['engrowdict:ans:v1']));
 
+  /* --- dropping a paste in, and doing nothing else ------------------------
+
+     The tidying is what a paste is for, so the paste does it. Asking for a
+     button afterwards means knowing there is one — and what sits in the box
+     until it is pressed is a page of prose with nothing answerable in it,
+     which draws in the preview as exactly that, and is exactly as useless. */
+  const pasteInto = (g, text) => {
+    const box = g.doc.getElementById('quiz-body');
+    box.value = text;                       // the browser's own part of it
+    box.dispatchEvent(new g.window.Event('paste'));
+  };
+
+  const d2 = mk(null, unlockedStore());
+  await wait(900);
+  click(d2.window, tabQ(d2));
+  await wait(50);
+  click(d2.window, d2.doc.getElementById('add-word'));
+  await wait(40);
+
+  pasteInto(d2, PASTE);
+  await wait(60);
+  ok('a paste reads itself, without a button being found first',
+     /^\? choice 27$/m.test(d2.doc.getElementById('quiz-body').value),
+     d2.doc.getElementById('quiz-body').value.split('\n')[1]);
+  ok('  and the preview is questions, with something to press on each',
+     d2.doc.querySelectorAll('#quiz-preview .opt').length > 0
+     && d2.doc.querySelectorAll('#quiz-preview .qnum')[0].textContent === '27.',
+     d2.doc.querySelectorAll('#quiz-preview .opt').length + ' to choose from');
+  ok('  saying what it read and what is still owing',
+     /5 questions read/.test(d2.doc.getElementById('quiz-msg').textContent),
+     d2.doc.getElementById('quiz-msg').textContent);
+
+  /* Something already in marks is not a paste to be read, and a paste with
+     nothing in it that looks like a question is left where it was put. */
+  pasteInto(d2, '? tfng 5\nA statement. = T');
+  await wait(60);
+  ok('a paste already in marks is left exactly as it was pasted',
+     d2.doc.getElementById('quiz-body').value === '? tfng 5\nA statement. = T',
+     d2.doc.getElementById('quiz-body').value);
+
+  pasteInto(d2, 'Just a paragraph of prose, with nothing to answer.');
+  await wait(300);          // nothing to read, so the preview is the slow one
+  ok('and a paste that is not questions at all is left alone too',
+     d2.doc.getElementById('quiz-body').value
+       === 'Just a paragraph of prose, with nothing to answer.',
+     d2.doc.getElementById('quiz-body').value);
+  ok('  with the preview saying what it is rather than drawing it as prose',
+     /still looks like a paste/.test(d2.doc.getElementById('quiz-preview').textContent)
+     && !!d2.doc.getElementById('prev-tidy'),
+     d2.doc.getElementById('quiz-preview').textContent.trim().slice(0, 34));
+
+  click(d2.window, d2.doc.getElementById('prev-tidy'));
+  await wait(40);
+  ok('  and the button to do something about it standing in the preview itself',
+     /Nothing in that looked like questions/
+       .test(d2.doc.getElementById('quiz-msg').textContent),
+     d2.doc.getElementById('quiz-msg').textContent);
+
   done(a.errs.concat(b.errs, c.errs, wide.errs, tight.errs, none.errs,
-                     w.errs, back.errs, late.errs, t.errs));
+                     w.errs, back.errs, late.errs, t.errs, d2.errs));
 })();

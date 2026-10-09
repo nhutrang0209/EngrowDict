@@ -1768,6 +1768,12 @@ a.btn[hidden] { display: none; }
 }
 .quiz-prev .quiz { padding: 0; }
 .quiz-prev .none { padding: 14px 0; font-size: 12.5px; }
+/* What stands in the preview while there is nothing to preview: what the box
+   holds, and the one thing to do about it. */
+.prev-note { padding: 22px 2px; display: flex; flex-direction: column; gap: 7px; align-items: flex-start; }
+.prev-note .lead { font-family: var(--serif); font-size: 16px; font-weight: 600; color: var(--ink); }
+.prev-note .sub { font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+.prev-note .btn { margin-top: 5px; }
 .quiz-prev .task:first-child { padding-top: 14px; }
 /* The two of them scroll inside themselves, and the form does not scroll at
    all. A preview below the fold of a dialog is a preview nobody finds: the
