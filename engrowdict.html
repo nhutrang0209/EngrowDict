@@ -1472,9 +1472,13 @@ a.btn[hidden] { display: none; }
   .readsplit[data-pane="quiz"] { grid-template-columns: minmax(0, 1fr); }
   .readsplit[data-pane~="quiz"] .read { padding-right: 0; }
   .readsplit[data-pane~="quiz"] .aisplit { display: none; }
+  /* Stacked, there is nothing to stand beside and nothing to stand still
+     against: the column is the page now, and the page is what scrolls. */
   .readsplit[data-pane~="quiz"] .quizpane {
+    position: static; max-height: none;
     border-left: 0; border-top: 1px solid var(--rule); margin-top: 26px;
   }
+  .quizpane > .quiz { overflow: visible; }
   /* A rail down the side of a phone is width nobody has. It lies back down as
      a strip, with the names on it: there is no hovering for a tooltip here. */
   .work { grid-template-columns: 1fr; grid-template-rows: auto auto 1fr; }
@@ -1668,10 +1672,24 @@ a.btn[hidden] { display: none; }
   grid-template-columns:
     minmax(0, 1fr) 7px min(var(--ai-w, 420px), 32vw) 7px min(var(--q-w, 440px), 32vw);
 }
+/* Stands where it is and scrolls inside itself, the way the Vietnamese
+   column does. Answering is not reading one thing after another: it is
+   looking at question 31 and then at the paragraph it is about, and back. In
+   one scroller the passage went past every time the questions were moved,
+   so getting to question 36 took the opening paragraph off the screen —
+   which is the paragraph half of them are asking about.
+
+   The containment is the other half of it. Without it, a column scrolled to
+   its end hands the rest of the wheel to the page behind, and the passage
+   starts moving at the moment the questions stop. */
 .quizpane {
-  align-self: stretch; min-width: 0;
+  position: sticky; top: 0; min-width: 0;
+  max-height: calc(100vh - var(--top-h) - 24px);
   display: flex; flex-direction: column;
   border-left: 1px solid var(--hair);
+}
+.quizpane > .quiz {
+  flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
 }
 /* The two names where one pane's name would have been: the strip that says
    which of them this column is showing is the thing that changes it. */

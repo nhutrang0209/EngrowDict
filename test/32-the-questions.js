@@ -812,6 +812,28 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
   ok('  and on a phone they stack too, there being no column to give them',
      /\[data-pane="quiz"\] \{ grid-template-columns: minmax\(0, 1fr\)/.test(block(760)),
      'stacked on a phone');
+  /* Answering is not reading one thing after another: it is looking at
+     question 31, then at the paragraph it is about, and back. Scrolled
+     together, getting down to question 36 took the opening paragraph off the
+     screen — and half the questions are about the opening paragraph. */
+  const quizRule = (() => {
+    // the rule itself, not one of the ones nested in a media query
+    const at = css.indexOf('\n.quizpane {');
+    return at < 0 ? '' : css.slice(at, css.indexOf('}', at));
+  })();
+  ok('the questions stand where they are and scroll inside themselves',
+     /position: sticky/.test(quizRule) && /max-height:/.test(quizRule),
+     quizRule.replace(/\s+/g, ' ').slice(0, 70));
+  ok('  so the passage is not dragged along by them',
+     /\.quizpane > \.quiz \{[^}]*overflow-y: auto/.test(css),
+     'its own scroller');
+  ok('  and does not take over when they reach their end',
+     /\.quizpane > \.quiz \{[^}]*overscroll-behavior: contain/.test(css),
+     'the wheel stays where it was put');
+  ok('  except stacked on a phone, where the column is the page',
+     /\[data-pane~="quiz"\] \.quizpane \{[^}]*position: static/.test(block(760)),
+     'the page scrolls instead');
+
   ok('  with the column never taking more than half the window it stands in',
      /\[data-pane="quiz"\][\s\S]{0,120}min\(var\(--q-w[^)]*\), 46vw\)/.test(css),
      'clamped');
