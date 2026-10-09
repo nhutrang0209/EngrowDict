@@ -80,9 +80,12 @@ function withTranslation(store) {
 
 const tabQ = g => g.doc.getElementById('tab-questions');
 const hits = g => [...g.doc.querySelectorAll('.hit .hw')].map(n => n.textContent);
-const tasks = g => [...g.doc.querySelectorAll('.quiz .task')];
-const rows = g => [...g.doc.querySelectorAll('.quiz .qrow')];
-const nums = g => [...g.doc.querySelectorAll('.quiz .qnum, .quiz .gap-n')]
+/* The pane beside the passage, not the preview in the form: both draw the
+   same questions with the same renderer, and a count that took in both would
+   quietly double once the form was open. */
+const tasks = g => [...g.doc.querySelectorAll('#quiz-pane .task')];
+const rows = g => [...g.doc.querySelectorAll('#quiz-pane .qrow')];
+const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-n')]
   .map(n => n.textContent.replace('.', ''));
 
 (async () => {
@@ -162,7 +165,7 @@ const nums = g => [...g.doc.querySelectorAll('.quiz .qnum, .quiz .gap-n')]
   await wait(40);
   click(b.window, b.doc.querySelector('.hit'));
   await wait(80);
-  const opt = b.doc.querySelectorAll('.quiz .qrow .opt')[1];   // FALSE on question 1
+  const opt = b.doc.querySelectorAll('#quiz-pane .qrow .opt')[1];   // FALSE on question 1
   click(b.window, opt);
   await wait(30);
   ok('an answer is marked where it was pressed',
@@ -179,10 +182,10 @@ const nums = g => [...g.doc.querySelectorAll('.quiz .qnum, .quiz .gap-n')]
   click(c.window, c.doc.querySelector('.hit'));
   await wait(80);
   ok('a later visit finds the answers where they were left',
-     c.doc.querySelectorAll('.quiz .opt[aria-pressed="true"]').length === 1,
-     String(c.doc.querySelectorAll('.quiz .opt[aria-pressed="true"]').length));
+     c.doc.querySelectorAll('#quiz-pane .opt[aria-pressed="true"]').length === 1,
+     String(c.doc.querySelectorAll('#quiz-pane .opt[aria-pressed="true"]').length));
 
-  click(c.window, c.doc.querySelector('.quiz .opt[aria-pressed="true"]'));
+  click(c.window, c.doc.querySelector('#quiz-pane .opt[aria-pressed="true"]'));
   await wait(30);
   ok('  and pressing the one already chosen takes it back off',
      !JSON.parse(c.store['engrowdict:ans:v1'] || '{}')['q:r0'],
@@ -402,14 +405,14 @@ const nums = g => [...g.doc.querySelectorAll('.quiz .qnum, .quiz .gap-n')]
      nums(late).join(' ') === '27 28 29', nums(late).join(' '));
 
   ok('  an option pasted off a paper with its own letter is not lettered twice',
-     [...late.doc.querySelectorAll('.quiz .opt')].slice(0, 1)
+     [...late.doc.querySelectorAll('#quiz-pane .opt')].slice(0, 1)
        .map(b => b.textContent).join('') === 'AWisdom seems to be a quality found only in humans.',
-     [...late.doc.querySelectorAll('.quiz .opt')][0].textContent);
+     [...late.doc.querySelectorAll('#quiz-pane .opt')][0].textContent);
 
   ok('  and a question whose options were written without letters gets them all the same',
-     [...late.doc.querySelectorAll('.quiz .qrow')][1]
+     [...late.doc.querySelectorAll('#quiz-pane .qrow')][1]
        .querySelectorAll('.opt-l').length === 2,
-     [...[...late.doc.querySelectorAll('.quiz .qrow')][1].querySelectorAll('.opt-l')]
+     [...[...late.doc.querySelectorAll('#quiz-pane .qrow')][1].querySelectorAll('.opt-l')]
        .map(n => n.textContent).join(''));
 
   ok('the buttons in the form are words, not the reading mark they borrowed',
@@ -521,6 +524,7 @@ const nums = g => [...g.doc.querySelectorAll('.quiz .qnum, .quiz .gap-n')]
      its questions, not its answers. So they are typed in, and then it saves. */
   tbox.value = said.replace('opening paragraph? = ', 'opening paragraph? = C');
   t.doc.getElementById('quiz-for').value = 'r0';
+  const saved = tbox.value;
   click(t.window, t.doc.getElementById('quiz-save'));
   await wait(80);
   ok('what comes out of it saves, and numbers itself from where the page did',
@@ -528,6 +532,63 @@ const nums = g => [...g.doc.querySelectorAll('.quiz .qnum, .quiz .gap-n')]
   ok('  with the answer that was typed in standing against its question',
      JSON.parse(t.store['engrowdict:quizzes:v1'])[base.readings[0].title]
        .includes('opening paragraph? = C'), 'C');
+
+  /* --- and what it will look like, while it is being written --------------
+
+     The marks are written to be read by the page, not by a person. A form
+     that showed only the marks asked its writer to hold the rendering in
+     their head and check it there — and the question a writer has is always
+     whether this is right yet. */
+  const prev = () => t.doc.getElementById('quiz-preview');
+  const ptally = () => t.doc.getElementById('quiz-tally').textContent;
+  const typeQ = v => {
+    t.doc.getElementById('quiz-body').value = v;
+    t.doc.getElementById('quiz-body').dispatchEvent(new t.window.Event('input'));
+  };
+
+  click(t.window, t.doc.getElementById('quiz-edit'));
+  await wait(40);
+  ok('the form has the box on one side and what it comes out as on the other',
+     !!prev() && prev().parentNode.parentNode.classList.contains('quiz-split'),
+     prev() ? prev().parentNode.parentNode.className : 'no preview');
+  ok('  showing what is already written the moment it opens',
+     prev().querySelectorAll('.task').length === 3,
+     prev().querySelectorAll('.task').length + ' tasks');
+  ok('  and counting them, with the numbers they will carry',
+     /5 questions/.test(ptally()) && /27–31/.test(ptally()), ptally());
+
+  typeQ('? tfng 12\nOne statement. = T\nAnother. = F');
+  await wait(300);
+  ok('it follows the typing rather than waiting to be asked',
+     prev().querySelectorAll('.qrow').length === 2
+     && [...prev().querySelectorAll('.qnum')].map(n => n.textContent).join(' ')
+        === '12. 13.',
+     [...prev().querySelectorAll('.qnum')].map(n => n.textContent).join(' '));
+  ok('  and says when nothing is owing, as well as when something is',
+     /2 questions/.test(ptally()) && !/unanswered/.test(ptally()), ptally());
+
+  typeQ('? tfng\nOne statement.');
+  await wait(300);
+  ok('  an answer not yet written is counted, not hidden',
+     /1 unanswered/.test(ptally()), ptally());
+
+  typeQ('');
+  await wait(300);
+  ok('an empty box says what the space is for rather than standing blank',
+     /appears here/.test(prev().textContent) && ptally() === '',
+     prev().textContent.trim().slice(0, 40));
+
+  /* Nothing put into the preview is an answer to anything: it is a writer
+     looking at their own work, and it has no business in what a reader has
+     put down. */
+  typeQ('? tfng\nOne statement. = T');
+  await wait(300);
+  const before = JSON.stringify(t.store['engrowdict:ans:v1'] || null);
+  click(t.window, prev().querySelector('.opt'));
+  await wait(40);
+  ok('pressing an answer in the preview answers nothing for anybody',
+     JSON.stringify(t.store['engrowdict:ans:v1'] || null) === before,
+     String(t.store['engrowdict:ans:v1']));
 
   done(a.errs.concat(b.errs, c.errs, wide.errs, tight.errs, none.errs,
                      w.errs, back.errs, late.errs, t.errs));

@@ -1742,9 +1742,37 @@ a.btn[hidden] { display: none; }
 }
 .quiz-edit:focus { outline: none; border-color: var(--accent); box-shadow: var(--ring); }
 .quizbar { flex-wrap: wrap; }
-/* Over the box and to the right of what the box is called: the one button
-   here that acts on what is already in it rather than adding to it. */
-.field > .tidybtn { float: right; margin-top: -2px; padding: 4px 10px; font-size: 12px; }
+/* The form is two columns, because what is being written is written in marks
+   and read as questions, and a writer checking the second against the first
+   should not have to hold either of them in their head. */
+#quiz-dlg { width: min(1120px, 96vw); }
+.quiz-split {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 20px; align-items: start;
+}
+.field-top { display: flex; align-items: center; gap: 10px; min-height: 24px; }
+.field-top > span:first-child {
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--faint);
+}
+/* The one button here that acts on what is already in the box rather than
+   adding to it, so it stands away from the row that adds. */
+.tidybtn { padding: 4px 10px; font-size: 12px; }
+.tally { font-family: var(--mono); font-size: 10.5px; color: var(--faint); }
+.tally.owing { color: var(--term); }
+.tally.done { color: var(--accent-hi); }
+.quiz-prev {
+  border: 1px solid var(--rule); border-radius: var(--r-s);
+  background: var(--tint); padding: 2px 14px 14px;
+  max-height: 46vh; overflow-y: auto;
+}
+.quiz-prev .quiz { padding: 0; }
+.quiz-prev .none { padding: 14px 0; font-size: 12.5px; }
+.quiz-prev .task:first-child { padding-top: 14px; }
+@media (max-width: 900px) {
+  .quiz-split { grid-template-columns: minmax(0, 1fr); }
+  .quiz-prev { max-height: 34vh; }
+}
 .markbtn.mb-w {
   width: auto; padding: 0 9px; height: 24px; border-radius: var(--r-s);
   font-size: 11px; color: var(--muted);

@@ -4450,12 +4450,16 @@
     pick.appendChild(el("span", null, "The passage"));
     var sel = el("select");
     sel.id = "quiz-for";
+    /* Which passage decides the letters a matching task offers, so the
+       preview is a different thing on a different passage. */
+    sel.addEventListener("change", queuePreview);
     pick.appendChild(sel);
     body.appendChild(pick);
 
     var f = el("div", "field");
-    var lab = el("span", null, "The questions");
-    f.appendChild(lab);
+    var top = el("div", "field-top");
+    top.appendChild(el("span", null, "The questions"));
+    top.appendChild(el("span", "grow"));
     /* Copied off a page that already set them out, what comes across is that
        page's setting-out. This reads it back into marks rather than asking
        anybody to retype it — and writes the answer back into the box, not
@@ -4466,20 +4470,44 @@
     tidy.id = "quiz-tidy";
     tidy.title = "Turn questions copied off a page into the marks below";
     tidy.addEventListener("click", runTidy);
-    f.appendChild(tidy);
+    top.appendChild(tidy);
+    f.appendChild(top);
     f.appendChild(quizBits());
     var box = el("textarea", "mono quiz-edit");
     box.id = "quiz-body";
     box.rows = 16;
     box.spellcheck = false;
     box.setAttribute("aria-label", "The questions");
+    box.addEventListener("input", queuePreview);
     f.appendChild(box);
     f.appendChild(el("p", "hint",
       "One task to a ? line. Numbers are not written against the questions: "
       + "they are the order the blanks come in, so nothing can fall out of "
       + "step. A set that does not open at 1 says so once — ? choice 27 — and "
       + "the rest follow on."));
-    body.appendChild(f);
+
+    /* Beside it, the same thing as the reader will meet it. The marks are
+       written to be read by the page and not by a person, so a form that
+       showed only the marks was asking its writer to hold the rendering in
+       their head and check it there. The question a writer has is always
+       whether this is right yet, and the only honest answer to it is the
+       thing itself. */
+    var pv = el("div", "field");
+    var pvTop = el("div", "field-top");
+    pvTop.appendChild(el("span", null, "How it will read"));
+    pvTop.appendChild(el("span", "grow"));
+    var tally = el("span", "tally");
+    tally.id = "quiz-tally";
+    pvTop.appendChild(tally);
+    pv.appendChild(pvTop);
+    var prev = el("div", "quiz-prev");
+    prev.id = "quiz-preview";
+    pv.appendChild(prev);
+
+    var split = el("div", "quiz-split");
+    split.appendChild(f);
+    split.appendChild(pv);
+    body.appendChild(split);
     dlg.appendChild(body);
 
     var foot = el("div", "dlg-foot");
@@ -4553,6 +4581,46 @@
     box.setSelectionRange(caret, caret);
   }
 
+  /* Drawn a moment after the typing stops rather than on the keystroke: a
+     set is parsed and rendered whole, and doing that per letter is work
+     nobody sees the end of. */
+  var previewWait = 0;
+
+  function queuePreview() {
+    clearTimeout(previewWait);
+    previewWait = setTimeout(drawQuizPreview, 220);
+  }
+
+  function drawQuizPreview() {
+    var host = document.getElementById("quiz-preview");
+    var tally = document.getElementById("quiz-tally");
+    if (!host) return;
+    host.textContent = "";
+    if (tally) tally.textContent = "";
+    var text = String((quizBox() || {}).value || "");
+    if (!text.trim()) {
+      host.appendChild(el("p", "none",
+        "Whatever you write appears here, the way it will be read."));
+      return;
+    }
+    var sel = document.getElementById("quiz-for");
+    var on = byId[sel && sel.value];
+    /* A passage with no id of its own, so the slots draw and take nothing:
+       what is put into them here is a writer checking their own work, not a
+       reader answering, and it has no business in the answers. */
+    var set = parseQuiz(text, quizMarks(on));
+    host.appendChild(quizBody({ paras: (on && on.paras) || [] }, text));
+    if (tally && set.slots.length) {
+      var first = set.slots[0].n, last = set.slots[set.slots.length - 1].n;
+      var owing = 0;
+      set.slots.forEach(function (x) { if (!x.ans) owing++; });
+      tally.textContent = plural(set.slots.length, "question", "questions")
+        + (last > first ? " · " + first + "–" + last : " · " + first)
+        + (owing ? " · " + owing + " unanswered" : "");
+      tally.className = "tally" + (owing ? " owing" : " done");
+    }
+  }
+
   function runTidy() {
     var box = quizBox();
     var raw = String(box.value || "");
@@ -4568,6 +4636,7 @@
       return;
     }
     box.value = said;
+    drawQuizPreview();
     var owing = 0;
     set.slots.forEach(function (x) { if (!x.ans) owing++; });
     /* Every one of them is owing, every time: a page showing its questions is
@@ -4611,6 +4680,7 @@
     var row = document.getElementById("quiz-to-sheet-row");
     if (row) row.hidden = !canWriteSheet();
     quizMsg("", "");
+    drawQuizPreview();
     dlg.showModal();
     (existing ? quizBox() : sel).focus();
   }
@@ -5188,9 +5258,9 @@
     return w;
   }
 
-  function quizBody(r) {
+  function quizBody(r, text) {
     var box = el("div", "quiz");
-    var set = parseQuiz(r && r.quiz, quizMarks(r));
+    var set = parseQuiz(text != null ? text : (r && r.quiz), quizMarks(r));
     if (!set.slots.length && !set.tasks.length) {
       box.appendChild(el("p", "none", "No questions for this passage yet."));
       return box;
