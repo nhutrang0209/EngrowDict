@@ -294,6 +294,17 @@ function doPost(e) {
       var pkey = pp.getProperty(PROP_AI);
       return out({ ok: true, pong: true,
                    script: ScriptApp.getScriptId(),
+                   /* What this copy of the script knows how to be asked. The
+                      script in a sheet is a copy taken by hand and deployed
+                      by hand, so it is older than the page whenever the page
+                      has learnt something new — and the page cannot tell
+                      until it asks for the new thing and is refused. Saying
+                      so here turns that into something the page can check
+                      before anybody has typed anything.
+
+                      An older copy answers without this field at all, which
+                      is the answer: it can do none of them. */
+                   can: ['questions'],
                    ai: pkey ? aiName(pkey) : '',
                    aiModel: pkey ? (pp.getProperty(PROP_AI_MODEL) || aiDefaultModel(pkey)) : '' });
     }

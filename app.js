@@ -4698,6 +4698,32 @@
     quizMsg(foundSaid(set), "warn");
   }
 
+  /* Whether the script this link runs knows how to file questions, asked when
+     the form opens rather than found out by a save that fails.
+
+     The script in a sheet is a copy taken by hand and deployed by hand, so it
+     is older than this page whenever this page has learnt something new. The
+     page cannot tell from here — it can only ask for the new thing and be
+     refused — which is a refusal arriving after fourteen questions have been
+     typed. The ping says what the copy knows how to be asked; one that knows
+     nothing about it answers without the field at all, which is the answer. */
+  function askCanFile() {
+    var row = document.getElementById("quiz-to-sheet-row");
+    if (!canWriteSheet() || !row) return;
+    var tick = document.getElementById("quiz-to-sheet");
+    callSheet({ action: "ping" }).then(function (res) {
+      var can = res && res.can && res.can.indexOf("questions") > -1;
+      if (can || !document.getElementById("quiz-dlg").open) return;
+      /* Unticked rather than merely warned about: left ticked it is a save
+         that fails, and the reader has to work out that unticking it is what
+         gets their work kept. */
+      if (tick) tick.checked = false;
+      quizMsg("The sheet's Apps Script is older than this page and cannot file "
+        + "questions yet — paste in the latest sheet-sync.gs and deploy a new "
+        + "version. Until then these are kept on this device.", "warn");
+    }, function () { /* the save will say so, with the reason */ });
+  }
+
   function quizMsg(text, tone) {
     var msg = document.getElementById("quiz-msg");
     if (!msg) return;
@@ -4732,6 +4758,7 @@
     if (row) row.hidden = !canWriteSheet();
     quizMsg("", "");
     drawQuizPreview();
+    askCanFile();
     dlg.showModal();
     (existing ? quizBox() : sel).focus();
   }
@@ -8945,7 +8972,12 @@
       callSheet({ action: "ping" }).then(function (res) {
         /* The one thing about the sheet that cannot be seen from here is
            whether a key for the Vietnamese was ever put in, so the ping says. */
-        setMsg("Connected. " + (res.ai
+        var old = !(res.can && res.can.indexOf("questions") > -1);
+        setMsg((old
+          ? "Connected, but this script is older than the page: it cannot file "
+            + "questions yet. Paste in the latest sheet-sync.gs and deploy a "
+            + "new version. "
+          : "Connected. ") + (res.ai
           ? "Auto Fill asks " + res.ai + " for the Vietnamese"
             + (res.aiModel ? " (" + res.aiModel + ")" : "") + "."
           : "No key for the Vietnamese column is set in the script this link "

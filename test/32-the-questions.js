@@ -723,7 +723,53 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
      && !!JSON.parse(dark.store['engrowdict:quizzes:v1'] || '{}')[base.readings[0].title],
      dark.doc.getElementById('banner').textContent.slice(0, 50));
 
+  /* --- asked before anything is typed, not found out by a failed save -----
+
+     The script in a sheet is a copy taken by hand and deployed by hand, so it
+     is older than the page whenever the page has learnt something new. The
+     page cannot tell from here; it can only ask for the new thing and be
+     refused, and that refusal used to arrive after fourteen questions had
+     been typed. */
+  function pings(reply) {
+    const g = mk(null, unlockedStore(CFG));
+    g.window.fetch = (url, init) => {
+      const body = JSON.parse((init && init.body) || '{}');
+      return Promise.resolve({
+        ok: true, status: 200,
+        json: () => Promise.resolve(body.action === 'ping' ? reply : { ok: true }),
+      });
+    };
+    return g;
+  }
+
+  const stale = pings({ ok: true, pong: true, script: 'x', ai: '' });
+  await wait(900);
+  click(stale.window, tabQ(stale));
+  await wait(50);
+  click(stale.window, stale.doc.getElementById('add-word'));
+  await wait(120);
+  ok('a script that cannot file questions says so as the form opens',
+     /older than this page/.test(stale.doc.getElementById('quiz-msg').textContent),
+     stale.doc.getElementById('quiz-msg').textContent.slice(0, 60));
+  ok('  and the tick comes off, so the save keeps the work instead of failing',
+     stale.doc.getElementById('quiz-to-sheet').checked === false, 'unticked');
+
+  const fresh = pings({ ok: true, pong: true, script: 'x', can: ['questions'], ai: '' });
+  await wait(900);
+  click(fresh.window, tabQ(fresh));
+  await wait(50);
+  click(fresh.window, fresh.doc.getElementById('add-word'));
+  await wait(120);
+  ok('a script that can file them says nothing and leaves the tick alone',
+     fresh.doc.getElementById('quiz-msg').textContent === ''
+     && fresh.doc.getElementById('quiz-to-sheet').checked === true,
+     fresh.doc.getElementById('quiz-msg').textContent || 'silent');
+
+  ok('and the script answers the ping with what it knows how to be asked',
+     /can: \['questions'\]/.test(read('sheet-sync.gs')),
+     'the ping carries it');
+
   done(a.errs.concat(b.errs, c.errs, wide.errs, tight.errs, none.errs,
                      w.errs, back.errs, late.errs, t.errs, d2.errs,
-                     old88.errs, down.errs, dark.errs));
+                     old88.errs, down.errs, dark.errs, stale.errs, fresh.errs));
 })();

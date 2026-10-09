@@ -237,6 +237,7 @@ function page(store, posts, reply) {
   ok('  and the ping now says a key is set, still without sending it',
      JSON.stringify(call({ key: CFG.key, action: 'ping' })) ===
      JSON.stringify({ ok: true, pong: true, script: 'script-id-under-test',
+                      can: ['questions'],
                       ai: 'Gemini', aiModel: 'gemini-3.5-flash' }),
      JSON.stringify(call({ key: CFG.key, action: 'ping' })));
   ok('  a key with a space in it, or a short one, is refused',
