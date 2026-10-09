@@ -4218,6 +4218,7 @@
     ["? tfng", "True / False / Not given", "Each line below is a statement"],
     ["? ynng", "Yes / No / Not given", "Each line below is a claim"],
     ["? choice", "Multiple choice", "A question, then its answers as - lines"],
+    ["? tfng 27", "Starts at…", "The number this set's first question takes"],
     ["? notes", "Note completion", "Notes with ___{} blanks typed into"],
     ["? summary", "Summary completion", "A summary with ___{} blanks in it"],
     ["? match", "Matching", "Answered with the passage's own A, B, C"],
@@ -4262,8 +4263,10 @@
     box.setAttribute("aria-label", "The questions");
     f.appendChild(box);
     f.appendChild(el("p", "hint",
-      "One task to a ? line. Numbers are not written: they are the order the "
-      + "blanks come in, so nothing can fall out of step."));
+      "One task to a ? line. Numbers are not written against the questions: "
+      + "they are the order the blanks come in, so nothing can fall out of "
+      + "step. A set that does not open at 1 says so once — ? choice 27 — and "
+      + "the rest follow on."));
     body.appendChild(f);
     dlg.appendChild(body);
 
@@ -4762,6 +4765,12 @@
     var set = { tasks: [], slots: [] };
     if (!text) return set;
     var task = null;
+    /* The number the next blank takes. One in a paper is rarely question one:
+       a reading test numbers 1 to 40 across three passages, so the third one
+       opens at 27. The ? line may say where to start — `? choice 27` — and
+       everything after it follows on, through the other tasks and the other
+       kinds, so the number is written once per set and never again. */
+    var nextN = 1;
     /* A paper puts the heading over the task — "Questions 1-7", then what to
        do with them — so the heading is written before the line that says what
        kind they are. It is held until that line arrives rather than opening a
@@ -4769,7 +4778,8 @@
        and put the heading in the wrong one. */
     var held = [];
 
-    function open(kind) {
+    function open(kind, from) {
+      if (from > 0) nextN = from;
       task = { kind: QKINDS[kind] ? kind : "notes", tell: "", bank: [], rows: [] };
       while (held.length) {
         var bit = held.shift();
@@ -4792,7 +4802,7 @@
     }
 
     function slot(ans) {
-      var s = { n: set.slots.length + 1, ans: ansOf(ans, task.kind), pick: pickFor(task) };
+      var s = { n: nextN++, ans: ansOf(ans, task.kind), pick: pickFor(task) };
       set.slots.push(s);
       return s;
     }
@@ -4823,7 +4833,7 @@
       for (var j = i + 1; j < lines.length; j++) {
         var one = lines[j].trim();
         if (!one) continue;
-        if (one.charAt(0) === "?") return true;
+        if (/^\?\s*[A-Za-z]/.test(one)) return true;
         if (one.charAt(0) === "#" || one.charAt(0) === "!") continue;
         return false;
       }
@@ -4835,7 +4845,10 @@
       if (!line.trim()) return;
       var m;
 
-      if ((m = /^\?\s*([A-Za-z]+)\s*$/.exec(line))) { open(m[1].toLowerCase()); return; }
+      if ((m = /^\?\s*([A-Za-z]+)(?:\s+(\d+))?\s*$/.exec(line))) {
+        open(m[1].toLowerCase(), Number(m[2] || 0));
+        return;
+      }
 
       var ahead = headsNext(i);
       if ((m = /^!\s*(.*)$/.exec(line))) {
@@ -4870,7 +4883,12 @@
          is what a multiple choice is — and anything else is a new question. */
       var last = task.rows[task.rows.length - 1];
       if (b.kind === "li" && last && last.kind === "q") {
-        last.opts.push(b.text);
+        /* Pasted off a paper an option carries its own "A." in front of it.
+           The letters here are the options there turn out to be, counted
+           down the list, so a letter written into the words would be printed
+           twice — and one pasted out of order would disagree with where it
+           actually sits. It comes off. */
+        last.opts.push(b.text.replace(/^[A-Za-z][.)]\s+/, ""));
         /* The letters are the options there turn out to be, so the set is
            settled again each time one more arrives. */
         if (last.slot) {

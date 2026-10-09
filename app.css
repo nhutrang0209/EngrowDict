@@ -1746,6 +1746,10 @@ a.btn[hidden] { display: none; }
   width: auto; padding: 0 9px; height: 24px; border-radius: var(--r-s);
   font-size: 11px; color: var(--muted);
 }
+/* The mark button is the dot a reader leaves in a passage, and it draws that
+   dot in front of itself. These are words, not that button, and wore the dot
+   because they borrowed its chrome. */
+.markbtn.mb-w::before { content: none; }
 .markbtn.mb-w:hover { color: var(--accent-hi); }
 #quiz-for {
   border: 1px solid var(--rule); border-radius: var(--r-s);

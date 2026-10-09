@@ -369,5 +369,53 @@ const nums = g => [...g.doc.querySelectorAll('.quiz .qnum, .quiz .gap-n')]
      off.ok && sandbox.__buildData().readings.filter(r => r.quiz).length === 0,
      JSON.stringify(off));
 
-  done(a.errs.concat(b.errs, c.errs, wide.errs, tight.errs, none.errs, w.errs, back.errs));
+  /* --- a set that does not open at one -------------------------------------
+
+     A reading test numbers 1 to 40 across three passages, so the questions on
+     the third one open at 27. The ? line says so once and the rest follow on,
+     through the other tasks and the other kinds — because the alternative is
+     writing forty numbers by hand and keeping them in step with every edit. */
+  const LATE = [
+    '! Choose the correct letter, A, B, C or D.',
+    '? choice 27',
+    "What is the writer's main point in the opening paragraph? = C",
+    '- A. Wisdom seems to be a quality found only in humans.',
+    '- B. A commonly held belief about wisdom could be mistaken.',
+    '- C. Notions of wisdom may vary according to the society we live in.',
+    '- D. Much about the true nature of wisdom remains unknown.',
+    'What does the researcher suggest about wise decisions? = A',
+    '- It differs considerably between individuals.',
+    '- Previous studies into it relied on flawed evidence.',
+    '',
+    '! Complete the notes below.',
+    '? notes',
+    '- the degree of wisdom shown by an ___{individual}',
+  ].join('\n');
+
+  const late = mk(LATE);
+  await wait(900);
+  click(late.window, tabQ(late));
+  await wait(50);
+  click(late.window, late.doc.querySelector('.hit'));
+  await wait(80);
+  ok('a set told where to start opens there, and carries on into the next task',
+     nums(late).join(' ') === '27 28 29', nums(late).join(' '));
+
+  ok('  an option pasted off a paper with its own letter is not lettered twice',
+     [...late.doc.querySelectorAll('.quiz .opt')].slice(0, 1)
+       .map(b => b.textContent).join('') === 'AWisdom seems to be a quality found only in humans.',
+     [...late.doc.querySelectorAll('.quiz .opt')][0].textContent);
+
+  ok('  and a question whose options were written without letters gets them all the same',
+     [...late.doc.querySelectorAll('.quiz .qrow')][1]
+       .querySelectorAll('.opt-l').length === 2,
+     [...[...late.doc.querySelectorAll('.quiz .qrow')][1].querySelectorAll('.opt-l')]
+       .map(n => n.textContent).join(''));
+
+  ok('the buttons in the form are words, not the reading mark they borrowed',
+     /\.markbtn\.mb-w::before \{ content: none/.test(read('app.css')),
+     'no dot on them');
+
+  done(a.errs.concat(b.errs, c.errs, wide.errs, tight.errs, none.errs,
+                     w.errs, back.errs, late.errs));
 })();
