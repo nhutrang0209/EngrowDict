@@ -1747,6 +1747,9 @@ a.btn[hidden] { display: none; }
 }
 .quiz-edit:focus { outline: none; border-color: var(--accent); box-shadow: var(--ring); }
 .quizbar { flex-wrap: wrap; }
+/* Over the box and to the right of what the box is called: the one button
+   here that acts on what is already in it rather than adding to it. */
+.field > .tidybtn { float: right; margin-top: -2px; padding: 4px 10px; font-size: 12px; }
 .markbtn.mb-w {
   width: auto; padding: 0 9px; height: 24px; border-radius: var(--r-s);
   font-size: 11px; color: var(--muted);
@@ -6092,6 +6095,206 @@ a.btn[hidden] { display: none; }
     [" = ", "Answer", "What this line's blank wants"]
   ];
 
+
+  /* ---- a paste, tidied ----------------------------------------------------
+
+     Questions are copied off a page that already set them out, and what comes
+     across is the setting-out without the page: a number on a line of its own,
+     the options under it each on theirs, "TRUE FALSE NOT GIVEN" printed as
+     three lines because they were three buttons, a (31) where a box was, and
+     the site's own "! Report" caught in the middle of it.
+
+     All of which is regular. The shape is still in the text — it is just in
+     the shape the other page used — so this reads it back out rather than
+     asking anybody to retype it or asking a model to guess at it. A model
+     could not supply the one thing missing anyway: the answers are not in what
+     was copied, because the page was not showing them.
+
+     What it cannot work out it leaves alone and says so. The box is still the
+     box: nothing is saved from here, it is written back for the reader to look
+     at, and the answers are theirs to fill in. */
+
+  /* The line a paper opens a task with, and what that line means it is. The
+     claims and the views are looked for before the information, because
+     "agree with the claims of the writer" also contains the other one. */
+  var TELLS = [
+    [/do the following statements agree with the (claims|views)/i, "ynng"],
+    [/do the following statements agree with the information/i, "tfng"],
+    [/^(true|false|not given)\b.*\bif\b/i, "tfng"],
+    [/choose the correct letter/i, "choice"],
+    [/choose (one|two|three|four) letters/i, "choice"],
+    [/complete the summary/i, "summary"],
+    [/complete the (notes|table|flow-?chart|sentences|diagram)/i, "notes"],
+    [/which (paragraph|section)\b/i, "match"],
+    [/^(reading passage|the passage) has \w+ (paragraphs|sections)/i, "match"],
+    [/answer the questions below/i, "short"],
+    [/^choose (one|two|no more than)\b/i, "notes"]
+  ];
+
+  /* What the other page left behind that means nothing here: its own report
+     link, the row of letters standing in for a box, the second line of an
+     instruction that only says again how to write the answer down. */
+  var QNOISE = /^(!|report|[A-Z]\s*[-–]\s*[A-Z]|write (the|your) (correct )?(letter|answer)s?\b.*|questions?\s+\d+\s*[-–]\s*\d+)$/i;
+
+  /* "27." is the number over a question. "(31)" is a box in the middle of a
+     sentence that the paste broke onto a line of its own. The brackets are
+     the whole of the difference, and getting it wrong turns a summary into
+     five questions with no words in them. */
+  var QNUM = /^(\d{1,2})\s*[.):]?$/;                // 27.  27)  27
+  var QGAP = /^\((\d{1,2})\)$/;                     // (31)
+  var QOPT = /^\(?([A-Za-z])\)?[.)]\s+(.+)$/;       // A. …   B) …
+  var QJUDGE = /^(true|false|not given|yes|no)$/i;  // the buttons, printed
+
+  function tidyQuiz(raw) {
+    var lines = String(raw || "").split(/\r?\n/);
+    var out = [], kind = "", opened = false, firstN = 0;
+    var said = [];            // the question being gathered, a line at a time
+    var body = [];            // a summary being gathered, likewise
+    var bank = 0;             // how many words the open task's box has taken
+    var seenBlank = false;    // whether this task's body has started
+
+    function flushSaid() {
+      if (!said.length) return;
+      /* The answer is not in what was copied — the page was not showing it —
+         so the place for it is left open rather than guessed at. */
+      out.push(mend(said.join(" ")) + " = ");
+      said = [];
+    }
+
+    function flushBody() {
+      if (!body.length) return;
+      out.push(mend(body.join(" ")));
+      body = [];
+    }
+
+    /* A sentence put back together out of the lines a page broke it into.
+       The break fell where the box was, so the space that stood in for the
+       box is now standing in front of the full stop that followed it. */
+    function mend(text) {
+      return text.replace(/\s+/g, " ").replace(/\s+([.,;:!?])/g, "$1").trim();
+    }
+
+    function openTask(k) {
+      flushSaid();
+      flushBody();
+      kind = k;
+      opened = false;
+      bank = 0;
+      seenBlank = false;
+    }
+
+    /* Held back until the first number is known, so the set can be told where
+       it starts in the one place that needs telling. */
+    function ensureOpen() {
+      if (opened || !kind) return;
+      /* Without the number: the first one read is the one that matters and it
+         may not have been read yet. It is written into the first ? line at
+         the end, and the tasks after it follow on by themselves. */
+      out.push("? " + kind);
+      opened = true;
+    }
+
+    function blanks(text) {
+      return text.replace(/\((\d{1,2})\)/g, function (all, n) {
+        if (!firstN) firstN = Number(n);
+        return "___{}";
+      });
+    }
+
+    lines.forEach(function (raw2) {
+      var line = raw2.replace(/\s+/g, " ").trim();
+      if (!line || QNOISE.test(line)) return;
+
+      /* An instruction opens a task and says what kind it is. */
+      var told = null;
+      for (var t = 0; t < TELLS.length; t++) {
+        if (TELLS[t][0].test(line)) { told = TELLS[t]; break; }
+      }
+      if (told) {
+        openTask(told[1]);
+        out.push(out.length ? "" : null);
+        out.push("! " + line);
+        return;
+      }
+
+      /* The three words a paper prints under a statement were three buttons.
+         The task already says which three they are. */
+      if (QJUDGE.test(line) && (kind === "tfng" || kind === "ynng")) return;
+
+      var m;
+      if ((m = QGAP.exec(line))) {
+        if (!firstN) firstN = Number(m[1]);
+        seenBlank = true;
+        ensureOpen();
+        if (kind === "summary") body.push("___{}");
+        else out.push("___{}");
+        return;
+      }
+      if ((m = QNUM.exec(line))) {
+        if (!firstN) firstN = Number(m[1]);
+        ensureOpen();
+        flushSaid();
+        return;
+      }
+
+      if ((m = QOPT.exec(line))) {
+        /* The same shape twice over: under a question it is one of its
+           answers, and over a summary it is one of the words the summary
+           picks from. Which it is, is which kind of task is open. */
+        if (kind === "summary" || kind === "match" || kind === "notes") {
+          if (!seenBlank) {
+            ensureOpen();
+            out.push("* " + m[1].toUpperCase() + " " + m[2]);
+            bank++;
+            return;
+          }
+        } else {
+          ensureOpen();
+          flushSaid();
+          out.push("- " + m[1].toUpperCase() + ". " + m[2]);
+          return;
+        }
+      }
+
+      var hasBlank = /\(\d{1,2}\)/.test(line);
+      if (hasBlank) seenBlank = true;
+
+      if (kind === "summary" || kind === "notes") {
+        if (!seenBlank && !bank && body.length === 0 && line.length < 70
+            && !/[.:;,]$/.test(line)) {
+          ensureOpen();
+          out.push("# " + line);           // the title over a set of notes
+          return;
+        }
+        ensureOpen();
+        if (kind === "notes") { out.push("- " + blanks(line)); seenBlank = true; }
+        else body.push(blanks(line));
+        return;
+      }
+
+      /* Anything else is the words of a question, which a paste often breaks
+         over several lines because the page it came off was narrow. */
+      if (hasBlank) { ensureOpen(); out.push(blanks(line)); return; }
+      ensureOpen();
+      said.push(line);
+    });
+
+    flushSaid();
+    flushBody();
+
+    /* The number is known only once the first one has been read, and by then
+       the ? line is already written. */
+    if (firstN > 1) {
+      for (var i = 0; i < out.length; i++) {
+        if (out[i] && out[i].charAt(0) === "?") {
+          out[i] = out[i].replace(/^\?\s*(\w+).*$/, "? $1 " + firstN);
+          break;
+        }
+      }
+    }
+    return out.filter(function (x) { return x !== null; }).join("\n").trim() + "\n";
+  }
+
   var editingQuiz = null;        // the passage whose questions are being written
 
   function quizBox() { return document.getElementById("quiz-body"); }
@@ -6118,7 +6321,19 @@ a.btn[hidden] { display: none; }
     body.appendChild(pick);
 
     var f = el("div", "field");
-    f.appendChild(el("span", null, "The questions"));
+    var lab = el("span", null, "The questions");
+    f.appendChild(lab);
+    /* Copied off a page that already set them out, what comes across is that
+       page's setting-out. This reads it back into marks rather than asking
+       anybody to retype it — and writes the answer back into the box, not
+       into the sheet, because what it could not work out is for the reader to
+       put right before anything is saved. */
+    var tidy = el("button", "btn tidybtn", "Tidy up a paste");
+    tidy.type = "button";
+    tidy.id = "quiz-tidy";
+    tidy.title = "Turn questions copied off a page into the marks below";
+    tidy.addEventListener("click", runTidy);
+    f.appendChild(tidy);
     f.appendChild(quizBits());
     var box = el("textarea", "mono quiz-edit");
     box.id = "quiz-body";
@@ -6203,6 +6418,31 @@ a.btn[hidden] { display: none; }
     var caret = at + put.length - (text === "___{}" ? 1 : 0);
     box.focus();
     box.setSelectionRange(caret, caret);
+  }
+
+  function runTidy() {
+    var box = quizBox();
+    var raw = String(box.value || "");
+    if (!raw.trim()) { quizMsg("Paste the questions in first.", ""); return; }
+    if (/^\s*\?\s*[A-Za-z]/m.test(raw)) {
+      quizMsg("That is already written in marks — there is nothing to tidy.", "");
+      return;
+    }
+    var said = tidyQuiz(raw);
+    var set = parseQuiz(said, []);
+    if (!set.slots.length) {
+      quizMsg("Nothing in that looked like questions. Leaving it as it is.", "");
+      return;
+    }
+    box.value = said;
+    var owing = 0;
+    set.slots.forEach(function (x) { if (!x.ans) owing++; });
+    /* Every one of them is owing, every time: a page showing its questions is
+       not showing its answers. Saying the number is how the reader knows what
+       is left rather than finding out when they come to do it. */
+    quizMsg(plural(set.slots.length, "question", "questions") + " found"
+      + (owing ? " — " + owing + " still want an answer after the ="
+        : ", all answered"), owing ? "warn" : "");
   }
 
   function quizMsg(text, tone) {
@@ -6623,7 +6863,7 @@ a.btn[hidden] { display: none; }
   var BLANK_RE = /___\{([^}]*)\}|___/g;
   /* The answer at the end of a question line. The last one on the line, so a
      statement that happens to contain " = " keeps it. */
-  var TAIL_RE = /\s=\s([^=]*)$/;
+  var TAIL_RE = /\s=\s*([^=]*)$/;
 
   function parseQuiz(text, paraMarks) {
     var set = { tasks: [], slots: [] };

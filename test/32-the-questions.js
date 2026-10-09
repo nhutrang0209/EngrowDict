@@ -416,6 +416,119 @@ const nums = g => [...g.doc.querySelectorAll('.quiz .qnum, .quiz .gap-n')]
      /\.markbtn\.mb-w::before \{ content: none/.test(read('app.css')),
      'no dot on them');
 
+  /* --- a paste, tidied ------------------------------------------------------
+
+     Copied off a page that already set the questions out, what comes across
+     is that page's setting-out: the number on a line of its own, the options
+     under it on theirs, TRUE FALSE NOT GIVEN printed as three lines because
+     they were three buttons, a (31) where a box was, and the site's own
+     "! Report" caught in the middle. All of it regular, so none of it has to
+     be retyped — and none of it guessed at either. */
+  const PASTE = [
+    'Choose the correct letter, A, B, C or D.',
+    '',
+    '27.',
+    "What is the writer's main point in the opening paragraph?",
+    '',
+    'A. Wisdom seems to be a quality found only in humans.',
+    '',
+    'B. A commonly held belief about wisdom could be mistaken.',
+    '28.',
+    'What does the researcher suggest about wise decisions?',
+    'A. It differs considerably between individuals.',
+    'B. Previous studies into it relied on flawed evidence.',
+    '',
+    '!',
+    'Report',
+    'Complete the summary using the list of words, A-J, below.',
+    '',
+    'Key features of wise reasoning',
+    'Write the correct letter (A–J) in the boxes below.',
+    '',
+    'A. opinions',
+    'B. confidence',
+    'It is important to possess a certain amount of ',
+    '(29)',
+    'A-J',
+    ' about the limits of our own knowledge.',
+    '',
+    '!',
+    'Report',
+    'Do the following statements agree with the information given in the Reading Passage?',
+    '',
+    '30.',
+    'Students were free to select which viewpoint they would adopt.',
+    '',
+    'TRUE',
+    'FALSE',
+    'NOT GIVEN',
+    '31.',
+    'The couples knew what the research was investigating.',
+    '',
+    'TRUE',
+    'FALSE',
+    'NOT GIVEN',
+  ].join('\n');
+
+  const t = mk(null, unlockedStore());
+  await wait(900);
+  click(t.window, tabQ(t));
+  await wait(50);
+  click(t.window, t.doc.getElementById('add-word'));
+  await wait(40);
+  const tbox = t.doc.getElementById('quiz-body');
+  const tmsg = () => t.doc.getElementById('quiz-msg').textContent;
+
+  click(t.window, t.doc.getElementById('quiz-tidy'));
+  await wait(30);
+  ok('tidying an empty box asks for something to tidy',
+     /Paste the questions/.test(tmsg()), tmsg());
+
+  tbox.value = PASTE;
+  click(t.window, t.doc.getElementById('quiz-tidy'));
+  await wait(40);
+  const said = tbox.value;
+
+  ok('a paste comes back as marks, with the first number read off it',
+     /^! Choose the correct letter/m.test(said) && /^\? choice 27$/m.test(said),
+     said.split('\n').slice(0, 2).join(' / '));
+  ok('  and the number is written once, not onto every task',
+     (said.match(/^\? \w+ \d+$/gm) || []).length === 1
+     && /^\? summary$/m.test(said) && /^\? tfng$/m.test(said),
+     (said.match(/^\?.*$/gm) || []).join(' | '));
+  ok('  the options keeping the letters the page gave them',
+     /^- A\. Wisdom seems/m.test(said), (said.match(/^- .*/m) || [])[0]);
+  ok('  the box of words read as a box and not as four more options',
+     /^\* A opinions$/m.test(said) && /^# Key features/m.test(said),
+     (said.match(/^\* .*/gm) || []).join(' | '));
+  ok('  a sentence broken around its box put back together, box and all',
+     /amount of ___\{\} about the limits of our own knowledge\./.test(said),
+     (said.match(/It is important.*/) || [])[0]);
+  ok('  and the three words that were three buttons left out of the statements',
+     !/^(TRUE|FALSE|NOT GIVEN)$/m.test(said) && !/^(!|Report)$/m.test(said),
+     'no leftovers');
+
+  ok('it says how many it found and how many still want an answer',
+     /5 questions found/.test(tmsg()) && /5 still want an answer/.test(tmsg()),
+     tmsg());
+
+  click(t.window, t.doc.getElementById('quiz-tidy'));
+  await wait(30);
+  ok('  and tidying what is already tidy says so rather than mangling it',
+     tbox.value === said && /already written in marks/.test(tmsg()), tmsg());
+
+  /* The answers are the one thing a paste cannot carry: the page was showing
+     its questions, not its answers. So they are typed in, and then it saves. */
+  tbox.value = said.replace('opening paragraph? = ', 'opening paragraph? = C');
+  t.doc.getElementById('quiz-for').value = 'r0';
+  click(t.window, t.doc.getElementById('quiz-save'));
+  await wait(80);
+  ok('what comes out of it saves, and numbers itself from where the page did',
+     nums(t).slice(0, 3).join(' ') === '27 28 29', nums(t).join(' '));
+  ok('  with the answer that was typed in standing against its question',
+     JSON.parse(t.store['engrowdict:quizzes:v1'])[base.readings[0].title]
+       .includes('opening paragraph? = C'), 'C');
+
   done(a.errs.concat(b.errs, c.errs, wide.errs, tight.errs, none.errs,
-                     w.errs, back.errs, late.errs));
+                     w.errs, back.errs, late.errs, t.errs));
 })();

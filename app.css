@@ -1742,6 +1742,9 @@ a.btn[hidden] { display: none; }
 }
 .quiz-edit:focus { outline: none; border-color: var(--accent); box-shadow: var(--ring); }
 .quizbar { flex-wrap: wrap; }
+/* Over the box and to the right of what the box is called: the one button
+   here that acts on what is already in it rather than adding to it. */
+.field > .tidybtn { float: right; margin-top: -2px; padding: 4px 10px; font-size: 12px; }
 .markbtn.mb-w {
   width: auto; padding: 0 9px; height: 24px; border-radius: var(--r-s);
   font-size: 11px; color: var(--muted);
