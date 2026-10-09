@@ -1769,9 +1769,18 @@ a.btn[hidden] { display: none; }
 .quiz-prev .quiz { padding: 0; }
 .quiz-prev .none { padding: 14px 0; font-size: 12.5px; }
 .quiz-prev .task:first-child { padding-top: 14px; }
+/* The two of them scroll inside themselves, and the form does not scroll at
+   all. A preview below the fold of a dialog is a preview nobody finds: the
+   whole of its use is being looked at without being looked for. */
+#quiz-dlg .dlg-body { max-height: 76vh; overflow: hidden; }
+.quiz-split .quiz-edit { height: 40vh; min-height: 180px; max-height: 46vh; }
 @media (max-width: 900px) {
-  .quiz-split { grid-template-columns: minmax(0, 1fr); }
-  .quiz-prev { max-height: 34vh; }
+  .quiz-split { grid-template-columns: minmax(0, 1fr); gap: 13px; }
+  /* Stacked, they share the height between them rather than one of them
+     taking it and the other waiting under the edge. */
+  .quiz-split .quiz-edit { height: 25vh; min-height: 120px; }
+  .quiz-prev { max-height: 25vh; }
+  .quiz-split .hint { display: none; }
 }
 .markbtn.mb-w {
   width: auto; padding: 0 9px; height: 24px; border-radius: var(--r-s);

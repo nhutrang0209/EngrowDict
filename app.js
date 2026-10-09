@@ -4475,7 +4475,7 @@
     f.appendChild(quizBits());
     var box = el("textarea", "mono quiz-edit");
     box.id = "quiz-body";
-    box.rows = 16;
+    box.rows = 12;          // the height is the stylesheet's; this is a floor
     box.spellcheck = false;
     box.setAttribute("aria-label", "The questions");
     box.addEventListener("input", queuePreview);
