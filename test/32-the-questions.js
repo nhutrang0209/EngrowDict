@@ -748,11 +748,15 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
   await wait(50);
   click(stale.window, stale.doc.getElementById('add-word'));
   await wait(120);
-  ok('a script that cannot file questions says so as the form opens',
-     /older than this page/.test(stale.doc.getElementById('quiz-msg').textContent),
+  ok('a script that did not say it can file questions is said so, as the form opens',
+     /may be older than the page/.test(stale.doc.getElementById('quiz-msg').textContent),
      stale.doc.getElementById('quiz-msg').textContent.slice(0, 60));
-  ok('  and the tick comes off, so the save keeps the work instead of failing',
-     stale.doc.getElementById('quiz-to-sheet').checked === false, 'unticked');
+  /* A missing field is weak evidence — a script one line older than the field
+     can still file questions perfectly well — and weak evidence does not get
+     to stop the save. It need not: a save that fails says why and keeps the
+     work here regardless. */
+  ok('  but the tick stays on, because saying so might be wrong',
+     stale.doc.getElementById('quiz-to-sheet').checked === true, 'still ticked');
 
   const fresh = pings({ ok: true, pong: true, script: 'x', can: ['questions'], ai: '' });
   await wait(900);

@@ -6620,17 +6620,21 @@ a.btn[hidden] { display: none; }
   function askCanFile() {
     var row = document.getElementById("quiz-to-sheet-row");
     if (!canWriteSheet() || !row) return;
-    var tick = document.getElementById("quiz-to-sheet");
     callSheet({ action: "ping" }).then(function (res) {
       var can = res && res.can && res.can.indexOf("questions") > -1;
       if (can || !document.getElementById("quiz-dlg").open) return;
-      /* Unticked rather than merely warned about: left ticked it is a save
-         that fails, and the reader has to work out that unticking it is what
-         gets their work kept. */
-      if (tick) tick.checked = false;
-      quizMsg("The sheet's Apps Script is older than this page and cannot file "
-        + "questions yet — paste in the latest sheet-sync.gs and deploy a new "
-        + "version. Until then these are kept on this device.", "warn");
+      /* Said, and nothing more. The first version of this took the tick off
+         as well, to spare the reader a save that fails — and then a script
+         that could file questions perfectly well, but was one line older than
+         the field that says so, was stopped from filing any. A missing field
+         is weak evidence, and weak evidence should not be allowed to act.
+
+         It need not act, either: a save that fails now says why and keeps the
+         work on this device regardless. Trying and being told beats being
+         told without trying, when the telling might be wrong. */
+      quizMsg("This sheet's Apps Script may be older than the page: it did not "
+        + "say it can file questions. Saving will try anyway, and will keep "
+        + "them here if it cannot.", "warn");
     }, function () { /* the save will say so, with the reason */ });
   }
 
