@@ -723,6 +723,77 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
      && !!JSON.parse(dark.store['engrowdict:quizzes:v1'] || '{}')[base.readings[0].title],
      dark.doc.getElementById('banner').textContent.slice(0, 50));
 
+  /* --- a page that words its instruction its own way ----------------------
+
+     "Do the following statements agree with the information given in the
+     Reading Passage?" and "Do the statements below agree with the information
+     provided in the Reading Passage?" are the same instruction. A recogniser
+     tied to the first read the second as a question, left the task unopened,
+     and then had nothing to tell it the three words under each statement were
+     buttons — so they were read as part of the statement.
+
+     The words are the surer sign. A page may word its instruction any way at
+     all; a statement to be judged is always followed by TRUE, FALSE and NOT
+     GIVEN, because those were the three things to press. */
+  const OTHERWORDS = [
+    'Do the statements below agree with the information provided in the Reading Passage?',
+    '',
+    '7.',
+    'The first claim is one the passage supports.',
+    '',
+    'TRUE',
+    'FALSE',
+    'NOT GIVEN',
+    '8.',
+    'The second claim is one the passage says nothing about.',
+    '',
+    'TRUE',
+    'FALSE',
+    'NOT GIVEN',
+    '',
+    'Answer the questions below, using NO MORE THAN TWO WORDS for each answer.',
+    '',
+    '9.',
+    'What was found at the site?',
+  ].join('\n');
+
+  const other = mk(null, unlockedStore());
+  await wait(900);
+  click(other.window, tabQ(other));
+  await wait(50);
+  click(other.window, other.doc.getElementById('add-word'));
+  await wait(40);
+  other.doc.getElementById('quiz-body').value = OTHERWORDS;
+  click(other.window, other.doc.getElementById('quiz-tidy'));
+  await wait(60);
+  const got = other.doc.getElementById('quiz-body').value;
+
+  ok('an instruction worded another way is still an instruction',
+     /^! Do the statements below agree/m.test(got),
+     got.split('\n')[0]);
+  ok('  and the three words under each statement say what the task is',
+     /^\? tfng 7$/m.test(got), (got.match(/^\?.*$/gm) || []).join(' | '));
+  ok('  so they are left out of the statements rather than read as part of them',
+     !/TRUE|FALSE|NOT GIVEN/.test(got)
+     && /^The first claim is one the passage supports\. = $/m.test(got),
+     (got.match(/^The first.*$/m) || [])[0]);
+  ok('  and the task after it is read as its own, numbered on from there',
+     /^\? short$/m.test(got) && /^What was found at the site\? =/m.test(got),
+     (got.match(/^\?.*$/gm) || []).join(' | '));
+
+  /* Where a page prints the three on the end of the statement instead of
+     under it, they are still not part of what is being judged. */
+  other.doc.getElementById('quiz-body').value =
+    'Some statement about the passage. TRUE FALSE NOT GIVEN\n'
+    + 'Another statement about it. TRUE FALSE NOT GIVEN';
+  click(other.window, other.doc.getElementById('quiz-tidy'));
+  await wait(60);
+  const inline = other.doc.getElementById('quiz-body').value;
+  ok('the same three printed on the end of a statement are taken off it too',
+     /^\? tfng$/m.test(inline)
+     && /^Some statement about the passage\. = $/m.test(inline),
+     inline.replace(/\n/g, ' | '));
+
   /* --- asked before anything is typed, not found out by a failed save -----
 
      The script in a sheet is a copy taken by hand and deployed by hand, so it
@@ -841,5 +912,5 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
   done(a.errs.concat(b.errs, c.errs, wide.errs, tight.errs, none.errs,
                      w.errs, back.errs, late.errs, t.errs, d2.errs,
                      old88.errs, down.errs, dark.errs, stale.errs, fresh.errs,
-                     band.errs));
+                     band.errs, other.errs));
 })();

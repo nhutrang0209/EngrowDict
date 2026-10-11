@@ -6209,8 +6209,13 @@ a.btn[hidden] { display: none; }
      claims and the views are looked for before the information, because
      "agree with the claims of the writer" also contains the other one. */
   var TELLS = [
-    [/do the following statements agree with the (claims|views)/i, "ynng"],
-    [/do the following statements agree with the information/i, "tfng"],
+    /* Loose on the wording, because every site words it its own way: "Do the
+       following statements agree with the information given in the Reading
+       Passage?" and "Do the statements below agree with the information
+       provided in the Reading Passage?" are the same instruction, and a
+       recogniser tied to one of them reads the other as a question. */
+    [/statements\b.*\bagree with the (claims|views|opinions)/i, "ynng"],
+    [/statements\b.*\bagree with the information/i, "tfng"],
     [/^(true|false|not given)\b.*\bif\b/i, "tfng"],
     [/choose the correct letter/i, "choice"],
     [/choose (one|two|three|four) letters/i, "choice"],
@@ -6234,11 +6239,34 @@ a.btn[hidden] { display: none; }
   var QNUM = /^(\d{1,2})\s*[.):]?$/;                // 27.  27)  27
   var QGAP = /^\((\d{1,2})\)$/;                     // (31)
   var QOPT = /^\(?([A-Za-z])\)?[.)]\s+(.+)$/;       // A. …   B) …
-  var QJUDGE = /^(true|false|not given|yes|no)$/i;  // the buttons, printed
+  /* The buttons, printed. One to a line where the page stacked them, or all
+     three on one where it did not.
+
+     These are worth more than the instruction above. A page may word its
+     instruction any way it likes, but a statement to be judged true or false
+     is always followed by the words TRUE, FALSE and NOT GIVEN, because they
+     were the three things to press. So where the instruction was not
+     recognised, these say what the task is — and where it was, they agree. */
+  var QJUDGE = /^(true|false|not given|yes|no)$/i;
+  var QJUDGE3 = /^(true\s+false|yes\s+no)\s+not\s*given$/i;
+  /* And the same three where a page printed them on the end of the statement
+     rather than under it. */
+  var QJUDGE_TAIL = /[\s.]+((?:true\s+false|yes\s+no)\s+not\s*given)\s*$/i;
 
   function tidyQuiz(raw) {
     var lines = String(raw || "").split(/\r?\n/);
     var out = [], kind = "", opened = false, firstN = 0;
+    /* Where this task's ? line sits in `out`. The kind is sometimes not known
+       until a line or two after the task has started — the words that say so
+       come under the first statement, not over it — so the line is written
+       where it belongs and put right when the answer arrives. */
+    var kindAt = -1;
+    /* Whether anything so far says these are questions at all. A paragraph of
+       prose dropped in the box is a paragraph of prose, and opening a task
+       over it would turn every sentence into a question with no answer — so
+       a task opens on evidence: a number against a line, a box to fill, a
+       lettered option, or an instruction that named the kind outright. */
+    var sawQ = false;
     var said = [];            // the question being gathered, a line at a time
     var body = [];            // a summary being gathered, likewise
     var bank = 0;             // how many words the open task's box has taken
@@ -6246,9 +6274,20 @@ a.btn[hidden] { display: none; }
 
     function flushSaid() {
       if (!said.length) return;
+      var text = mend(said.join(" "));
+      /* Some pages print the three buttons on the end of the statement rather
+         than under it, and a statement is not asking anybody whether it is
+         true, false or not given — it is the thing being judged. */
+      var tail = QJUDGE_TAIL.exec(text);
+      if (tail) {
+        text = text.slice(0, tail.index).replace(/[\s.]+$/, "") + ".";
+        if (kind !== "tfng" && kind !== "ynng") {
+          sayKind(/^yes/i.test(tail[1]) ? "ynng" : "tfng");
+        }
+      }
       /* The answer is not in what was copied — the page was not showing it —
          so the place for it is left open rather than guessed at. */
-      out.push(mend(said.join(" ")) + " = ");
+      out.push(text + " = ");
       said = [];
     }
 
@@ -6270,18 +6309,32 @@ a.btn[hidden] { display: none; }
       flushBody();
       kind = k;
       opened = false;
+      kindAt = -1;
       bank = 0;
       seenBlank = false;
+    }
+
+    /* What this task turns out to be, said late. */
+    function sayKind(k) {
+      kind = k;
+      if (opened && kindAt > -1) out[kindAt] = "? " + k;
     }
 
     /* Held back until the first number is known, so the set can be told where
        it starts in the one place that needs telling. */
     function ensureOpen() {
-      if (opened || !kind) return;
+      if (opened) return;
+      if (!kind && !sawQ) return;      // nothing yet says these are questions
       /* Without the number: the first one read is the one that matters and it
          may not have been read yet. It is written into the first ? line at
-         the end, and the tasks after it follow on by themselves. */
-      out.push("? " + kind);
+         the end, and the tasks after it follow on by themselves.
+
+         And with a kind even where none has been said yet. Numbered questions
+         with nothing under them to choose from are answered by typing, which
+         is what short means; if the three words turn up two lines later, the
+         line is put right then. */
+      out.push("? " + (kind || "short"));
+      kindAt = out.length - 1;
       opened = true;
     }
 
@@ -6308,14 +6361,24 @@ a.btn[hidden] { display: none; }
         return;
       }
 
-      /* The three words a paper prints under a statement were three buttons.
-         The task already says which three they are. */
-      if (QJUDGE.test(line) && (kind === "tfng" || kind === "ynng")) return;
+      /* The three words a paper prints under a statement were three buttons,
+         and the task says which three they are once it knows. Where it does
+         not, they are what tells it: an instruction can be worded any way at
+         all, but a statement to be judged is always followed by these. */
+      if (QJUDGE.test(line) || QJUDGE3.test(line)) {
+        if (kind !== "tfng" && kind !== "ynng") {
+          if (/^yes\b/i.test(line)) sayKind("ynng");
+          else if (/^(true|false)\b/i.test(line)) sayKind("tfng");
+          else if (/^no$/i.test(line)) sayKind("ynng");
+        }
+        return;
+      }
 
       var m;
       if ((m = QGAP.exec(line))) {
         if (!firstN) firstN = Number(m[1]);
         seenBlank = true;
+        sawQ = true;
         ensureOpen();
         if (kind === "summary") body.push("___{}");
         else out.push("___{}");
@@ -6323,6 +6386,7 @@ a.btn[hidden] { display: none; }
       }
       if ((m = QNUM.exec(line))) {
         if (!firstN) firstN = Number(m[1]);
+        sawQ = true;
         ensureOpen();
         flushSaid();
         return;
@@ -6339,7 +6403,7 @@ a.btn[hidden] { display: none; }
             bank++;
             return;
           }
-        } else {
+        } else if (kind || sawQ) {
           ensureOpen();
           flushSaid();
           out.push("- " + m[1].toUpperCase() + ". " + m[2]);
@@ -6366,6 +6430,22 @@ a.btn[hidden] { display: none; }
       /* Anything else is the words of a question, which a paste often breaks
          over several lines because the page it came off was narrow. */
       if (hasBlank) { ensureOpen(); out.push(blanks(line)); return; }
+
+      /* Unless the three buttons are on the end of it, in which case the line
+         is a whole statement and says so: nothing else in a reading paper
+         ends in those words. It opens the task where no instruction did, and
+         it closes the statement, because the next line is the next one. */
+      if (QJUDGE_TAIL.test(line)) {
+        sawQ = true;
+        if (kind !== "tfng" && kind !== "ynng") {
+          sayKind(/\bYES\s+NO\b/i.test(line) ? "ynng" : "tfng");
+        }
+        ensureOpen();
+        said.push(line);
+        flushSaid();
+        return;
+      }
+
       ensureOpen();
       said.push(line);
     });
