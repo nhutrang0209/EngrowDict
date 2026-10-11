@@ -6241,6 +6241,8 @@ a.btn[hidden] { display: none; }
     [/choose (one|two|three|four) letters/i, "choice"],
     [/complete the summary/i, "summary"],
     [/complete the (notes|table|flow-?chart|sentences|diagram)/i, "notes"],
+    [/choose the correct heading/i, "match"],
+    [/list of headings/i, "match"],
     [/which (paragraph|section)\b/i, "match"],
     [/^(reading passage|the passage) has \w+ (paragraphs|sections)/i, "match"],
     [/answer the questions below/i, "short"],
@@ -6256,6 +6258,33 @@ a.btn[hidden] { display: none; }
      sentence that the paste broke onto a line of its own. The brackets are
      the whole of the difference, and getting it wrong turns a summary into
      five questions with no words in them. */
+  /* The numerals a list of headings is numbered with, longest first so that
+     viii is read as viii and not as v followed by iii. */
+  var ROMANS = "xiii|xii|viii|vii|iii|ix|iv|vi|xi|ii|x|v|i";
+  var ROMAN_RUN = new RegExp("(?:^|\\s)(" + ROMANS + ")[.)]\\s+", "gi");
+
+  /* A list of headings that came across as one line, which is how it comes
+     across when the page set them out as a block and the clipboard took the
+     block as a paragraph. Three numerals in order is a list; two is a
+     coincidence, and a sentence with "i." in it twice is not worth breaking
+     a paragraph over. */
+  function headingsFrom(line) {
+    ROMAN_RUN.lastIndex = 0;
+    var marks = [], m;
+    while ((m = ROMAN_RUN.exec(line))) {
+      marks.push({ lab: m[1].toLowerCase(), at: m.index, from: ROMAN_RUN.lastIndex });
+    }
+    if (marks.length < 3) return null;
+    var items = [];
+    for (var i = 0; i < marks.length; i++) {
+      var to = i + 1 < marks.length ? marks[i + 1].at : line.length;
+      var text = line.slice(marks[i].from, to).trim();
+      if (text) items.push({ lab: marks[i].lab, text: text });
+    }
+    if (items.length < 3) return null;
+    return { head: line.slice(0, marks[0].at).trim(), items: items };
+  }
+
   var QNUM = /^(\d{1,2})\s*[.):]?$/;                // 27.  27)  27
   var QGAP = /^\((\d{1,2})\)$/;                     // (31)
   var QOPT = /^\(?([A-Za-z])\)?[.)]\s+(.+)$/;       // A. …   B) …
@@ -6321,7 +6350,11 @@ a.btn[hidden] { display: none; }
        The break fell where the box was, so the space that stood in for the
        box is now standing in front of the full stop that followed it. */
     function mend(text) {
-      return text.replace(/\s+/g, " ").replace(/\s+([.,;:!?])/g, "$1").trim();
+      return text.replace(/\s+/g, " ").replace(/\s+([.,;:!?])/g, "$1")
+        /* The dashes or underscores a page leaves where its answer box was.
+           "Section A --" is asking about Section A; the dashes were the box. */
+        .replace(/[\s]*[-\u2013\u2014_]{2,}\s*$/, "")
+        .trim();
     }
 
     function openTask(k) {
@@ -6374,6 +6407,24 @@ a.btn[hidden] { display: none; }
       for (var t = 0; t < TELLS.length; t++) {
         if (TELLS[t][0].test(line)) { told = TELLS[t]; break; }
       }
+      /* A list of numbered headings, which may have the instruction that
+         introduces it run together on the same line — that is how it arrives
+         when the page set the list out as a block and the clipboard took the
+         block as one paragraph. What stands in front of the first numeral is
+         the instruction, less the word that introduced the list. */
+      var heads = headingsFrom(line);
+      if (heads) {
+        openTask(told ? told[1] : "match");
+        if (out.length) out.push("");
+        var lead = heads.head.replace(/\b(list of )?headings?\b[\s:]*$/i, "").trim();
+        if (lead) out.push("! " + lead);
+        ensureOpen();
+        heads.items.forEach(function (h) {
+          out.push("* " + h.lab + ". " + h.text);
+        });
+        return;
+      }
+
       if (told) {
         openTask(told[1]);
         out.push(out.length ? "" : null);
@@ -7398,6 +7449,27 @@ a.btn[hidden] { display: none; }
     return String.fromCharCode(65 + i);
   }
 
+  /* One item out of a box of words or a list of headings, and what it is
+     called. A box of words is lettered A to J; a list of headings is
+     numbered i to viii, which is three characters where the other is one and
+     is why a single letter was not enough to read either.
+
+     A label with a stop after it is certainly a label. Without one, only a
+     single letter counts — "A opinions" names A and means opinions, while
+     "The benefits of asking" names nothing and means all four words. */
+  function bankItem(rest, n) {
+    if (!rest) return null;
+    var m = /^([A-Za-z]{1,6}|\d{1,2})[.)]\s+(.+)$/.exec(rest);
+    if (!m) m = /^([A-Za-z])\s+(.+)$/.exec(rest);
+    if (!m) return { letter: letterAt(n), text: rest };
+    /* As written. A box of words is lettered A to J and a list of headings
+       is numbered i to viii, and the one character that is both — i is a
+       letter and i is one — cannot be told apart on its own line. Whoever
+       wrote it knew which they meant, so it is printed the way they wrote
+       it, and only a label nobody wrote is one this makes up. */
+    return { letter: m[1], text: m[2].trim() };
+  }
+
   /* An answer as it will be compared. Case and spacing are not what is being
      tested, and a key that says "F" means the same as one that says "False". */
   function ansOf(text, kind) {
@@ -7539,9 +7611,9 @@ a.btn[hidden] { display: none; }
         }
         if (!task) open("notes");       // a cell that starts straight in
       }
-      if ((m = /^\*\s+(?:([A-Za-z])[.)]?\s+)?(.*)$/.exec(line))) {
-        task.bank.push({ letter: m[1] ? m[1].toUpperCase() : letterAt(task.bank.length),
-                         text: m[2].trim() });
+      if ((m = /^\*\s+(.*)$/.exec(line))) {
+        var b = bankItem(m[1].trim(), task.bank.length);
+        if (b) task.bank.push(b);
         return;
       }
 

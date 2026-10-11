@@ -872,6 +872,80 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
      && /^Some statement about the passage\. = $/m.test(inline),
      inline.replace(/\n/g, ' | '));
 
+  /* --- matching headings -------------------------------------------------
+
+     A list of headings is numbered i to viii, which is three characters
+     where a box of words is one, and it arrives as a single line: the page
+     set the list out as a block and the clipboard took the block as a
+     paragraph. So the instruction, the word that introduces the list, and
+     all eight headings come across run together, and the whole thing read as
+     one enormous question with nothing to answer it. */
+  const HEADS = [
+    'The Reading Passage has six sections, A-F. Choose the correct heading '
+      + 'for each section from the list of headings below. Headings '
+      + 'i. The first one here ii. The second one here iii. The third one here '
+      + 'iv. The fourth one here v. The fifth one here vi. The sixth one here',
+    '',
+    '27.',
+    'Section A --',
+    '28.',
+    'Section B --',
+  ].join('\n');
+
+  const heads = mk(null, unlockedStore());
+  await wait(900);
+  click(heads.window, tabQ(heads));
+  await wait(50);
+  click(heads.window, heads.doc.getElementById('add-word'));
+  await wait(40);
+  heads.doc.getElementById('quiz-body').value = HEADS;
+  click(heads.window, heads.doc.getElementById('quiz-tidy'));
+  await wait(80);
+  const hgot = heads.doc.getElementById('quiz-body').value;
+
+  ok('a list of headings run together with its instruction comes apart again',
+     /^\? match 27$/m.test(hgot)
+     && (hgot.match(/^\* /gm) || []).length === 6,
+     (hgot.match(/^\* .*/gm) || []).length + ' headings');
+  ok('  the instruction keeping the words that are the instruction',
+     /^! The Reading Passage has six sections, A-F\./m.test(hgot)
+     && !/^!.*The first one here/m.test(hgot)
+     && !/^!.*\bHeadings\s*$/m.test(hgot),
+     (hgot.match(/^!.*/m) || [])[0].slice(-40));
+  ok('  and each heading keeping the numeral it was written with',
+     /^\* i\. The first one here$/m.test(hgot)
+     && /^\* vi\. The sixth one here$/m.test(hgot),
+     (hgot.match(/^\* .*/gm) || []).slice(0, 2).join(' | '));
+  ok('  with the box the page left for the answer taken off the question',
+     /^Section A = $/m.test(hgot) && !/--/.test(hgot),
+     (hgot.match(/^Section A.*/m) || [])[0]);
+
+  ok('the numerals are what the sections are answered with, as written',
+     [...heads.doc.querySelectorAll('#quiz-preview .bank-l')]
+       .map(n => n.textContent).join(',') === 'i,ii,iii,iv,v,vi',
+     [...heads.doc.querySelectorAll('#quiz-preview .bank-l')]
+       .map(n => n.textContent).join(','));
+  /* A section is a question in its own right, so its numerals are buttons
+     under it rather than a list inside a line — the select is for a blank
+     standing in the middle of a sentence, which this is not. */
+  ok('  and i is i rather than I, a numeral being not quite a letter',
+     [...heads.doc.querySelectorAll('#quiz-preview .qrow')][0]
+       .querySelectorAll('.opt').length === 6
+     && [...[...heads.doc.querySelectorAll('#quiz-preview .qrow')][0]
+          .querySelectorAll('.opt')].map(b => b.textContent).join(',')
+          === 'i,ii,iii,iv,v,vi',
+     [...[...heads.doc.querySelectorAll('#quiz-preview .qrow')][0]
+       .querySelectorAll('.opt')].map(b => b.textContent).join(','));
+
+  /* Two numerals in a sentence are two numerals in a sentence. */
+  heads.doc.getElementById('quiz-body').value =
+    '? tfng\nThe i. and ii. in this sentence are not a list of headings. = T';
+  click(heads.window, heads.doc.getElementById('quiz-tidy'));
+  await wait(40);
+  ok('two numerals in a line are not a list, and nothing is broken over them',
+     /already written in marks/.test(heads.doc.getElementById('quiz-msg').textContent),
+     heads.doc.getElementById('quiz-msg').textContent.slice(0, 40));
+
   /* --- asked before anything is typed, not found out by a failed save -----
 
      The script in a sheet is a copy taken by hand and deployed by hand, so it
@@ -990,5 +1064,5 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
   done(a.errs.concat(b.errs, c.errs, wide.errs, tight.errs, none.errs,
                      w.errs, back.errs, late.errs, t.errs, d2.errs,
                      old88.errs, down.errs, dark.errs, stale.errs, fresh.errs,
-                     band.errs, other.errs, fig.errs, named.errs));
+                     band.errs, other.errs, fig.errs, named.errs, heads.errs));
 })();
