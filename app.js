@@ -4270,6 +4270,7 @@
     [/choose (one|two|three|four) letters/i, "choice"],
     [/complete the summary/i, "summary"],
     [/complete the (notes|table|flow-?chart|sentences|diagram)/i, "notes"],
+    [/label the (diagram|map|plan|picture)/i, "notes"],
     [/choose the correct heading/i, "match"],
     [/list of headings/i, "match"],
     [/which (paragraph|section)\b/i, "match"],
@@ -4325,6 +4326,22 @@
      is always followed by the words TRUE, FALSE and NOT GIVEN, because they
      were the three things to press. So where the instruction was not
      recognised, these say what the task is — and where it was, they agree. */
+  /* An empty answer box, as the clipboard takes it. A page draws the box and
+     writes something faint inside to show it is a box — three dots, a row of
+     underscores, a dash or two — and copying the page copies the something
+     faint, because that is the only part of a box that is text.
+
+     On a line of its own it stands in front of what it is labelling; at the
+     start of a line it is already in front of it. Either way it is where the
+     answer goes. */
+  var DOTS = /^[.\u2026_\u2013\u2014\-]{2,}$/;
+  var DOTS_LEAD = /^[.\u2026_\u2013\u2014\-]{2,}\s+(\S.*)$/;
+  /* And at the end of one, which is where note completion puts it: "close to
+     a trackway called the ......". Only inside a body, where a blank is a
+     blank; at the end of a question in a list the answer box is already
+     where the task says it is, and the dots are the box it was drawn in. */
+  var DOTS_TAIL = /\s+[.\u2026_\u2013\u2014\-]{2,}\s*$/;
+
   var QJUDGE = /^(true|false|not given|yes|no)$/i;
   var QJUDGE3 = /^(true\s+false|yes\s+no)\s+not\s*given$/i;
   /* And the same three where a page printed them on the end of the statement
@@ -4345,6 +4362,9 @@
        a task opens on evidence: a number against a line, a box to fill, a
        lettered option, or an instruction that named the kind outright. */
     var sawQ = false;
+    /* A box read a line before the words it belongs to. The next line that
+       has anything in it is what it is labelling. */
+    var boxNext = false;
     var said = [];            // the question being gathered, a line at a time
     var body = [];            // a summary being gathered, likewise
     var bank = 0;             // how many words the open task's box has taken
@@ -4475,6 +4495,23 @@
       }
 
       var m;
+
+      /* The box, alone on its line or at the start of one. Labelling a
+         diagram is the one task where the answer comes before the words,
+         and a page that draws it that way copies it that way. */
+      if (DOTS.test(line)) {
+        boxNext = true;
+        sawQ = true;
+        if (!kind) sayKind("notes");
+        return;
+      }
+      if ((m = DOTS_LEAD.exec(line))) {
+        boxNext = true;
+        sawQ = true;
+        if (!kind) sayKind("notes");
+        line = m[1];
+      }
+
       if ((m = QGAP.exec(line))) {
         if (!firstN) firstN = Number(m[1]);
         seenBlank = true;
@@ -4515,15 +4552,22 @@
       if (hasBlank) seenBlank = true;
 
       if (kind === "summary" || kind === "notes") {
-        if (!seenBlank && !bank && body.length === 0 && line.length < 70
-            && !/[.:;,]$/.test(line)) {
+        /* A short line with no stop at the end of it is a title over a set
+           of notes — unless a box is standing in front of it, in which case
+           it is the thing the box is labelling, and the shortness is only
+           because a label on a diagram is short. */
+        if (!boxNext && !seenBlank && !bank && body.length === 0
+            && line.length < 70 && !/[.:;,]$/.test(line)) {
           ensureOpen();
           out.push("# " + line);           // the title over a set of notes
           return;
         }
         ensureOpen();
-        if (kind === "notes") { out.push("- " + blanks(line)); seenBlank = true; }
-        else body.push(blanks(line));
+        var said2 = blanks(line.replace(DOTS_TAIL, " ___{}"));
+        if (said2 !== blanks(line)) seenBlank = true;
+        if (boxNext) { said2 = "___{} " + said2; boxNext = false; seenBlank = true; }
+        if (kind === "notes") { out.push("- " + said2); seenBlank = true; }
+        else body.push(said2);
         return;
       }
 

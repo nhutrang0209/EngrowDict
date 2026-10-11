@@ -946,6 +946,72 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
      /already written in marks/.test(heads.doc.getElementById('quiz-msg').textContent),
      heads.doc.getElementById('quiz-msg').textContent.slice(0, 40));
 
+  /* --- labelling a diagram ------------------------------------------------
+
+     The one task where the answer comes before the words: a box, then what
+     the box is labelling. A page draws that box and writes something faint
+     inside to show it is a box — three dots — and copying the page copies
+     the dots, because the dots are the only part of a box that is text.
+
+     Read as words they became part of the label; and the label itself, being
+     short and carrying no full stop, was then read as a title over a set of
+     notes, which ate every line and left nothing anybody could answer. */
+  const LABELS = [
+    'Label the diagrams below using ONE WORD ONLY for each answer.',
+    '',
+    '1.',
+    '...',
+    'Markers set out over a hillside to keep the tunnel on its route',
+    '2.',
+    '...',
+    'Waterway that receives the flow from the outlet',
+  ].join('\n');
+
+  const lab = mk(null, unlockedStore());
+  await wait(900);
+  click(lab.window, tabQ(lab));
+  await wait(50);
+  click(lab.window, lab.doc.getElementById('add-word'));
+  await wait(40);
+  lab.doc.getElementById('quiz-body').value = LABELS;
+  click(lab.window, lab.doc.getElementById('quiz-tidy'));
+  await wait(80);
+  const lgot = lab.doc.getElementById('quiz-body').value;
+
+  ok('"Label the diagrams below" is an instruction, not question one',
+     /^! Label the diagrams below/m.test(lgot) && /^\? notes$/m.test(lgot),
+     lgot.split('\n').slice(0, 2).join(' / '));
+  ok('  the box a page drew is read as the box it was, not as three dots',
+     !/\.\.\./.test(lgot)
+     && /^- ___\{\} Markers set out over a hillside/m.test(lgot),
+     (lgot.match(/^- .*/m) || [])[0]);
+  ok('  standing in front of what it labels, which is where the page had it',
+     (lgot.match(/^- ___\{\} /gm) || []).length === 2,
+     (lgot.match(/^- ___\{\} .*/gm) || []).length + ' labelled');
+  ok('  and a short label is not read as a title over the rest of them',
+     !/^# /m.test(lgot), lgot.replace(/\n/g, ' | ').slice(0, 60));
+
+  ok('each label is a question, numbered from where the page numbered it',
+     lab.doc.querySelectorAll('#quiz-preview .gap').length === 2
+     && [...lab.doc.querySelectorAll('#quiz-preview .gap-n')]
+          .map(n => n.textContent).join(',') === '1,2',
+     [...lab.doc.querySelectorAll('#quiz-preview .gap-n')]
+       .map(n => n.textContent).join(','));
+  ok('  with the box in front of the words, as the paper has it',
+     /^1\s+Markers set out/.test(
+       lab.doc.querySelector('#quiz-preview .qline').textContent.trim()),
+     lab.doc.querySelector('#quiz-preview .qline').textContent.trim().slice(0, 40));
+
+  /* A title over a set of notes is still a title where no box precedes it. */
+  lab.doc.getElementById('quiz-body').value =
+    'Complete the notes below.\nThe Uffington White Horse\n'
+    + 'close to a trackway called the ...\nRidgeway';
+  click(lab.window, lab.doc.getElementById('quiz-tidy'));
+  await wait(60);
+  ok('a short line with no box in front of it is still a title',
+     /^# The Uffington White Horse$/m.test(lab.doc.getElementById('quiz-body').value),
+     lab.doc.getElementById('quiz-body').value.replace(/\n/g, ' | ').slice(0, 70));
+
   /* --- asked before anything is typed, not found out by a failed save -----
 
      The script in a sheet is a copy taken by hand and deployed by hand, so it
@@ -1064,5 +1130,6 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
   done(a.errs.concat(b.errs, c.errs, wide.errs, tight.errs, none.errs,
                      w.errs, back.errs, late.errs, t.errs, d2.errs,
                      old88.errs, down.errs, dark.errs, stale.errs, fresh.errs,
-                     band.errs, other.errs, fig.errs, named.errs, heads.errs));
+                     band.errs, other.errs, fig.errs, named.errs, heads.errs,
+                     lab.errs));
 })();
