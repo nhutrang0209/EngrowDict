@@ -45,8 +45,15 @@ const mk = () => boot({
   // build on Windows is some eight KB of carriage returns that nobody ever
   // downloads — count those and the budget is a platform away from meaning
   // anything.
-  const shipped = shell.replace(/\r\n/g, '\n').length;
-  ok('the shell is small', shipped < 480000, Math.round(shipped / 1024) + ' KB');
+  const shipped = shell.replace(/\r\n/g, '\n');
+  const lines = shipped.split('\n');
+  const longest = lines.reduce((a, b) => (b.length > a.length ? b : a), '');
+  ok('nothing large has been pasted into the shell',
+     longest.length < 2000, longest.length + ' characters on its longest line');
+  ok('  and nothing is carried in it as base64',
+     !/data:[a-z/+-]+;base64,[A-Za-z0-9+/=]{200,}/.test(shipped), 'none');
+  ok('  with room above the shell for the next feature',
+     shipped.length < 540000, Math.round(shipped.length / 1024) + ' KB');
   ok('the shell embeds no data',
      !shell.includes('<script type="application/json" id="base">'));
   ok('the shell points at data.json', shell.includes('href="data.json"'));

@@ -4229,6 +4229,7 @@
     ["? summary", "Summary completion", "A summary with ___{} blanks in it"],
     ["? match", "Matching", "Answered with the passage's own A, B, C"],
     ["? short", "Short answer", "A question, an answer typed in"],
+    ["@ ", "Figure", "A diagram or a map — or paste one straight into the box"],
     ["___{}", "Blank", "A numbered blank, and what it wants"],
     ["* A ", "Word for the box", "One of the words a task picks from"],
     [" = ", "Answer", "What this line's blank wants"]
@@ -4475,6 +4476,9 @@
         return;
       }
 
+      /* A figure already written as a mark is a figure, not a question. */
+      if (/^@\s+\S/.test(line)) { ensureOpen(); out.push(line); return; }
+
       /* Anything else is the words of a question, which a paste often breaks
          over several lines because the page it came off was narrow. */
       if (hasBlank) { ensureOpen(); out.push(blanks(line)); return; }
@@ -4573,15 +4577,30 @@
 
        Only when there is nothing in marks already, and only when reading it
        actually finds questions. Anything else is left where it was put. */
-    box.addEventListener("paste", function () {
+    box.addEventListener("paste", function (ev) {
+      /* A picture first: a paste carrying one is a paste of a picture, and
+         whatever text came with it is the page's caption for it, not the
+         questions. */
+      var pic = pictureIn(ev.clipboardData);
+      if (pic) { ev.preventDefault(); takeFigure(pic); return; }
       setTimeout(function () { autoTidy(); }, 0);
+    });
+    box.addEventListener("dragover", function (ev) {
+      if (pictureIn(ev.dataTransfer)) ev.preventDefault();
+    });
+    box.addEventListener("drop", function (ev) {
+      var pic = pictureIn(ev.dataTransfer);
+      if (!pic) return;
+      ev.preventDefault();
+      takeFigure(pic);
     });
     f.appendChild(box);
     f.appendChild(el("p", "hint",
       "One task to a ? line. Numbers are not written against the questions: "
       + "they are the order the blanks come in, so nothing can fall out of "
       + "step. A set that does not open at 1 says so once — ? choice 27 — and "
-      + "the rest follow on."));
+      + "the rest follow on. A diagram goes in where the caret is: paste it, "
+      + "or drop the file on the box."));
 
     /* Beside it, the same thing as the reader will meet it. The marks are
        written to be read by the page and not by a person, so a form that
@@ -4674,6 +4693,7 @@
     /* Inside the braces of a blank, which is the only place a caret has
        anywhere to be after one of these. */
     var caret = at + put.length - (text === "___{}" ? 1 : 0);
+    if (text.charAt(0) === "@") caret = at + put.length - 1;   // before the newline
     box.focus();
     box.setSelectionRange(caret, caret);
   }
@@ -4814,6 +4834,101 @@
     }, function () { /* the save will say so, with the reason */ });
   }
 
+  /* ---- a figure, pasted ---------------------------------------------------
+
+     Put the caret where it belongs and press Ctrl+V, or drop the file on the
+     box. What goes in at the caret is the mark; what appears in the preview
+     beside it is the picture. That split is the same one the rest of this
+     form makes and makes for the same reason: the box is where the marks
+     live, and `? tfng` is what turns the next six lines into questions.
+
+     Nothing waits for a network. The picture is narrowed, squeezed and put
+     in this browser before the mark is written, so pasting is as quick as
+     pasting; what the sheet needs is sent when the sheet is written to, and
+     a set that stays here sends nothing ever. */
+  var FIG_WIDE = 1200;              // points across, past which nobody looks closer
+  var FIG_BYTES = 8 * 1024 * 1024;  // and a file this big is a photograph, not a figure
+
+  /* Narrowed to something a column can hold, and squeezed. A diagram keeps
+     its PNG — flat colour and hard edges are what PNG is for, and a JPEG of
+     one comes back fuzzy round every line — and anything else goes to JPEG,
+     where a photograph belongs. */
+  function squeeze(file) {
+    return new Promise(function (yes, no) {
+      var png = /png/i.test(file.type);
+      var url = URL.createObjectURL(file);
+      var img = new Image();
+      img.onload = function () {
+        var w = img.naturalWidth, h = img.naturalHeight;
+        if (!w || !h) { URL.revokeObjectURL(url); no(new Error("not a picture")); return; }
+        var by = Math.min(1, FIG_WIDE / w);
+        var cv = document.createElement("canvas");
+        cv.width = Math.round(w * by);
+        cv.height = Math.round(h * by);
+        cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+        URL.revokeObjectURL(url);
+        cv.toBlob(function (blob) {
+          if (blob) yes({ blob: blob, ext: png ? "png" : "jpg" });
+          else no(new Error("could not be squeezed"));
+        }, png ? "image/png" : "image/jpeg", png ? undefined : 0.85);
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); no(new Error("not a picture")); };
+      img.src = url;
+    });
+  }
+
+  /* Named after the passage it is on and a handful of random letters: the
+     name is read by people looking through docs/img, and no two pastes two
+     seconds apart may land on the same one. */
+  function figName(ext) {
+    var sel = document.getElementById("quiz-for");
+    var r = byId[sel && sel.value];
+    var stem = norm((r && r.title) || "figure").replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "").slice(0, 28) || "figure";
+    var tag = Math.random().toString(16).slice(2, 8);
+    return stem + "-" + tag + "." + ext;
+  }
+
+  /* The picture out of whatever was pasted or dropped, or nothing. */
+  function pictureIn(data) {
+    if (!data) return null;
+    var list = data.files && data.files.length ? data.files : null;
+    if (list) {
+      for (var i = 0; i < list.length; i++) {
+        if (/^image\//i.test(list[i].type)) return list[i];
+      }
+    }
+    var items = data.items || [];
+    for (var j = 0; j < items.length; j++) {
+      if (items[j].kind === "file" && /^image\//i.test(items[j].type)) {
+        var f = items[j].getAsFile();
+        if (f) return f;
+      }
+    }
+    return null;
+  }
+
+  function takeFigure(file) {
+    if (file.size > FIG_BYTES) {
+      quizMsg("That picture is " + Math.round(file.size / 1048576)
+        + " MB. Shrink it first — a figure is a diagram, not a photograph.", "");
+      return;
+    }
+    quizMsg("Taking the picture in…", "warn");
+    squeeze(file).then(function (got) {
+      var name = figName(got.ext);
+      return keepFigure(name, got.blob).then(function () {
+        putQuizBit("@ " + name);
+        drawQuizPreview();
+        quizMsg(name + " · " + Math.round(got.blob.size / 1024) + " KB · "
+          + "it goes into the sheet's own folder when this is saved", "warn");
+      });
+    }, function (err) {
+      quizMsg("That did not come in as a picture: "
+        + (err && err.message ? err.message : err), "");
+    });
+  }
+
   function quizMsg(text, tone) {
     var msg = document.getElementById("quiz-msg");
     if (!msg) return;
@@ -4897,6 +5012,56 @@
     return said;
   }
 
+  /* ---- the figures a set is carrying -------------------------------------
+
+     The names written into it that are names rather than addresses: those
+     are ours, and the sheet's copy needs them beside the page before the
+     cell that mentions them is any use to anybody else.
+
+     Sent one at a time, which is slower and is the right way round: a set
+     with four diagrams in it is four writes to a repo, and four at once is
+     four commits racing for the same branch tip. */
+  function figsIn(text) {
+    var out = [], seen = {}, m;
+    var re = /^@\s+(\S+)/gm;
+    while ((m = re.exec(String(text || "")))) {
+      var at = m[1];
+      if (/^(https?:|data:|blob:)/i.test(at) || seen[at]) continue;
+      seen[at] = 1;
+      out.push(at);
+    }
+    return out;
+  }
+
+  function asBase64(blob) {
+    return new Promise(function (yes, no) {
+      var fr = new FileReader();
+      fr.onload = function () {
+        yes(String(fr.result || "").replace(/^data:[^,]*,/, ""));
+      };
+      fr.onerror = function () { no(fr.error || new Error("unreadable")); };
+      fr.readAsDataURL(blob);
+    });
+  }
+
+  /* Each in turn, and a name this browser has never heard of is one that came
+     down with the sheet and is already where it belongs. */
+  function sendFigs(names, say) {
+    var sent = 0;
+    return names.reduce(function (seq, name) {
+      return seq.then(function () {
+        return myFigure(name).then(function (blob) {
+          if (!blob) return null;                 // not ours to send
+          if (say) say(name, sent + 1, names.length);
+          return asBase64(blob).then(function (b64) {
+            return callSheet({ action: "figure", name: name, data: b64 })
+              .then(function () { sent++; });
+          });
+        });
+      });
+    }, Promise.resolve()).then(function () { return sent; });
+  }
+
   function saveQuiz() {
     var got = readQuizForm();
     if (got.err) { quizMsg(got.err, ""); return; }
@@ -4906,8 +5071,17 @@
     btn.disabled = true;
     quizMsg(toSheet ? "Writing them into the sheet…" : "Saving…", "warn");
 
+    /* The figures first. A cell that names one the sheet has not got is a
+       cell that draws a broken picture for everybody but the browser it was
+       written in. */
+    var figs = toSheet ? figsIn(got.text) : [];
     var job = toSheet
-      ? callSheet({ action: "questions", passage: got.r.title, body: got.text })
+      ? sendFigs(figs, function (name, n, of) {
+          quizMsg("Sending " + (of > 1 ? n + " of " + of + ", " : "") + name + "…", "warn");
+        }).then(function () {
+          quizMsg("Writing them into the sheet…", "warn");
+          return callSheet({ action: "questions", passage: got.r.title, body: got.text });
+        })
       : Promise.resolve({ ok: true });
 
     function land(why) {
@@ -5264,6 +5438,20 @@
     return a;
   }
 
+  /* A figure: the diagram a set of questions labels, the map it asks about,
+     the chart it reads off. One to a line, the file or the address of it,
+     and whatever should be written under it after a bar.
+
+         @ 90p1-a7f3c2.png
+         @ 90p1-a7f3c2.png | The aqueduct, as surveyed
+         @ https://example.org/figure.png
+
+     A name with no scheme in front of it is one of ours, and lives either in
+     docs/img beside the page or — for a set that never went to the sheet —
+     in this browser. Where it lives is not the writer's business, so the mark
+     does not say. */
+  var FIG_RE = /^@\s+(\S+)\s*(?:\|\s*(.*))?$/;
+
   var BLANK_RE = /___\{([^}]*)\}|___/g;
   /* The answer at the end of a question line. The last one on the line, so a
      statement that happens to contain " = " keeps it. */
@@ -5362,6 +5550,14 @@
       if ((m = /^!\s*(.*)$/.exec(line))) {
         if (task && !ahead) task.tell = m[1].trim();
         else held.push({ tell: m[1].trim() });
+        return;
+      }
+      if ((m = FIG_RE.exec(line))) {
+        var fig = { kind: "img", src: m[1], cap: (m[2] || "").trim() };
+        /* A figure above the line that says what kind of task this is belongs
+           to that task, the way a heading does: it is what the questions
+           under it are about. */
+        if (task && !ahead) task.rows.push(fig); else held.push({ row: fig });
         return;
       }
       if (!task || ahead) {
@@ -5490,6 +5686,7 @@
   }
 
   function rowNode(row, r) {
+    if (row.kind === "img") return figNode(row);
     if (row.kind === "h") {
       var h = el("h3", "qhead" + (row.depth ? " in" + row.depth : ""));
       inlineInto(h, String(row.parts[0] || ""));
@@ -5519,6 +5716,54 @@
       else node.appendChild(typeIn(row.slot, r));
     }
     return node;
+  }
+
+  /* A figure, and the finding of it.
+
+     The address may be one anybody can fetch, or it may be a name — and a
+     name is looked for in this browser first and beside the page second,
+     because a set written here has its figures here before it has them
+     anywhere, and a set that came down from the sheet has them beside the
+     page and never here. Looked for in that order, both work without the
+     mark having to say which kind it is.
+
+     The looking is a promise and the drawing is not, so the picture is put in
+     when it is found. An <img> with no src draws nothing and takes no room,
+     which is what should be there while nothing is known. */
+  var figUrls = {};                 // what has already been found, by name
+
+  function figNode(row) {
+    var fig = el("figure", "qfig");
+    var img = document.createElement("img");
+    img.loading = "lazy";
+    img.alt = row.cap || "Figure";
+    fig.appendChild(img);
+    if (row.cap) fig.appendChild(el("figcaption", null, row.cap));
+    figSrc(row.src).then(function (url) { if (url) img.src = url; },
+      function () { /* a figure nobody can find is a figure nobody draws */ });
+    /* Bigger than the column it stands in, on a press. A diagram read at the
+       width of a narrow column is a diagram nobody can read. */
+    fig.addEventListener("click", function () {
+      if (img.src) window.open(img.src, "_blank", "noopener");
+    });
+    return fig;
+  }
+
+  function figSrc(src) {
+    var at = String(src || "");
+    if (!at) return Promise.resolve("");
+    if (/^(https?:|data:|blob:)/i.test(at)) return Promise.resolve(at);
+    if (figUrls[at]) return Promise.resolve(figUrls[at]);
+    return myFigure(at).then(function (blob) {
+      var url = blob ? URL.createObjectURL(blob) : figBeside(at);
+      figUrls[at] = url;
+      return url;
+    }, function () { return figBeside(at); });
+  }
+
+  /* Beside the page: the folder the sheet's own figures are published into. */
+  function figBeside(name) {
+    return "img/" + name;
   }
 
   function firstSlot(row) {
@@ -5705,29 +5950,93 @@
      the words waiting to be pushed to the sheet. */
   var BOOK_DB = "engrowdict-books";
 
+  /* Two stores now, so version two. The figures pasted into a set of
+     questions are the same kind of thing a book is — too big for
+     localStorage and nobody's business but this browser's — so they live
+     beside the books rather than in a database of their own.
+
+     The upgrade adds what is missing and touches nothing else. A reader who
+     has had this page open since before there were figures has a shelf in
+     here, and a migration that took a shelf out to put a folder in would be
+     a migration nobody forgives. */
+  var DB_V = 2;
+
   function withDB() {
     return new Promise(function (yes, no) {
       if (!window.indexedDB) { no(new Error("no IndexedDB")); return; }
-      var req = window.indexedDB.open(BOOK_DB, 1);
+      var req = window.indexedDB.open(BOOK_DB, DB_V);
       req.onupgradeneeded = function () {
-        if (!req.result.objectStoreNames.contains("books")) {
-          req.result.createObjectStore("books", { keyPath: "slug" });
+        var db = req.result;
+        if (!db.objectStoreNames.contains("books")) {
+          db.createObjectStore("books", { keyPath: "slug" });
+        }
+        if (!db.objectStoreNames.contains("images")) {
+          db.createObjectStore("images", { keyPath: "name" });
         }
       };
-      req.onsuccess = function () { yes(req.result); };
+      req.onsuccess = function () {
+        /* Another tab of this page, opened before the store for figures
+           existed, holds the version this one is replacing. Every connection
+           opened here lets go when it is asked, so the asking is enough. */
+        req.result.onversionchange = function () { req.result.close(); };
+        yes(req.result);
+      };
       req.onerror = function () { no(req.error); };
+
+      /* Blocked is not failed. Something is holding the version before this
+         one and is about to let go of it — and refusing the moment the event
+         arrives turns a wait of a few milliseconds into a shelf with nothing
+         on it.
+
+         But a tab left open on a build of this page from before any of this
+         has no handler to be asked with, and will hold it until somebody
+         closes that tab. Waiting for ever on that looks exactly like an empty
+         shelf too, and is a different thing to put right — so it is waited
+         out, and then said. */
+      var held = false;
+      req.onblocked = function () { held = true; };
+      setTimeout(function () {
+        if (!held) return;
+        no(new Error("Another tab of this page is holding the older store. "
+          + "Close it and reload."));
+      }, 4000);
     });
   }
 
-  function inStore(mode, run) {
+  function inStore(mode, run, which) {
+    var name = which || "books";
     return withDB().then(function (db) {
       return new Promise(function (yes, no) {
-        var tx = db.transaction("books", mode);
-        var req = run(tx.objectStore("books"));
+        var tx = db.transaction(name, mode);
+        var req = run(tx.objectStore(name));
         req.onsuccess = function () { yes(req.result); };
         req.onerror = function () { no(req.error); };
       });
     });
+  }
+
+  /* ---- the figures this browser is holding -------------------------------
+
+     A figure pasted into a set is here the moment it is pasted, before any
+     of it has been anywhere else: the writer sees it drawn in the preview
+     without having waited for a network, and a set that never goes to the
+     sheet never sends it anywhere at all. Saving to the sheet is what sends
+     the ones the sheet will need. */
+  function keepFigure(name, blob) {
+    return inStore("readwrite", function (st) {
+      return st.put({ name: name, blob: blob, at: Date.now() });
+    }, "images");
+  }
+
+  function myFigure(name) {
+    return inStore("readonly", function (st) { return st.get(name); }, "images")
+      .then(function (got) { return (got && got.blob) || null; },
+            function () { return null; });
+  }
+
+  function dropFigure(name) {
+    return inStore("readwrite", function (st) { return st.delete(name); }, "images")
+      .then(function () { return true; }, function () { return false; });
   }
 
   function myBooks() {

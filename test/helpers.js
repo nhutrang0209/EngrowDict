@@ -64,8 +64,15 @@ function boot(opts) {
           req.onupgradeneeded = () =>
             req.result.createObjectStore('books', { keyPath: 'slug' });
           req.onsuccess = () => {
-            const st = req.result.transaction('books', 'readwrite').objectStore('books');
-            opts.idbSeed.forEach(b => st.put(b));
+            const db = req.result;
+            const tx = db.transaction('books', 'readwrite');
+            opts.idbSeed.forEach(b => tx.objectStore('books').put(b));
+            /* And let go of it. A connection held open at the version before
+               the page's blocks the page's own upgrade, and the page waits on
+               that upgrade for as long as it is held — which is a shelf that
+               never arrives, from a seeder whose whole job was to put a book
+               on it. */
+            tx.oncomplete = () => db.close();
           };
         }
       }

@@ -1720,6 +1720,25 @@ a.btn[hidden] { display: none; }
 .bank-l { font-family: var(--mono); font-size: 11.5px; color: var(--accent); font-weight: 600; }
 .bank-t { color: var(--ink-2); overflow-wrap: anywhere; }
 
+/* The diagram a set of questions is about. On a white mount, because a
+   figure scanned off a paper is black lines on white, and sitting that
+   straight on a dark page leaves it glowing in a hole of its own.
+
+   Pressed, it opens at its own size: the column is narrow on purpose, and a
+   diagram read at the width of a narrow column is a diagram nobody reads. */
+.qfig {
+  margin: 14px 0 4px; cursor: zoom-in;
+  border: 1px solid var(--rule); border-radius: var(--r-s);
+  background: var(--on-accent); padding: 8px; overflow: hidden;
+}
+.qfig img { display: block; width: 100%; height: auto; border-radius: 2px; }
+.qfig figcaption {
+  margin-top: 7px; padding: 0 2px;
+  font-size: 11.5px; line-height: 1.45; color: var(--muted);
+  font-family: var(--sans);
+}
+.qfig:hover { border-color: var(--accent); }
+
 .qbody { margin-top: 12px; }
 .qhead { font-family: var(--serif); font-size: 16px; font-weight: 600; margin-top: 14px; }
 .qbody.notes {

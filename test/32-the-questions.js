@@ -723,6 +723,84 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
      && !!JSON.parse(dark.store['engrowdict:quizzes:v1'] || '{}')[base.readings[0].title],
      dark.doc.getElementById('banner').textContent.slice(0, 50));
 
+  /* --- the diagram a set is about -----------------------------------------
+
+     A figure is one line: the file or the address of it, and whatever goes
+     under it after a bar. A name with no scheme in front of it is one of
+     ours, and is looked for in this browser first and beside the page
+     second — a set written here has its figures here before it has them
+     anywhere, and one that came down from the sheet has them beside the page
+     and never here. Looked for in that order, both work without the mark
+     having to say which kind it is. */
+  const FIGQ = [
+    '! Label the diagram below.',
+    '? notes',
+    '@ https://example.org/aqueduct.png | The aqueduct, as surveyed',
+    '- the channel runs under the ___{hill}',
+    '- the two teams met at the ___{centre}',
+  ].join('\n');
+
+  const fig = mk(FIGQ);
+  await wait(900);
+  click(fig.window, tabQ(fig));
+  await wait(50);
+  click(fig.window, fig.doc.querySelector('.hit'));
+  await wait(100);
+
+  const figure = fig.doc.querySelector('#quiz-pane .qfig');
+  ok('a figure is drawn where it was written, above the questions it labels',
+     !!figure && figure.parentNode.classList.contains('qbody')
+     && figure.parentNode.firstElementChild === figure
+     && /qline/.test(figure.nextElementSibling.className),
+     figure ? 'first, with the questions under it' : 'no figure');
+  ok('  with what was written after the bar under it',
+     figure.querySelector('figcaption').textContent === 'The aqueduct, as surveyed',
+     (figure.querySelector('figcaption') || {}).textContent);
+  ok('  and an address anybody can fetch used as it stands',
+     figure.querySelector('img').getAttribute('src') === 'https://example.org/aqueduct.png',
+     figure.querySelector('img').getAttribute('src'));
+  ok('  while the questions under it are still questions',
+     fig.doc.querySelectorAll('#quiz-pane .gap').length === 2,
+     fig.doc.querySelectorAll('#quiz-pane .gap').length + ' blanks');
+
+  /* A name is ours, and where ours live is not the writer's business. */
+  const named = mk('? notes\n@ 90p1-a7f3c2.png\n- the channel runs under the ___{hill}');
+  await wait(900);
+  click(named.window, tabQ(named));
+  await wait(50);
+  click(named.window, named.doc.querySelector('.hit'));
+  await wait(150);
+  ok('a bare name is looked for beside the page, in the sheet\u2019s own folder',
+     named.doc.querySelector('#quiz-pane .qfig img').getAttribute('src')
+       === 'img/90p1-a7f3c2.png',
+     named.doc.querySelector('#quiz-pane .qfig img').getAttribute('src'));
+
+  ok('the figures a set carries are the names in it, not the addresses',
+     /function figsIn/.test(read('app.js'))
+     && /\^@\\s\+\(\\S\+\)/.test(read('app.js')),
+     'read off the marks');
+  ok('  and they go to the sheet before the cell that mentions them does',
+     read('app.js').indexOf('sendFigs(figs')
+       < read('app.js').indexOf('action: "questions", passage: got.r.title'),
+     'figures first');
+  ok('  by a route that does not encode the bytes a second time',
+     /function ghPutB64\(repo, token, branch, path, b64, sha, message\)/
+       .test(read('sheet-sync.gs'))
+     && /content: b64,/.test(read('sheet-sync.gs')),
+     'already base64, left alone');
+  ok('  into a name nothing can climb out of',
+     /indexOf\('\.\.'\) > -1/.test(read('sheet-sync.gs'))
+     && /\[\^A-Za-z0-9\._-\]/.test(read('sheet-sync.gs')),
+     'the name is scrubbed');
+
+  /* The shelf is in the same database, and a migration that took a shelf out
+     to put a folder in would be a migration nobody forgives. */
+  const js = read('app.js');
+  ok('the store for them is added beside the books, not instead of them',
+     /createObjectStore\("images"/.test(js) && /createObjectStore\("books"/.test(js)
+     && /var DB_V = 2;/.test(js),
+     'both stores, version two');
+
   /* --- a page that words its instruction its own way ----------------------
 
      "Do the following statements agree with the information given in the
@@ -841,7 +919,7 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
      fresh.doc.getElementById('quiz-msg').textContent || 'silent');
 
   ok('and the script answers the ping with what it knows how to be asked',
-     /can: \['questions'\]/.test(read('sheet-sync.gs')),
+     /can: \['questions', 'figures'\]/.test(read('sheet-sync.gs')),
      'the ping carries it');
 
   /* --- the band between a phone and a laptop ------------------------------
@@ -912,5 +990,5 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
   done(a.errs.concat(b.errs, c.errs, wide.errs, tight.errs, none.errs,
                      w.errs, back.errs, late.errs, t.errs, d2.errs,
                      old88.errs, down.errs, dark.errs, stale.errs, fresh.errs,
-                     band.errs, other.errs));
+                     band.errs, other.errs, fig.errs, named.errs));
 })();

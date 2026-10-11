@@ -304,7 +304,7 @@ function doPost(e) {
 
                       An older copy answers without this field at all, which
                       is the answer: it can do none of them. */
-                   can: ['questions'],
+                   can: ['questions', 'figures'],
                    ai: pkey ? aiName(pkey) : '',
                    aiModel: pkey ? (pp.getProperty(PROP_AI_MODEL) || aiDefaultModel(pkey)) : '' });
     }
@@ -371,6 +371,15 @@ function doPost(e) {
         return out(writeQuestions(body.passage, body.body));
       } finally {
         qlock.releaseLock();
+      }
+    }
+    if (body.action === 'figure') {
+      var flock = LockService.getScriptLock();
+      flock.waitLock(20000);
+      try {
+        return out(writeFigure(body.name, body.data));
+      } finally {
+        flock.releaseLock();
       }
     }
     if (body.action === 'aitranslate') return out(translatePassage(body.paras));
@@ -1227,9 +1236,18 @@ function shaOf(repo, token, branch, path) {
 }
 
 function ghPut(repo, token, branch, path, text, sha, message) {
+  return ghPutB64(repo, token, branch, path,
+    Utilities.base64Encode(text, Utilities.Charset.UTF_8), sha, message);
+}
+
+/* The same write, given what to write already encoded. A figure is bytes and
+   was base64 before it left the browser; running it through an encoder that
+   takes a string and assumes UTF-8 would be encoding it twice and writing a
+   file nothing can open. */
+function ghPutB64(repo, token, branch, path, b64, sha, message) {
   var payload = {
     message: message,
-    content: Utilities.base64Encode(text, Utilities.Charset.UTF_8),
+    content: b64,
     branch: branch,
   };
   if (sha) payload.sha = sha;
@@ -1241,6 +1259,48 @@ function ghPut(repo, token, branch, path, text, sha, message) {
     muteHttpExceptions: true,
   });
   return { code: r.getResponseCode(), body: r.getContentText() };
+}
+
+/* ------------------------------------------- the figures a set asks about */
+
+/* A diagram, a map, a chart: the thing a set of questions is labelling. It
+ * goes beside the page rather than into the sheet, because a sheet cell holds
+ * fifty thousand characters and the smallest useful diagram is more than that
+ * in base64 — and because beside the page is where the browser can cache it
+ * and read it again with no network.
+ *
+ * The name is the whole of the link between the two. The cell says
+ * "@ 90p1-a7f3c2.png" and this is what puts 90p1-a7f3c2.png where that will
+ * find it. */
+function writeFigure(name, data) {
+  var clean = flat(name).replace(/[^A-Za-z0-9._-]/g, '');
+  if (!clean || clean.indexOf('..') > -1 || !/\.(png|jpe?g|gif|webp)$/i.test(clean)) {
+    return { ok: false, error: 'That is not the name of a figure: ' + name };
+  }
+  var b64 = String(data === undefined ? '' : data).replace(/^data:[^,]*,/, '').trim();
+  if (!b64) return { ok: false, error: 'The figure had nothing in it' };
+
+  var props = PropertiesService.getScriptProperties();
+  var repo = props.getProperty(PROP_REPO);
+  var token = props.getProperty(PROP_TOKEN);
+  var branch = props.getProperty(PROP_BRANCH) || 'main';
+  if (!repo || !token) {
+    return { ok: false, error: 'No GitHub repo set up yet — EngrowDict -> '
+      + 'Set up GitHub repo, in the sheet.' };
+  }
+
+  var path = 'docs/img/' + clean;
+  /* A name carries six random characters, so one that is already there is the
+     same picture sent twice — the second save of a set that was saved once
+     before. Writing it again would be a commit saying nothing. */
+  if (shaOf(repo, token, branch, path)) {
+    return { ok: true, name: clean, already: true };
+  }
+  var res = ghPutB64(repo, token, branch, path, b64, null,
+    'A figure for a set of questions: ' + clean);
+  if (res.code === 200 || res.code === 201) return { ok: true, name: clean };
+  return { ok: false, error: 'GitHub answered ' + res.code + '. '
+    + String(res.body).slice(0, 160) };
 }
 
 /* ------------------------------------- the draft: Cambridge -> the form */

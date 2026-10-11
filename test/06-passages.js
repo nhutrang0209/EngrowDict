@@ -28,28 +28,30 @@ ok('the artifact copy has them too',
 ok('  and the same entries as the published data',
    embedded.entries.length === data.entries.length,
    embedded.entries.length + ' embedded against ' + data.entries.length + ' published');
-/* As it ships: a build on Windows carries carriage returns that git normalises
-   away before anyone downloads it — see 05-static-build.js.
+/* As it ships: a build on Windows carries carriage returns that git
+   normalises away before anyone downloads it — see 05-static-build.js.
 
-   The ceiling is a round number with room in it, not a measurement of
-   anything. It was 320,000 and the shell had grown to within 350 bytes of it,
-   close enough that the next comment written would have tripped it — and a
-   budget met by writing fewer comments buys nobody a faster page. What it is
-   for is noticing the day something large gets pasted in.
+   What this is for is noticing the day something large gets pasted in. It was
+   a ceiling on the whole file, and it was raised five times in a fortnight —
+   for the palettes, the highlighter, the questions, the figures — every time
+   because something had been built, never once because anything had been
+   pasted. A tripwire that only ever catches the people it was meant to let
+   through is not a tripwire, it is a gate.
 
-   It has been raised four times now, twice in a week, and each time because
-   something had been built and not because anything had been pasted in. The
-   last two were set a feature's width above the shell, which is how a tripwire
-   ends up across the path everybody walks: the palettes wanted 15KB, the
-   highlighter 15KB, the questions 30KB, and every one of them read as a
-   failure before it read as a feature.
-
-   So the number below is not the shell plus a little. It is roughly the shell
-   plus the largest thing anybody has added to it, which is what the test is
-   watching for — and a figure it is worth going and looking at when it does
-   go off. */
-ok('the shell itself stays light', shell.replace(/\r\n/g, '\n').length < 480000,
-   Math.round(shell.length / 1024) + ' KB');
+   So it asks the question it meant to ask. Something pasted in arrives as one
+   enormous line — a minified library, a font, a picture as base64 — and the
+   longest line this page writes for itself is under five hundred characters.
+   A line of two thousand is nothing anybody typed. The ceiling stays as well,
+   loose enough to be worth looking at when it does go off. */
+  const shipped = shell.replace(/\r\n/g, '\n');
+  const lines = shipped.split('\n');
+  const longest = lines.reduce((a, b) => (b.length > a.length ? b : a), '');
+  ok('nothing large has been pasted into the shell',
+     longest.length < 2000, longest.length + ' characters on its longest line');
+  ok('  and nothing is carried in it as base64',
+     !/data:[a-z/+-]+;base64,[A-Za-z0-9+/=]{200,}/.test(shipped), 'none');
+  ok('  with room above the shell for the next feature',
+     shipped.length < 540000, Math.round(shipped.length / 1024) + ' KB');
 
 /* --- and they work in the page ------------------------------------------ */
 (async () => {
@@ -122,9 +124,19 @@ ok('the shell itself stays light', shell.replace(/\r\n/g, '\n').length < 480000,
   /* Whatever the sheet published last: a word out of the first passage, and a
      word out of its title, both taken from the data rather than written down
      here. */
-  const first = data.readings[0];
-  const titleWord = first.title.split(/\s+/).find(x => x.length > 5).toLowerCase()
-    .replace(/[^a-z]/g, '');
+  /* The longest word in the title, whichever passage the sheet happens to
+     have put first — and a passage called "Test 88 P3" has no word in it
+     worth searching for, so the next one along is tried. `find` on a length
+     threshold returned undefined the day such a title reached the top, and
+     the test stopped at the line after it. */
+  const searchable = r => {
+    const w = String(r.title).split(/\s+/)
+      .map(x => x.toLowerCase().replace(/[^a-z]/g, ''))
+      .reduce((a, b) => (b.length > a.length ? b : a), '');
+    return w.length > 5 ? w : '';
+  };
+  const first = data.readings.find(searchable) || data.readings[0];
+  const titleWord = searchable(first);
   typeIn(titleWord);
   await wait(30);
   ok('a passage is found by its name', listed().indexOf(first.title) > -1,
