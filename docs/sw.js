@@ -5,7 +5,7 @@
    The dictionary is 4 MB and the whole point of installing is to be able to
    look a word up on the underground, so index.html and data.json are taken in
    on install rather than waiting to be asked for. */
-var VERSION = '083264ad07d0';
+var VERSION = '9a3593b40a9b';
 var CACHE = 'engrowdict-' + VERSION;
 var SHELL = [
   './',

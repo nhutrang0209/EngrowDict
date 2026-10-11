@@ -1716,6 +1716,7 @@ a.btn[hidden] { display: none; }
   border: 1px solid var(--rule); border-radius: var(--r-s); background: var(--tint);
   display: grid; grid-template-columns: 1fr 1fr; gap: 5px 16px;
 }
+.bank.tall { grid-template-columns: 1fr; gap: 4px; }
 .bank-item { display: flex; gap: 7px; font-size: 13px; min-width: 0; }
 .bank-l { font-family: var(--mono); font-size: 11.5px; color: var(--accent); font-weight: 600; }
 .bank-t { color: var(--ink-2); overflow-wrap: anywhere; }
@@ -1791,6 +1792,9 @@ a.btn[hidden] { display: none; }
   border: 1px solid var(--rule); border-radius: var(--r-s); background: var(--surface);
   font-family: var(--mono); font-size: 12px; padding: 1px 4px; color: var(--ink);
 }
+/* Standing under a question of its own rather than inside a line of notes,
+   where it has room to be the size of a thing you press. */
+.opts > .gap-pick { padding: 5px 9px; font-size: 13px; min-width: 5.5em; }
 
 /* ---- writing a set ------------------------------------------------------
    The marks are the thing here, not scaffolding under prose, so the box shows

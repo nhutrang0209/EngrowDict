@@ -502,7 +502,7 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
   ok('  the options keeping the letters the page gave them',
      /^- A\. Wisdom seems/m.test(said), (said.match(/^- .*/m) || [])[0]);
   ok('  the box of words read as a box and not as four more options',
-     /^\* A opinions$/m.test(said) && /^# Key features/m.test(said),
+     /^\* A\. opinions$/m.test(said) && /^# Key features/m.test(said),
      (said.match(/^\* .*/gm) || []).join(' | '));
   ok('  a sentence broken around its box put back together, box and all',
      /amount of ___\{\} about the limits of our own knowledge\./.test(said),
@@ -925,17 +925,13 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
        .map(n => n.textContent).join(',') === 'i,ii,iii,iv,v,vi',
      [...heads.doc.querySelectorAll('#quiz-preview .bank-l')]
        .map(n => n.textContent).join(','));
-  /* A section is a question in its own right, so its numerals are buttons
-     under it rather than a list inside a line — the select is for a blank
-     standing in the middle of a sentence, which this is not. */
+  /* Six of them is past the four a row of buttons can carry, so a section
+     is answered from a list — which is what the paper does too. */
   ok('  and i is i rather than I, a numeral being not quite a letter',
-     [...heads.doc.querySelectorAll('#quiz-preview .qrow')][0]
-       .querySelectorAll('.opt').length === 6
-     && [...[...heads.doc.querySelectorAll('#quiz-preview .qrow')][0]
-          .querySelectorAll('.opt')].map(b => b.textContent).join(',')
-          === 'i,ii,iii,iv,v,vi',
-     [...[...heads.doc.querySelectorAll('#quiz-preview .qrow')][0]
-       .querySelectorAll('.opt')].map(b => b.textContent).join(','));
+     [...heads.doc.querySelectorAll('#quiz-preview .opts select')[0].options]
+       .map(o => o.value).filter(Boolean).join(',') === 'i,ii,iii,iv,v,vi',
+     [...heads.doc.querySelectorAll('#quiz-preview .opts select')[0].options]
+       .map(o => o.value).join(','));
 
   /* Two numerals in a sentence are two numerals in a sentence. */
   heads.doc.getElementById('quiz-body').value =
@@ -945,6 +941,80 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
   ok('two numerals in a line are not a list, and nothing is broken over them',
      /already written in marks/.test(heads.doc.getElementById('quiz-msg').textContent),
      heads.doc.getElementById('quiz-msg').textContent.slice(0, 40));
+
+  /* --- a heading list set out one to a line ------------------------------
+
+     The same list, copied off a page that set each heading on its own line
+     rather than running them together. Only the one-character numerals — i
+     and v — were read as labels, because the thing that read a label could
+     read one character; the other six fell through, and six sections came
+     out with two headings to choose between. */
+  const DOWN = [
+    'Choose the correct heading for each section from the list below.',
+    '',
+    'Headings',
+    'i. The first heading goes here',
+    'ii. The second heading goes here',
+    'iii. The third heading goes here',
+    'iv. The fourth heading goes here',
+    'v. The fifth heading goes here',
+    'vi. The sixth heading goes here',
+    '',
+    '27.',
+    'Section A --',
+    '28.',
+    'Section B --',
+  ].join('\n');
+
+  const listed = mk(null, unlockedStore());
+  await wait(900);
+  click(listed.window, tabQ(listed));
+  await wait(50);
+  click(listed.window, listed.doc.getElementById('add-word'));
+  await wait(40);
+  listed.doc.getElementById('quiz-body').value = DOWN;
+  click(listed.window, listed.doc.getElementById('quiz-tidy'));
+  await wait(80);
+  const dgot = listed.doc.getElementById('quiz-body').value;
+
+  ok('a heading to a line is read as a heading, numeral and all',
+     (dgot.match(/^\* /gm) || []).length === 6
+     && /^\* vi\. The sixth heading goes here$/m.test(dgot),
+     (dgot.match(/^\* .*/gm) || []).length + ' read');
+  ok('  and the word that introduces the list is not one of the questions',
+     !/^Headings/m.test(dgot) && /^Section A = $/m.test(dgot),
+     (dgot.match(/^Section A.*/m) || [])[0] || 'missing');
+  ok('  so the sections are numbered from where the page numbered them',
+     nums(listed).length === 0 && /27–28/.test(listed.doc.getElementById('quiz-tally').textContent),
+     listed.doc.getElementById('quiz-tally').textContent);
+
+  /* --- eight of them is a list to choose from, not a wall of buttons ------
+
+     Three words to judge a statement by are three buttons and read as three
+     buttons. Eight headings against six sections are forty-eight, and a
+     paper does not print them that way either: it prints the list once,
+     above, and leaves a box to write the number in. */
+  ok('past four bare labels the answer is chosen from a list',
+     listed.doc.querySelectorAll('#quiz-preview .opts select').length === 2
+     && listed.doc.querySelectorAll('#quiz-preview .opt').length === 0,
+     listed.doc.querySelectorAll('#quiz-preview .opts select').length + ' lists, '
+       + listed.doc.querySelectorAll('#quiz-preview .opt').length + ' buttons');
+  ok('  carrying every heading there is, as written',
+     [...listed.doc.querySelector('#quiz-preview .opts select').options]
+       .map(o => o.value).filter(Boolean).join(',') === 'i,ii,iii,iv,v,vi',
+     [...listed.doc.querySelector('#quiz-preview .opts select').options]
+       .map(o => o.value).filter(Boolean).join(','));
+
+  listed.doc.getElementById('quiz-body').value =
+    '? tfng\nA statement to judge. = T\n\n? choice\nA question? = A\n'
+    + '- The first answer\n- The second answer';
+  listed.doc.getElementById('quiz-body')
+    .dispatchEvent(new listed.window.Event('input'));
+  await wait(300);
+  ok('  while three words, and answers that carry their own, stay buttons',
+     listed.doc.querySelectorAll('#quiz-preview .opts select').length === 0
+     && listed.doc.querySelectorAll('#quiz-preview .opt').length === 5,
+     listed.doc.querySelectorAll('#quiz-preview .opt').length + ' buttons');
 
   /* --- labelling a diagram ------------------------------------------------
 
@@ -1131,5 +1201,5 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
                      w.errs, back.errs, late.errs, t.errs, d2.errs,
                      old88.errs, down.errs, dark.errs, stale.errs, fresh.errs,
                      band.errs, other.errs, fig.errs, named.errs, heads.errs,
-                     lab.errs));
+                     lab.errs, listed.errs));
 })();

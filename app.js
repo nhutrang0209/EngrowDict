@@ -4282,7 +4282,7 @@
   /* What the other page left behind that means nothing here: its own report
      link, the row of letters standing in for a box, the second line of an
      instruction that only says again how to write the answer down. */
-  var QNOISE = /^(!|report|[A-Z]\s*[-–]\s*[A-Z]|write (the|your) (correct )?(letter|answer)s?\b.*|questions?\s+\d+\s*[-–]\s*\d+)$/i;
+  var QNOISE = /^(!|report|[A-Z]\s*[-–]\s*[A-Z]|write (the|your) (correct )?(letter|answer)s?\b.*|questions?\s+\d+\s*[-–]\s*\d+|(list of )?headings?|list of words)$/i;
 
   /* "27." is the number over a question. "(31)" is a box in the middle of a
      sentence that the paste broke onto a line of its own. The brackets are
@@ -4317,7 +4317,13 @@
 
   var QNUM = /^(\d{1,2})\s*[.):]?$/;                // 27.  27)  27
   var QGAP = /^\((\d{1,2})\)$/;                     // (31)
-  var QOPT = /^\(?([A-Za-z])\)?[.)]\s+(.+)$/;       // A. …   B) …
+  /* A. …  B) …  iii. …  7. …
+     Labels only: a single letter, a numeral, or a number. Anything wider
+     would read "Mr. Smith arrived" as the option Smith arrived, labelled
+     Mr — and a page of questions has more abbreviations in it than it has
+     options. The numerals go first in the alternation, or viii reads as v
+     followed by iii. */
+  var QOPT = new RegExp("^\\(?(" + ROMANS + "|[A-Za-z]|\\d{1,2})\\)?[.)]\\s+(.+)$");
   /* The buttons, printed. One to a line where the page stacked them, or all
      three on one where it did not.
 
@@ -4536,7 +4542,11 @@
         if (kind === "summary" || kind === "match" || kind === "notes") {
           if (!seenBlank) {
             ensureOpen();
-            out.push("* " + m[1].toUpperCase() + " " + m[2]);
+            /* As written, and with the stop kept, so the one that reads it
+               back knows the label from the words. A box of words is
+               lettered in capitals and a list of headings is numbered in
+               small letters, and whoever copied it had them right. */
+            out.push("* " + m[1] + ". " + m[2]);
             bank++;
             return;
           }
@@ -5786,7 +5796,12 @@
     var box = el("section", "task");
     if (t.tell) box.appendChild(el("p", "tell", t.tell));
     if (t.bank.length) {
-      var bank = el("div", "bank");
+      /* Two to a row for a box of single words, one to a row for a list of
+         headings: a heading is a sentence, and two sentences side by side in
+         a narrow column are four lines of torn text. */
+      var wordy = false;
+      t.bank.forEach(function (b) { if (b.text.length > 34) wordy = true; });
+      var bank = el("div", "bank" + (wordy ? " tall" : ""));
       t.bank.forEach(function (b) {
         var one = el("div", "bank-item");
         one.appendChild(el("span", "bank-l", b.letter));
@@ -5800,6 +5815,13 @@
     box.appendChild(body);
     return box;
   }
+
+  /* Past this many, a row of buttons is a wall. Three words to judge a
+     statement by are three buttons and read as three buttons; eight headings
+     to hang on six sections are forty-eight, and a paper does not print
+     them that way either — it prints the list once, above, and leaves a
+     box to write the number in. */
+  var AS_LIST = 4;
 
   function rowNode(row, r) {
     if (row.kind === "img") return figNode(row);
@@ -5828,8 +5850,16 @@
       var opts = row.opts.length
         ? row.opts.map(function (text, i) { return { v: letterAt(i), text: text }; })
         : (row.slot.pick || []).map(function (v) { return { v: v, text: "" }; });
-      if (opts.length) node.appendChild(picker(row.slot, opts, r));
-      else node.appendChild(typeIn(row.slot, r));
+      var bare = !row.opts.length;           // labels alone, with no words
+      if (bare && opts.length > AS_LIST) {
+        var box = el("div", "opts");
+        box.appendChild(pickOne(row.slot, row.slot.pick || [], r));
+        node.appendChild(box);
+      } else if (opts.length) {
+        node.appendChild(picker(row.slot, opts, r));
+      } else {
+        node.appendChild(typeIn(row.slot, r));
+      }
     }
     return node;
   }
@@ -5933,7 +5963,12 @@
      than under one. */
   function pickOne(s, opts, r) {
     var sel = el("select", "gap-pick");
-    sel.appendChild(el("option", null, "–"));
+    /* Nothing chosen, and nothing chosen is not a dash: an option with no
+       value of its own answers with whatever is written in it, and a reader
+       who has not answered would have answered "–". */
+    var none = el("option", null, "–");
+    none.value = "";
+    sel.appendChild(none);
     opts.forEach(function (v) {
       var o = el("option", null, v);
       o.value = v;
