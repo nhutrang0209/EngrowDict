@@ -240,7 +240,9 @@ const mk = store => boot({
     toString: () => 'abating',
     getRangeAt: () => ({ getBoundingClientRect: () => ({ left: 80, top: 150, width: 50, bottom: 166 }) }),
   });
-  doc.querySelector('.read .prose').dispatchEvent(new w.Event('mouseup'));
+  // a real mouseup bubbles, and the card listens above the prose
+  doc.querySelector('.read .prose')
+    .dispatchEvent(new w.Event('mouseup', { bubbles: true }));
   await wait(30);
   ok('selecting text while it is open feeds it instead of the small card',
      qbox().value === 'abating' &&

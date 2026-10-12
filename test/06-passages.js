@@ -233,7 +233,10 @@ ok('  and the same entries as the published data',
       getRangeAt: () => ({ getBoundingClientRect: () => ({ left: 100, top: 200, width: 60, bottom: 216 }) }),
     });
     const prose = doc.querySelector('.read .prose');
-    prose.dispatchEvent(new w.Event('mouseup'));
+    // A real mouseup bubbles, and the card listens above the prose now:
+    // it is on the whole of what is being read, so that a word in the
+    // title can be looked up the way a word in a paragraph can.
+    prose.dispatchEvent(new w.Event('mouseup', { bubbles: true }));
     return new Promise(r => setTimeout(r, 20));
   }
   const card = () => doc.getElementById('lookup');

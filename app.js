@@ -3008,10 +3008,20 @@
     w.appendChild(hint);
     var prose = el("div", "prose");
     r.paras.forEach(function (x) { prose.appendChild(proseNode(x)); });
-    prose.addEventListener("mouseup", onSelectInProse);
-    prose.addEventListener("touchend", onSelectInProse);
     paintHilites(prose);
     w.appendChild(prose);
+    /* On the whole of it rather than on the paragraphs alone. A title is
+       words of the passage too, and a reader who meets an unfamiliar one in
+       "The Uffington White Horse" selects it exactly as they would three
+       lines further down — and until now got nothing for it, because the
+       card was listening to the prose and a title is not in the prose.
+
+       Everything the card offers over and above the word itself still works
+       off where the selection is: the dot and the highlighter look for the
+       paragraphs and find none here, so they are not offered over a title,
+       which is right — there is no place to keep in a title. */
+    w.addEventListener("mouseup", onSelectToLookUp);
+    w.addEventListener("touchend", onSelectToLookUp);
     return w;
   }
 
@@ -3122,8 +3132,8 @@
        an English notebook, and a Vietnamese word selected in it would be
        looked up in the one language it cannot help with. */
     if (trTo() === "en") {
-      out.addEventListener("mouseup", onSelectInProse);
-      out.addEventListener("touchend", onSelectInProse);
+      out.addEventListener("mouseup", onSelectToLookUp);
+      out.addEventListener("touchend", onSelectToLookUp);
     }
     right.appendChild(out);
 
@@ -5889,6 +5899,11 @@
     head.appendChild(x);
     w.appendChild(head);
     w.appendChild(quizBody(r));
+    /* The questions carry as much unfamiliar English as the passage does,
+       and more of it per line. Pressing a button or typing in a box leaves
+       no selection, so the card stays out of the way of answering. */
+    w.addEventListener("mouseup", onSelectToLookUp);
+    w.addEventListener("touchend", onSelectToLookUp);
     return w;
   }
 
@@ -6924,7 +6939,10 @@
   var LOOKUP_MAX = 300;
   var lookupCard = null;
 
-  function onSelectInProse(ev) {
+  /* Anything being read: the passage, its title, and the questions set on
+     it. Not the list beside them and not the chrome — only the places where
+     the words are the point. */
+  function onSelectToLookUp(ev) {
     /* Where the pointer came down, before the selection is looked at: a click
        on a highlight with nothing selected is a reader pointing at one of
        their own marks, and the only thing they can mean by it is take it off.

@@ -723,6 +723,71 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
      && !!JSON.parse(dark.store['engrowdict:quizzes:v1'] || '{}')[base.readings[0].title],
      dark.doc.getElementById('banner').textContent.slice(0, 50));
 
+  /* --- where the card opens ------------------------------------------------
+
+     It was listening to the paragraphs, so a title got nothing and a
+     question got nothing — and the questions are where the unfamiliar
+     English is thickest, line for line.
+
+     What the card offers over and above the word still depends on where the
+     selection is: there is no place to keep in a title and nothing to
+     highlight in a question, so the dot and the highlighter are not offered
+     in either. They find the paragraphs, and neither is in them. */
+  function selectAll(g, node) {
+    const r = g.doc.createRange();
+    r.selectNodeContents(node);
+    g.window.getSelection().removeAllRanges();
+    g.window.getSelection().addRange(r);
+    node.dispatchEvent(new g.window.Event('mouseup', { bubbles: true }));
+  }
+
+  const look = mk('? tfng 7\nA statement about wisdom. = T');
+  await wait(900);
+  click(look.window, tabQ(look));
+  await wait(50);
+  click(look.window, look.doc.querySelector('.hit'));
+  await wait(90);
+
+  selectAll(look, look.doc.querySelector('.detail .read h1'));
+  await wait(90);
+  const card = () => look.doc.getElementById('lookup');
+  ok('selecting a word in the title opens the card on it',
+     !!card() && !card().hidden
+     && card().querySelector('.picked').textContent.indexOf(
+          look.doc.querySelector('.detail .read h1').textContent) > -1,
+     card() ? 'open' : 'nothing');
+  ok('  without the dot or the highlighter, there being no place in a title',
+     !look.doc.getElementById('mark-here')
+     && !look.doc.getElementById('highlight-this'),
+     'neither offered');
+
+  selectAll(look, look.doc.querySelector('#quiz-pane .qtext'));
+  await wait(90);
+  ok('and selecting one in a question opens it there too',
+     !!card() && !card().hidden
+     && /A statement about wisdom/.test(card().querySelector('.picked').textContent),
+     card() && !card().hidden ? 'open' : 'nothing');
+  ok('  and the same two are not offered over a question either',
+     !look.doc.getElementById('mark-here')
+     && !look.doc.getElementById('highlight-this'),
+     'neither offered');
+
+  /* Pressing an answer leaves no selection, so the card keeps out of the
+     way of the thing the column is for. A press is a mouseup and then a
+     click, in that order, with nothing selected by the time either lands —
+     and it is the mouseup the card listens to. */
+  const press = (g, node) => {
+    g.window.getSelection().removeAllRanges();
+    node.dispatchEvent(new g.window.Event('mouseup', { bubbles: true }));
+    click(g.window, node);
+  };
+  press(look, look.doc.querySelector('#quiz-pane .opt'));
+  await wait(80);
+  ok('  while answering one leaves the card out of it',
+     card().hidden && look.doc.querySelector('#quiz-pane .opt')
+       .getAttribute('aria-pressed') === 'true',
+     'answered, card shut');
+
   /* --- the diagram a set is about -----------------------------------------
 
      A figure is one line: the file or the address of it, and whatever goes
@@ -1333,5 +1398,5 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
                      w.errs, back.errs, late.errs, t.errs, d2.errs,
                      old88.errs, down.errs, dark.errs, stale.errs, fresh.errs,
                      band.errs, other.errs, fig.errs, named.errs, heads.errs,
-                     lab.errs, listed.errs, stuck.errs, apart.errs));
+                     lab.errs, listed.errs, stuck.errs, apart.errs, look.errs));
 })();

@@ -195,7 +195,9 @@ async function searchFor(g, text) {
       getBoundingClientRect: () => ({ left: 100, top: 200, width: 60, bottom: 216 }),
     }),
   });
-  g.doc.querySelector('.read .prose').dispatchEvent(new g.window.Event('mouseup'));
+  // a real mouseup bubbles, and the card listens above the prose
+  g.doc.querySelector('.read .prose')
+    .dispatchEvent(new g.window.Event('mouseup', { bubbles: true }));
   await wait(40);
   const picked = (g.doc.querySelector('#lookup .picked') || {}).textContent || '';
   ok('selecting the other name in a passage opens the entry it belongs to',
