@@ -1087,6 +1087,67 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
      && stuck.doc.getElementById('quiz-body').value === sgot,
      stuck.doc.getElementById('quiz-msg').textContent.slice(0, 46));
 
+  /* --- the same mess, broken differently ---------------------------------
+
+     The list does not always arrive glued into one line. Something — an
+     older build, or a reader trying to help it along — breaks it up, and
+     then it is eight questions nobody can answer instead of one. It is the
+     same list either way: three lines in a row each numbered, in order, is
+     a list of headings and not three questions. */
+  const APART = [
+    '? short 27',
+    'The Reading Passage has six sections, A-F. Choose the correct heading '
+      + 'for each from the list below. Headings = ',
+    'i. The first one here = ',
+    'ii. The second one here = ',
+    'iii. The third one here = ',
+    'iv. The fourth one here = ',
+    'Section A -- = ',
+    'Section B -- = ',
+    '',
+    '! Choose the correct letter.',
+    '? choice',
+    'What is the purpose of Section A? = B',
+    '- A. offering a solution',
+    '- B. defending a viewpoint',
+  ].join('\n');
+
+  const apart = mk(null, unlockedStore());
+  await wait(900);
+  click(apart.window, tabQ(apart));
+  await wait(50);
+  click(apart.window, apart.doc.getElementById('add-word'));
+  await wait(40);
+  apart.doc.getElementById('quiz-body').value = APART;
+  click(apart.window, apart.doc.getElementById('quiz-tidy'));
+  await wait(80);
+  const agot = apart.doc.getElementById('quiz-body').value;
+
+  ok('a heading to a line, each read as a question, is still one list',
+     (agot.match(/^\* /gm) || []).length === 4 && /^\? match 27$/m.test(agot),
+     (agot.match(/^\* .*/gm) || []).length + ' gathered');
+  ok('  and the line they stood under was their instruction all along',
+     /^! The Reading Passage has six sections/m.test(agot)
+     && !/\bHeadings\b/.test(agot),
+     (agot.match(/^!.*/m) || [])[0].slice(0, 44));
+  ok('  leaving the sections as the only questions there were',
+     /^Section A = $/m.test(agot) && !/^i\. /m.test(agot),
+     apart.doc.getElementById('quiz-tally').textContent);
+  ok('  with everything past them untouched, answers and all',
+     /^What is the purpose of Section A\? = B$/m.test(agot)
+     && /^- A\. offering a solution$/m.test(agot),
+     (agot.match(/^What is.*/m) || [])[0]);
+
+  /* Two numbered lines in a row are two numbered lines in a row. */
+  apart.doc.getElementById('quiz-body').value =
+    '? short\ni. Only one of these = \nii. And a second = ';
+  click(apart.window, apart.doc.getElementById('quiz-tidy'));
+  await wait(60);
+  ok('two of them in a row are not a list, and are left as the questions they are',
+     /nothing in it needs putting right/
+       .test(apart.doc.getElementById('quiz-msg').textContent),
+     apart.doc.getElementById('quiz-msg').textContent.slice(0, 44));
+
   /* --- labelling a diagram ------------------------------------------------
 
      The one task where the answer comes before the words: a box, then what
@@ -1272,5 +1333,5 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
                      w.errs, back.errs, late.errs, t.errs, d2.errs,
                      old88.errs, down.errs, dark.errs, stale.errs, fresh.errs,
                      band.errs, other.errs, fig.errs, named.errs, heads.errs,
-                     lab.errs, listed.errs, stuck.errs));
+                     lab.errs, listed.errs, stuck.errs, apart.errs));
 })();

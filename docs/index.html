@@ -6868,38 +6868,89 @@ a.btn[hidden] { display: none; }
      and leaves every other line exactly as it stands.
 
      Eight numerals in order inside one question is not a question. */
+  /* One heading on its own line, numbered. Three of those in a row is the
+     same list as eight numerals inside one line, broken differently. */
+  var ROMAN_ONE = new RegExp("^(" + ROMANS + ")[.)]\\s+(\\S.*)$");
+
   function mendMarks(text) {
     var lines = String(text).split(/\r?\n/);
-    var out = [], kindAt = -1, mended = 0;
+    var out = [], kindAt = -1, mended = 0, i = 0;
 
-    lines.forEach(function (line) {
-      if (/^\s*\?\s*[A-Za-z]/.test(line)) { kindAt = out.length; out.push(line); return; }
-      if (!line.trim() || /^\s*[!*@#>-]/.test(line)) { out.push(line); return; }
+    function marked(l) {
+      return !l.trim() || /^\s*[!*@#>-]/.test(l) || /^\s*\?\s*[A-Za-z]/.test(l);
+    }
+    /* The words of a line, with whatever answer was typed after them kept
+       aside: the answer stays with its question, whatever happens in front
+       of it. */
+    function split(l) {
+      var t = TAIL_RE.exec(l);
+      return t ? { bare: l.slice(0, t.index), ans: l.slice(t.index) }
+               : { bare: l, ans: "" };
+    }
+    function asMatch() {
+      if (kindAt > -1) {
+        out[kindAt] = out[kindAt].replace(/^(\s*\?\s*)[A-Za-z]+/, "$1match");
+      }
+    }
+    /* The line a list of headings was standing under was its instruction,
+       and was read as a question only because nothing had split the list
+       off it yet. */
+    function leadWasInstruction() {
+      var last = out.length - 1;
+      if (last < 0 || marked(out[last])) return;
+      var said = split(out[last]).bare
+        .replace(/\b(list of )?headings?\b[\s:]*$/i, "").trim();
+      if (said) out[last] = "! " + said; else out.pop();
+    }
 
-      /* The answer somebody typed stays with its question, whatever happens
-         to the words in front of it. */
-      var tail = TAIL_RE.exec(line);
-      var bare = tail ? line.slice(0, tail.index) : line;
-      var ans = tail ? line.slice(tail.index) : "";
+    while (i < lines.length) {
+      var line = lines[i];
+      if (/^\s*\?\s*[A-Za-z]/.test(line)) { kindAt = out.length; out.push(line); i++; continue; }
+      if (marked(line)) { out.push(line); i++; continue; }
 
-      var heads = headingsFrom(bare);
+      var cut = split(line);
+
+      /* The whole list inside this one line. */
+      var heads = headingsFrom(cut.bare);
       if (heads) {
         var lead = heads.head.replace(/\b(list of )?headings?\b[\s:]*$/i, "").trim();
         if (lead) out.push("! " + lead);
         heads.items.forEach(function (h) { out.push("* " + h.lab + ". " + h.text); });
-        /* And the task it was sitting in is a matching task, whatever the
-           build that wrote it decided. */
-        if (kindAt > -1) {
-          out[kindAt] = out[kindAt].replace(/^(\s*\?\s*)[A-Za-z]+/, "$1match");
-        }
+        asMatch();
         mended++;
-        return;
+        i++;
+        continue;
       }
 
-      var less = bare.replace(DOTS_TAIL, "");
-      if (less !== bare && less.trim()) { out.push(less + ans); mended++; return; }
+      /* Or the same list, a heading to a line, each read as a question of
+         its own — which is what it looks like once something has broken the
+         line up without knowing what it was breaking. */
+      var run = [], j = i;
+      while (j < lines.length && !marked(lines[j])) {
+        var m2 = ROMAN_ONE.exec(split(lines[j]).bare.trim());
+        if (!m2) break;
+        run.push({ lab: m2[1].toLowerCase(), text: m2[2].trim() });
+        j++;
+      }
+      if (run.length >= 3) {
+        leadWasInstruction();
+        run.forEach(function (h) { out.push("* " + h.lab + ". " + h.text); });
+        asMatch();
+        mended += run.length;
+        i = j;
+        continue;
+      }
+
+      var less = cut.bare.replace(DOTS_TAIL, "");
+      if (less !== cut.bare && less.trim()) {
+        out.push(less + cut.ans);
+        mended++;
+        i++;
+        continue;
+      }
       out.push(line);
-    });
+      i++;
+    }
 
     return mended ? { text: out.join("\n"), mended: mended } : null;
   }
