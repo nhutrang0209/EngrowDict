@@ -1016,6 +1016,77 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
      && listed.doc.querySelectorAll('#quiz-preview .opt').length === 5,
      listed.doc.querySelectorAll('#quiz-preview .opt').length + ' buttons');
 
+  /* --- a set an older build left in a mess -------------------------------
+
+     A set written before any of this knew a numeral could be a label
+     carries the whole list of headings glued to the end of a question, and
+     the dashes a page drew its answer boxes with left in the words. Tidy
+     refused to look at it, because it was already in marks — and said there
+     was nothing to put right, over a set the reader could see was wrong.
+
+     Re-reading the whole thing is not on offer: the answers in it were typed
+     by hand. So only what is unmistakably wrong is put right, and every
+     other line is left exactly as it stands. */
+  const STUCK = [
+    '? short 27',
+    'The Reading Passage has six sections, A-F. Choose the correct heading '
+      + 'for each from the list below. Headings i. The first one here '
+      + 'ii. The second one here iii. The third one here iv. The fourth one '
+      + 'here v. The fifth one here vi. The sixth one here = ',
+    'Section A -- = ',
+    'Section B -- = ',
+    '',
+    '! Choose the correct letter.',
+    '? choice',
+    'What is the purpose of Section A? = B',
+    '- A. offering a solution',
+    '- B. defending a viewpoint',
+  ].join('\n');
+
+  const stuck = mk(null, unlockedStore());
+  await wait(900);
+  click(stuck.window, tabQ(stuck));
+  await wait(50);
+  click(stuck.window, stuck.doc.getElementById('add-word'));
+  await wait(40);
+  stuck.doc.getElementById('quiz-body').value = STUCK;
+  click(stuck.window, stuck.doc.getElementById('quiz-tidy'));
+  await wait(80);
+  const sgot = stuck.doc.getElementById('quiz-body').value;
+
+  ok('a set already in marks is looked at before it is said to be fine',
+     /put right/.test(stuck.doc.getElementById('quiz-msg').textContent),
+     stuck.doc.getElementById('quiz-msg').textContent);
+  ok('  the list of headings glued to a question is set out as a list',
+     (sgot.match(/^\* /gm) || []).length === 6 && /^\? match 27$/m.test(sgot),
+     (sgot.match(/^\?.*/gm) || []).join(' | '));
+  ok('  with the words in front of it kept as the instruction they are',
+     /^! The Reading Passage has six sections/m.test(sgot)
+     && !/^!.*The first one here/m.test(sgot),
+     (sgot.match(/^!.*/m) || [])[0].slice(0, 46));
+  ok('  and the box a page drew taken out of the words',
+     /^Section A = $/m.test(sgot) && !/--/.test(sgot),
+     (sgot.match(/^Section A.*/m) || [])[0]);
+
+  /* The point of doing only this much. */
+  ok('everything else is left exactly as it stands, answers and all',
+     /^What is the purpose of Section A\? = B$/m.test(sgot)
+     && /^- A\. offering a solution$/m.test(sgot)
+     && /^! Choose the correct letter\.$/m.test(sgot),
+     (sgot.match(/^What is.*/m) || [])[0]);
+  ok('  so the answer that was typed is still the answer',
+     /3 questions/.test(stuck.doc.getElementById('quiz-tally').textContent)
+     && /2 unanswered/.test(stuck.doc.getElementById('quiz-tally').textContent),
+     stuck.doc.getElementById('quiz-tally').textContent);
+
+  click(stuck.window, stuck.doc.getElementById('quiz-tidy'));
+  await wait(60);
+  ok('and a set with nothing wrong in it is told so, rather than read again',
+     /nothing in it needs putting right/
+       .test(stuck.doc.getElementById('quiz-msg').textContent)
+     && stuck.doc.getElementById('quiz-body').value === sgot,
+     stuck.doc.getElementById('quiz-msg').textContent.slice(0, 46));
+
   /* --- labelling a diagram ------------------------------------------------
 
      The one task where the answer comes before the words: a box, then what
@@ -1201,5 +1272,5 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
                      w.errs, back.errs, late.errs, t.errs, d2.errs,
                      old88.errs, down.errs, dark.errs, stale.errs, fresh.errs,
                      band.errs, other.errs, fig.errs, named.errs, heads.errs,
-                     lab.errs, listed.errs));
+                     lab.errs, listed.errs, stuck.errs));
 })();

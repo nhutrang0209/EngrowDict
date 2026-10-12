@@ -6841,6 +6841,53 @@ a.btn[hidden] { display: none; }
     }
   }
 
+  /* ---- putting right what is already in marks ----------------------------
+
+     A set written by an older build of this page carries whatever that build
+     could not read — a list of headings glued to the end of a question,
+     because nothing then knew a numeral could be a label; the dashes a page
+     drew its answer box with, left in the words. Re-reading the whole thing
+     is not on offer: the answers in it were typed by hand and a fresh read
+     would throw them away. This puts right only what is unmistakably wrong
+     and leaves every other line exactly as it stands.
+
+     Eight numerals in order inside one question is not a question. */
+  function mendMarks(text) {
+    var lines = String(text).split(/\r?\n/);
+    var out = [], kindAt = -1, mended = 0;
+
+    lines.forEach(function (line) {
+      if (/^\s*\?\s*[A-Za-z]/.test(line)) { kindAt = out.length; out.push(line); return; }
+      if (!line.trim() || /^\s*[!*@#>-]/.test(line)) { out.push(line); return; }
+
+      /* The answer somebody typed stays with its question, whatever happens
+         to the words in front of it. */
+      var tail = TAIL_RE.exec(line);
+      var bare = tail ? line.slice(0, tail.index) : line;
+      var ans = tail ? line.slice(tail.index) : "";
+
+      var heads = headingsFrom(bare);
+      if (heads) {
+        var lead = heads.head.replace(/\b(list of )?headings?\b[\s:]*$/i, "").trim();
+        if (lead) out.push("! " + lead);
+        heads.items.forEach(function (h) { out.push("* " + h.lab + ". " + h.text); });
+        /* And the task it was sitting in is a matching task, whatever the
+           build that wrote it decided. */
+        if (kindAt > -1) {
+          out[kindAt] = out[kindAt].replace(/^(\s*\?\s*)[A-Za-z]+/, "$1match");
+        }
+        mended++;
+        return;
+      }
+
+      var less = bare.replace(DOTS_TAIL, "");
+      if (less !== bare && less.trim()) { out.push(less + ans); mended++; return; }
+      out.push(line);
+    });
+
+    return mended ? { text: out.join("\n"), mended: mended } : null;
+  }
+
   /* The same reading the button does, done without being asked, and silent
      about everything except what it found. */
   function autoTidy() {
@@ -6870,7 +6917,20 @@ a.btn[hidden] { display: none; }
     var raw = String(box.value || "");
     if (!raw.trim()) { quizMsg("Paste the questions in first.", ""); return; }
     if (/^\s*\?\s*[A-Za-z]/m.test(raw)) {
-      quizMsg("That is already written in marks — there is nothing to tidy.", "");
+      /* Already in marks, which is not the same as already right. A set
+         written by an older build carries what that build could not read,
+         and saying "nothing to tidy" over one of those was saying something
+         untrue about a thing the reader could see was wrong. */
+      var mend = mendMarks(raw);
+      if (!mend) {
+        quizMsg("That is already written in marks, and nothing in it needs "
+          + "putting right.", "");
+        return;
+      }
+      box.value = mend.text;
+      drawQuizPreview();
+      quizMsg(plural(mend.mended, "line", "lines") + " put right — the rest is "
+        + "left exactly as it was.", "warn");
       return;
     }
     var said = tidyQuiz(raw);
