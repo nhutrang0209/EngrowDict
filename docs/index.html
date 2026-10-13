@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="build" content="b5829b3efb94">
+<meta name="build" content="8f2d76f084d6">
 <meta name="description" content="Look up 11,558 English-Vietnamese entries: phonetics, English definitions, Vietnamese meanings.">
 <link rel="preload" href="data.json" as="fetch" crossorigin>
 <link rel="manifest" href="manifest.webmanifest">
@@ -6621,17 +6621,28 @@ a.btn[hidden] { display: none; }
       /* The box, alone on its line or at the start of one. Labelling a
          diagram is the one task where the answer comes before the words,
          and a page that draws it that way copies it that way. */
+      /* A box in a summary stands in the sentence, between the words either
+         side of it: "called ...... . He separated" is one sentence with a
+         gap in it. A box in a set of notes stands in front of the thing it
+         labels, on a line of its own, because that is how a diagram is
+         labelled. Same three dots, two different places, and which it is is
+         which kind of task they are in.
+
+         Run as a label in a summary, the last box of all had nothing after
+         it to label and was simply lost — which is a question the reader can
+         see on the page and cannot answer. */
       if (DOTS.test(line)) {
-        boxNext = true;
         sawQ = true;
         if (!kind) sayKind("notes");
+        if (kind === "summary") { ensureOpen(); body.push("___{}"); seenBlank = true; }
+        else boxNext = true;
         return;
       }
       if ((m = DOTS_LEAD.exec(line))) {
-        boxNext = true;
         sawQ = true;
         if (!kind) sayKind("notes");
-        line = m[1];
+        if (kind === "summary") { line = "___{} " + m[1]; seenBlank = true; }
+        else { boxNext = true; line = m[1]; }
       }
 
       if ((m = QGAP.exec(line))) {
@@ -6648,6 +6659,11 @@ a.btn[hidden] { display: none; }
         sawQ = true;
         ensureOpen();
         flushSaid();
+        /* And the paragraph as well as the question. A summary numbered 6
+           and 7 is two sentences with a gap in each, not one paragraph with
+           two — and run together, the second gap landed in the middle of the
+           first sentence's words. */
+        flushBody();
         return;
       }
 

@@ -1348,6 +1348,59 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
        === 'Options',
      (rowset.doc.querySelector('#quiz-preview .bank-lab') || {}).textContent);
 
+  /* --- a summary numbered item by item ------------------------------------
+
+     Two sentences with a gap in each, not one paragraph with two in it. Run
+     together, the second gap landed in the middle of the first sentence's
+     words — and the last box of all, having nothing after it to stand in
+     front of, was lost altogether. That is a question a reader can see on
+     the page and cannot answer.
+
+     Which is the whole of the difference between the two places a box can
+     be. In a summary it stands in the sentence, between the words either
+     side of it. In a set of notes it stands in front of the thing it labels,
+     because that is how a diagram is labelled. Same three dots. */
+  const SUMS = [
+    'Complete the following summary of the paragraphs of Reading Passage. '
+      + 'Using NO MORE THAN TWO WORDS for each answer.',
+    '',
+    '6.',
+    'The one who studied them first is called',
+    '...',
+    '. He sorted them into two groups.',
+    '7.',
+    'The work was used in medicine as early as the year of',
+    '...',
+  ].join('\n');
+
+  const sums = mk(null, unlockedStore());
+  await wait(900);
+  click(sums.window, tabQ(sums));
+  await wait(50);
+  click(sums.window, sums.doc.getElementById('add-word'));
+  await wait(40);
+  sums.doc.getElementById('quiz-body').value = SUMS;
+  click(sums.window, sums.doc.getElementById('quiz-tidy'));
+  await wait(90);
+  const ugot = sums.doc.getElementById('quiz-body').value;
+
+  ok('a numbered item is an item, in a body as much as in a list',
+     /^The one who studied them first is called ___\{\}\. He sorted them into two groups\.$/m
+       .test(ugot)
+     && /^The work was used in medicine as early as the year of ___\{\}$/m.test(ugot),
+     (ugot.match(/^The .*/gm) || []).length + ' sentences');
+  ok('  the gap standing in the sentence, between the words either side of it',
+     /called ___\{\}\. He sorted/.test(ugot), 'in the middle');
+  ok('  and the last of all kept, having nothing after it to stand before',
+     /year of ___\{\}$/m.test(ugot), 'kept');
+  ok('  so both are questions, numbered from where the page numbered them',
+     /2 questions/.test(sums.doc.getElementById('quiz-tally').textContent)
+     && /6–7/.test(sums.doc.getElementById('quiz-tally').textContent),
+     sums.doc.getElementById('quiz-tally').textContent);
+  ok('  and read as two lines rather than one run together',
+     sums.doc.querySelectorAll('#quiz-preview .qline').length === 2,
+     sums.doc.querySelectorAll('#quiz-preview .qline').length + ' lines');
+
   /* --- labelling a diagram ------------------------------------------------
 
      The one task where the answer comes before the words: a box, then what
@@ -1534,5 +1587,5 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
                      old88.errs, down.errs, dark.errs, stale.errs, fresh.errs,
                      band.errs, other.errs, fig.errs, named.errs, heads.errs,
                      lab.errs, listed.errs, stuck.errs, apart.errs, look.errs,
-                     para.errs, rowset.errs));
+                     para.errs, rowset.errs, sums.errs));
 })();
