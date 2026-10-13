@@ -5794,6 +5794,19 @@
     return /\bbox\s+\d{1,2}\b/i.test(tell || "") ? 1 : 0;
   }
 
+  /* "Please choose THREE research fields" — three answers to one
+     instruction, written into three boxes on the answer sheet, and the
+     order they go in is nobody's business. A paper sets them out as one
+     list of six with three to be picked from it, and that is one question
+     only if you are counting instructions rather than answers. */
+  var NUMWORD = { one: 1, two: 2, three: 3, four: 4, five: 5 };
+
+  function wantsIn(tell) {
+    var m = /\bchoose\s+(one|two|three|four|five|\d)\b/i.exec(tell || "");
+    if (m) return NUMWORD[String(m[1]).toLowerCase()] || Number(m[1]) || 1;
+    return boxesIn(tell) || 1;
+  }
+
   function qShape(kind) {
     return (QKINDS[kind] || QKINDS.notes).shape;
   }
@@ -5996,9 +6009,23 @@
          themselves, which turned the first answer into the stem and left the
          other five as its options. */
       var last = task.rows[task.rows.length - 1];
-      if (b.kind === "li" && (!last || last.kind !== "q")) {
-        task.rows.push({ kind: "q", depth: 0, parts: [""], opts: [], slot: slot("") });
+      if (b.kind === "li" && (!last || (last.kind !== "q" && last.kind !== "many"))) {
+        /* How many of them are wanted is in the instruction, and the answer
+           sheet agrees: three letters, three boxes, 8 to 10. One box each,
+           so the numbering keeps counting the way it counts everywhere
+           else, and so the instruction's own total has something to be held
+           against. */
+        var want = wantsIn(task.tell);
+        var mine = [];
+        for (var q = 0; q < want; q++) mine.push(slot(""));
+        task.rows.push({ kind: "many", depth: 0, opts: [], slots: mine });
         last = task.rows[task.rows.length - 1];
+      }
+      if (b.kind === "li" && last && last.kind === "many") {
+        last.opts.push(b.text.replace(/^[A-Za-z][.)]\s+/, ""));
+        var lets = last.opts.map(function (_, k) { return letterAt(k); });
+        last.slots.forEach(function (x) { x.pick = lets; });
+        return;
       }
       if (b.kind === "li" && last && last.kind === "q") {
         /* Pasted off a paper an option carries its own "A." in front of it.
@@ -6134,6 +6161,7 @@
 
   function rowNode(row, r) {
     if (row.kind === "img") return figNode(row);
+    if (row.kind === "many") return manyNode(row, r);
     if (row.kind === "h") {
       var h = el("h3", "qhead" + (row.depth ? " in" + row.depth : ""));
       inlineInto(h, String(row.parts[0] || ""));
@@ -6225,7 +6253,77 @@
     return "img/" + name;
   }
 
+  /* Several answers to one instruction: the letters are pressed rather than
+     picked one at a time, because what is being said is "these three", and
+     which of the three boxes each one lands in is not a question anybody is
+     being asked.
+
+     Pressing one that is already down takes it back off. Pressing one when
+     all the boxes are full does nothing: a reader who has chosen three and
+     wants a different three takes one off first, which is the same thing
+     the paper makes them do. */
+  function manyNode(row, r) {
+    var wrap = el("div", "qrow many");
+    var ns = row.slots.map(function (x) { return x.n; });
+    wrap.appendChild(el("span", "qnum",
+      (ns.length > 1 ? ns[0] + "–" + ns[ns.length - 1] : ns[0]) + "."));
+
+    var box = el("div", "opts");
+    var tally = el("p", "many-count");
+
+    /* What is in each box, held here as well as written down. The preview in
+       the form draws against a passage with no id, so that nothing a writer
+       presses while checking their own work is mistaken for an answer — and
+       a set of buttons that reads its state back out of the one place it is
+       not allowed to write to is a set of buttons that never lights up. */
+    var mine = row.slots.map(function (x) { return answerOf(r, x.n); });
+
+    function draw() {
+      var on = mine.filter(Boolean);
+      var all = box.querySelectorAll(".opt");
+      for (var i = 0; i < all.length; i++) {
+        all[i].setAttribute("aria-pressed",
+          String(on.indexOf(all[i].dataset.v) > -1));
+      }
+      tally.textContent = on.length + " of " + row.slots.length + " chosen";
+      tally.className = "many-count" + (on.length === row.slots.length ? " done" : "");
+    }
+
+    function press(v) {
+      var at = mine.indexOf(v);
+      if (at > -1) { put(at, ""); return; }       // pressed again: back off
+      var free = mine.indexOf("");
+      if (free < 0) return;                       // all of them chosen already
+      put(free, v);
+    }
+
+    function put(at, v) {
+      mine[at] = v;
+      keepAnswer(r, row.slots[at].n, v);
+      draw();
+    }
+
+    row.opts.forEach(function (text, i) {
+      var v = letterAt(i);
+      var b = el("button", "opt");
+      b.type = "button";
+      b.dataset.v = v;
+      b.appendChild(el("span", "opt-l", v));
+      var said = el("span", "opt-t");
+      inlineInto(said, text);
+      b.appendChild(said);
+      b.addEventListener("click", function () { press(v); });
+      box.appendChild(b);
+    });
+
+    wrap.appendChild(box);
+    wrap.appendChild(tally);
+    draw();
+    return wrap;
+  }
+
   function firstSlot(row) {
+    if (row.kind === "many") return row.slots[0].n;
     if (row.slot) return row.slot.n;
     for (var i = 0; i < row.parts.length; i++) {
       if (typeof row.parts[i] !== "string") return row.parts[i].n;

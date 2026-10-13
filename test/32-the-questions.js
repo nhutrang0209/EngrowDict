@@ -1456,6 +1456,86 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
        .test(boxed.doc.getElementById('quiz-msg').textContent),
      boxed.doc.getElementById('quiz-msg').textContent.slice(-58));
 
+  /* --- three answers to one instruction -----------------------------------
+
+     "Please choose THREE research fields" is three answers written into
+     three boxes, 8 to 10, and the order they go in is nobody's business. A
+     paper sets them out as one list of six with three to be taken from it,
+     and that is one question only if you are counting instructions rather
+     than answers — which is what was being counted, so six options came out
+     as one question and the instruction's own total disagreed with it. */
+  const THREE = [
+    '! Choose the correct letters. Write your answers in boxes 8-10 on your '
+      + 'answer sheet. Please choose THREE fields that were studied.',
+    '? choice 8',
+    '- A. The first field',
+    '- B. The second field',
+    '- C. The third field',
+    '- D. The fourth field',
+    '- E. The fifth field',
+    '- F. The sixth field',
+  ].join('\n');
+
+  const trio = mk(THREE, unlockedStore());
+  await wait(900);
+  click(trio.window, tabQ(trio));
+  await wait(50);
+  click(trio.window, trio.doc.querySelector('.hit'));
+  await wait(100);
+
+  const seat = '#quiz-pane ';
+  const count = () => trio.doc.querySelector(seat + '.many-count').textContent;
+  const opts = () => [...trio.doc.querySelectorAll(seat + '.opt')];
+  const downs = () => [...trio.doc.querySelectorAll(seat + '.opt[aria-pressed="true"]')]
+    .map(b => b.dataset.v).join(',');
+
+  ok('three answers to one instruction are three questions, not one',
+     trio.doc.querySelector(seat + '.qnum').textContent === '8–10.'
+     && opts().length === 6,
+     trio.doc.querySelector(seat + '.qnum').textContent + ' over '
+       + opts().length + ' to choose from');
+  ok('  so the instruction\u2019s own count has nothing to disagree with',
+     !trio.doc.querySelector(seat + '.task-off'),
+     (trio.doc.querySelector(seat + '.task-off') || {}).textContent || 'agreed');
+  ok('  and it says how many are still to choose',
+     count() === '0 of 3 chosen', count());
+
+  click(trio.window, opts()[1]);
+  click(trio.window, opts()[3]);
+  await wait(30);
+  ok('pressing them puts them down, in no particular box',
+     count() === '2 of 3 chosen' && downs() === 'B,D', count() + ' · ' + downs());
+
+  click(trio.window, opts()[5]);
+  await wait(30);
+  ok('  and the last one fills it', count() === '3 of 3 chosen'
+     && downs() === 'B,D,F', count() + ' · ' + downs());
+
+  click(trio.window, opts()[0]);
+  await wait(30);
+  ok('  a fourth does nothing, there being nowhere left to put it',
+     count() === '3 of 3 chosen' && downs() === 'B,D,F', count() + ' · ' + downs());
+
+  click(trio.window, opts()[3]);
+  await wait(30);
+  ok('  and pressing one that is down takes it revisit off',
+     count() === '2 of 3 chosen' && downs() === 'B,F', count() + ' · ' + downs());
+
+  ok('what was chosen is kept a box at a time, the way every other answer is',
+     Object.keys(JSON.parse(trio.store['engrowdict:ans:v1'])['q:r0']).sort().join(',')
+       === '10,8',
+     trio.store['engrowdict:ans:v1']);
+
+  const revisit = mk(THREE, trio.store);
+  await wait(900);
+  click(revisit.window, tabQ(revisit));
+  await wait(50);
+  click(revisit.window, revisit.doc.querySelector('.hit'));
+  await wait(100);
+  ok('  and a later visit finds them where they were put',
+     revisit.doc.querySelector(seat + '.many-count').textContent === '2 of 3 chosen',
+     revisit.doc.querySelector(seat + '.many-count').textContent);
+
   /* --- labelling a diagram ------------------------------------------------
 
      The one task where the answer comes before the words: a box, then what
@@ -1642,5 +1722,5 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
                      old88.errs, down.errs, dark.errs, stale.errs, fresh.errs,
                      band.errs, other.errs, fig.errs, named.errs, heads.errs,
                      lab.errs, listed.errs, stuck.errs, apart.errs, look.errs,
-                     para.errs, rowset.errs, sums.errs, boxed.errs));
+                     para.errs, rowset.errs, sums.errs, boxed.errs, trio.errs, revisit.errs));
 })();

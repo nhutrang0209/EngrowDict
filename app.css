@@ -1784,6 +1784,16 @@ a.btn[hidden] { display: none; }
 .qtext { font-size: 14px; line-height: 1.55; color: var(--ink); }
 .qrow .opts, .qrow .gap-in { grid-column: 2; }
 .opts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+/* Several answers to one instruction: the list stands under the number of
+   the boxes it fills, with a count under it saying how many are still to
+   choose — which is the one thing a reader needs that the buttons do not
+   already say. */
+.qrow.many .opts { grid-column: 2; }
+.many-count {
+  grid-column: 2; margin-top: 7px;
+  font-family: var(--mono); font-size: 10.5px; color: var(--term);
+}
+.many-count.done { color: var(--accent-hi); }
 .opt {
   cursor: pointer; border: 1px solid var(--rule); background: var(--surface);
   border-radius: var(--r-s); padding: 5px 11px;
