@@ -5788,6 +5788,20 @@
      page nor the reader could see it. A gap lost out of a summary left a
      question printed with nothing to answer it, and the only sign was a
      sentence that stopped halfway. */
+  /* The first box an instruction names. A paper says which boxes a task
+     fills — "in boxes 8-10 on your answer sheet" — and that is where its
+     numbering starts, said by the paper itself rather than worked out by
+     counting everything in front of it.
+
+     Which matters because counting forward makes every task depend on every
+     task before it being perfect. One gap lost out of a summary moved the
+     three questions after it to 7-9, under an instruction that said 8-10 —
+     one fault showing up as two, in a place it had nothing to do with. */
+  function firstBox(tell) {
+    var m = /\bboxes?\s+(\d{1,2})\b/i.exec(tell || "");
+    return m ? Number(m[1]) : 0;
+  }
+
   function boxesIn(tell) {
     var m = /\bboxes?\s+(\d{1,2})\s*(?:[-–—]|to)\s*(\d{1,2})\b/i.exec(tell || "");
     if (m) return Math.abs(Number(m[2]) - Number(m[1])) + 1;
@@ -5891,13 +5905,24 @@
     function open(kind, from) {
       if (from > 0) nextN = from;
       task = { kind: QKINDS[kind] ? kind : "notes", tell: "", bank: [], rows: [],
-               slots: [] };
+               slots: [], told: from > 0 };
       while (held.length) {
         var bit = held.shift();
-        if (bit.tell) task.tell = bit.tell; else task.rows.push(bit.row);
+        if (bit.tell) sayTell(bit.tell); else task.rows.push(bit.row);
       }
       set.tasks.push(task);
       return task;
+    }
+
+    /* The instruction, and where it says this task's answers go. A number
+       written on the ? line is somebody saying it on purpose and wins; the
+       instruction fills it in where nobody did. Only before the first answer
+       of the task has been counted, or it would move the ones already made. */
+    function sayTell(text) {
+      task.tell = text;
+      if (task.told || task.slots.length) return;
+      var at = firstBox(text);
+      if (at > 0) nextN = at;
     }
 
     /* The set a slot in this task chooses from, or null for one to be typed
@@ -5964,7 +5989,7 @@
 
       var ahead = headsNext(i);
       if ((m = /^!\s*(.*)$/.exec(line))) {
-        if (task && !ahead) task.tell = m[1].trim();
+        if (task && !ahead) sayTell(m[1].trim());
         else held.push({ tell: m[1].trim() });
         return;
       }

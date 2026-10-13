@@ -1536,6 +1536,67 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
      revisit.doc.querySelector(seat + '.many-count').textContent === '2 of 3 chosen',
      revisit.doc.querySelector(seat + '.many-count').textContent);
 
+  /* --- each task starts where its own instruction says --------------------
+
+     Counting forward makes every task depend on every task in front of it
+     being perfect. One gap lost out of a summary moved the three questions
+     after it to 7-9, sitting under an instruction that said 8-10 — one
+     fault showing up as two, the second in a place that had nothing to do
+     with it.
+
+     A paper says which boxes each task fills. That is where its numbering
+     starts, said by the paper rather than worked out by counting. */
+  const SHIFTED = [
+    '! Complete the summary. Write your answers in boxes 6-7 on your answer sheet.',
+    '? summary 6',
+    'A sentence with ___{} in it, and a second that lost its gap.',
+    '',
+    '! Choose the correct letters. Write your answers in boxes 8-10 on your '
+      + 'answer sheet. Please choose THREE fields.',
+    '? choice',
+    '- A. The first field',
+    '- B. The second field',
+    '- C. The third field',
+    '',
+    '! Do the statements agree with the information given? Write your answers '
+      + 'in boxes 11-12 on your answer sheet.',
+    '? tfng',
+    'A statement. = T',
+    'Another statement. = F',
+  ].join('\n');
+
+  const held = mk(null, unlockedStore());
+  await wait(900);
+  click(held.window, tabQ(held));
+  await wait(50);
+  click(held.window, held.doc.getElementById('add-word'));
+  await wait(40);
+  held.doc.getElementById('quiz-body').value = SHIFTED;
+  held.doc.getElementById('quiz-body')
+    .dispatchEvent(new held.window.Event('input'));
+  await wait(340);
+  const seen = () => [...held.doc.querySelectorAll(
+    '#quiz-preview .qnum, #quiz-preview .gap-n')]
+    .map(n => n.textContent.replace('.', '')).join(' ');
+
+  ok('a task short of an answer does not move the tasks after it',
+     seen() === '6 8–10 11 12', seen());
+  ok('  and the one that is short is the only one said to be',
+     held.doc.querySelectorAll('#quiz-preview .task-off').length === 1
+     && /asks for 2 answers/.test(
+          held.doc.querySelector('#quiz-preview .task-off').textContent),
+     held.doc.querySelectorAll('#quiz-preview .task-off').length + ' said');
+
+  /* A number written on the ? line is somebody saying it on purpose. */
+  held.doc.getElementById('quiz-body').value =
+    '! Do the statements agree? Write your answers in boxes 11-12.\n'
+    + '? tfng 30\nA statement. = T';
+  held.doc.getElementById('quiz-body')
+    .dispatchEvent(new held.window.Event('input'));
+  await wait(340);
+  ok('  while a number written against the task itself still wins',
+     seen() === '30', seen());
+
   /* --- labelling a diagram ------------------------------------------------
 
      The one task where the answer comes before the words: a box, then what
@@ -1722,5 +1783,5 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
                      old88.errs, down.errs, dark.errs, stale.errs, fresh.errs,
                      band.errs, other.errs, fig.errs, named.errs, heads.errs,
                      lab.errs, listed.errs, stuck.errs, apart.errs, look.errs,
-                     para.errs, rowset.errs, sums.errs, boxed.errs, trio.errs, revisit.errs));
+                     para.errs, rowset.errs, sums.errs, boxed.errs, trio.errs, revisit.errs, held.errs));
 })();
