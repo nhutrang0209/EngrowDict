@@ -4967,6 +4967,24 @@
       if (marked(line)) { out.push(line); i++; continue; }
 
       var cut = split(line);
+      var said = cut.bare.trim();
+
+      /* A row of letters is what the questions are answered with, and the
+         line a page prints to count the answers is not a question at all.
+         Both read as questions to anything that had not been taught
+         otherwise, which is every build before the one that was. */
+      var row = LETTER_SET.exec(said);
+      if (row) {
+        var set = row[1].split(/[^A-Za-z]+/).filter(Boolean);
+        if (set.length > 2) {
+          set.forEach(function (L) { out.push("* " + L.toUpperCase()); });
+          asMatch();
+          mended++;
+          i++;
+          continue;
+        }
+      }
+      if (QNOISE.test(said)) { mended++; i++; continue; }
 
       /* The whole list inside this one line. */
       var heads = headingsFrom(cut.bare);
@@ -5874,8 +5892,19 @@
       }
 
       /* A list task. A bullet under a question is one of its answers — which
-         is what a multiple choice is — and anything else is a new question. */
+         is what a multiple choice is — and anything else is a new question.
+
+         Answers with no question over them belong to the instruction: that
+         is how "choose THREE of the following" is set out, the six options
+         standing under the instruction and nothing else between. They are
+         given a question with no words rather than being read as questions
+         themselves, which turned the first answer into the stem and left the
+         other five as its options. */
       var last = task.rows[task.rows.length - 1];
+      if (b.kind === "li" && (!last || last.kind !== "q")) {
+        task.rows.push({ kind: "q", depth: 0, parts: [""], opts: [], slot: slot("") });
+        last = task.rows[task.rows.length - 1];
+      }
       if (b.kind === "li" && last && last.kind === "q") {
         /* Pasted off a paper an option carries its own "A." in front of it.
            The letters here are the options there turn out to be, counted
@@ -5976,6 +6005,9 @@
       /* Letters with no words against them are a row of counters, not a
          table of two columns with one of them empty. */
       var bank = el("div", "bank" + (bare ? " chips" : wordy ? " tall" : ""));
+      /* Letters on their own say nothing about themselves, so the box they
+         sit in says it for them — which is what a paper prints over them. */
+      if (bare) bank.appendChild(el("span", "bank-lab", "Options"));
       t.bank.forEach(function (b) {
         var one = el("div", "bank-item");
         one.appendChild(el("span", "bank-l", b.letter));
@@ -6026,6 +6058,10 @@
         : (row.slot.pick || []).map(function (v) { return { v: v, text: "" }; });
       var bare = !row.opts.length;           // labels alone, with no words
       if (bare && opts.length > AS_LIST) {
+        /* At the end of the line the question is on, not under it: a letter
+           is a short answer and a paper puts the box for it in the margin,
+           where the eye can run down a column of them. */
+        node.className += " aside";
         var box = el("div", "opts");
         box.appendChild(pickOne(row.slot, row.slot.pick || [], r));
         node.appendChild(box);

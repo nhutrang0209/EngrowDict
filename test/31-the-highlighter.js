@@ -94,6 +94,29 @@ async function openFirstPassage(g) {
    wrapping the words in something and losing one of them. */
 const proseText = g => paras(g).map(p => p.textContent).join('\n');
 
+/* The longest word in a paragraph, and where it sits.
+
+   The numbers below used to be written down — select from 10 to 24 — and
+   that was a test about whichever passage the sheet happened to have put
+   first. The day one arrived with a space at character 10, the highlight
+   began at 11, as it should: a wash that starts on a space is a stripe with
+   nothing under it, and the page pulls the ends in off any it lands on. The
+   test read that as a fault.
+
+   A word is a word in any passage. Cut one in half and the two halves meet
+   inside it, where there is no space for either end to be pulled off — which
+   is the only way two selections can touch at all. */
+function longWord(t) {
+  let best = { from: 0, to: 0 }, m;
+  const re = /\S+/g;
+  while ((m = re.exec(t))) {
+    if (m[0].length > best.to - best.from) {
+      best = { from: m.index, to: m.index + m[0].length };
+    }
+  }
+  return best;
+}
+
 (async () => {
   const store = {};
   const a = mk(store);
@@ -106,7 +129,12 @@ const proseText = g => paras(g).map(p => p.textContent).join('\n');
   const words = text(paras(a)[1]);
 
   /* --- one highlight ------------------------------------------------------ */
-  selectIn(a, 1, 10, 24);
+  const word = longWord(words);
+  const half = word.from + Math.floor((word.to - word.from) / 2);
+  ok('the paragraph has a word long enough to be cut in half',
+     word.to - word.from >= 6, JSON.stringify(words.slice(word.from, word.to)));
+
+  selectIn(a, 1, word.from, half);
   await wait(60);
   ok('selecting words offers to highlight them, under what the card already had',
      !!hlBtn(a) && hlBtn(a).parentNode.classList.contains('hl-row')
@@ -122,12 +150,13 @@ const proseText = g => paras(g).map(p => p.textContent).join('\n');
      a.doc.getElementById('lookup').hidden, 'card closed');
   ok('  exactly those words, neither more nor less',
      a.doc.querySelector('.detail .prose mark.hl').textContent
-       === words.slice(10, 24),
+       === words.slice(word.from, half),
      JSON.stringify(a.doc.querySelector('.detail .prose mark.hl').textContent));
   ok('  and the paragraph still says what it said',
      proseText(a) === whole, 'unchanged');
   ok('  kept by the words, as a paragraph and characters into it',
-     JSON.stringify(kept(a)['r:r0']) === '[{"p":1,"from":10,"to":24}]',
+     JSON.stringify(kept(a)['r:r0'])
+       === JSON.stringify([{ p: 1, from: word.from, to: half }]),
      store[HL_KEY]);
 
   /* --- as many as the passage deserves ------------------------------------ */
@@ -142,14 +171,14 @@ const proseText = g => paras(g).map(p => p.textContent).join('\n');
      paras(a).map(p => p.querySelectorAll('mark.hl').length).join(''));
 
   /* --- two that touch are one --------------------------------------------- */
-  selectIn(a, 1, 24, 30);
+  selectIn(a, 1, half, word.to);
   await wait(60);
   click(a.window, hlBtn(a));
   await wait(40);
-  const one = (kept(a)['r:r0'] || []).filter(r => r.p === 1);
+  const joined = (kept(a)['r:r0'] || []).filter(r => r.p === 1);
   ok('highlighting the words next to a highlight grows it rather than laying a second',
-     one.length === 1 && one[0].from === 10 && one[0].to === 30,
-     JSON.stringify(one));
+     joined.length === 1 && joined[0].from === word.from && joined[0].to === word.to,
+     JSON.stringify(joined));
 
   /* --- and it is still there when you come back --------------------------- */
   click(a.window, a.doc.getElementById('tab-dictionary'));

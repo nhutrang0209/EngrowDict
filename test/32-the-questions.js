@@ -1283,6 +1283,71 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
        .test(pgot) && !/^# /m.test(pgot),
      (pgot.match(/^The one who.*/m) || [])[0] || 'missing');
 
+  /* --- and the same set, already in marks and already wrong ---------------
+
+     The row of letters was taught to the pass that reads a paste, and not to
+     the one that puts right what is already in marks — so a set written
+     before it still carried the row as its first question, and pressing
+     Tidy on it changed nothing. */
+  const ROWSTUCK = [
+    '! The Reading Passage has seven paragraphs A-K. Which paragraph contains '
+      + 'the following information?',
+    '? match',
+    'Options A B C D E F G H I J K = ',
+    'A statement about the first thing = ',
+    'A statement about the second thing = ',
+    '',
+    '! Choose the correct letters. Please choose THREE that were studied.',
+    '? choice',
+    'Select 3 answers (0/3 selected) = ',
+    '- A. The first option',
+    '- B. The second option',
+  ].join('\n');
+
+  const rowset = mk(null, unlockedStore());
+  await wait(900);
+  click(rowset.window, tabQ(rowset));
+  await wait(50);
+  click(rowset.window, rowset.doc.getElementById('add-word'));
+  await wait(40);
+  rowset.doc.getElementById('quiz-body').value = ROWSTUCK;
+  click(rowset.window, rowset.doc.getElementById('quiz-tidy'));
+  await wait(90);
+  const rgot = rowset.doc.getElementById('quiz-body').value;
+
+  ok('a row of letters already in marks is put right as well as a pasted one',
+     (rgot.match(/^\* [A-K]$/gm) || []).length === 11
+     && !/^Options/m.test(rgot),
+     (rgot.match(/^\* [A-K]$/gm) || []).length + ' letters');
+  ok('  and the line a page prints to count its answers goes with it',
+     !/Select 3 answers/.test(rgot)
+     && /^- A\. The first option$/m.test(rgot),
+     rgot.indexOf('Select') > -1 ? 'still there' : 'gone');
+  ok('  leaving the statements as the only questions in that task',
+     (rgot.match(/^A statement about.* = $/gm) || []).length === 2,
+     (rgot.match(/^A statement.*/gm) || []).length + ' statements');
+
+  /* Answers with no question over them belong to the instruction. Read as
+     questions, the first of them became the stem and the rest its options. */
+  ok('answers with no question over them get one with no words, not a stem',
+     rowset.doc.querySelectorAll('#quiz-preview .opt').length === 2,
+     rowset.doc.querySelectorAll('#quiz-preview .opt').length + ' answers');
+
+  /* --- how it is laid out -------------------------------------------------
+
+     A letter is a short answer, and a paper puts the box for it in the
+     margin — so a column of them reads straight down. Under the question it
+     would be a column of boxes nobody can scan. */
+  ok('a question answered with one letter keeps the list on its own line',
+     rowset.doc.querySelectorAll('#quiz-preview .qrow.aside').length === 2
+     && rowset.doc.querySelector('#quiz-preview .qrow.aside .opts select')
+          .parentNode.parentNode.classList.contains('aside'),
+     rowset.doc.querySelectorAll('#quiz-preview .qrow.aside').length + ' in the margin');
+  ok('  and the box of letters says what it is, as a paper prints over it',
+     rowset.doc.querySelector('#quiz-preview .bank.chips .bank-lab').textContent
+       === 'Options',
+     (rowset.doc.querySelector('#quiz-preview .bank-lab') || {}).textContent);
+
   /* --- labelling a diagram ------------------------------------------------
 
      The one task where the answer comes before the words: a box, then what
@@ -1469,5 +1534,5 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
                      old88.errs, down.errs, dark.errs, stale.errs, fresh.errs,
                      band.errs, other.errs, fig.errs, named.errs, heads.errs,
                      lab.errs, listed.errs, stuck.errs, apart.errs, look.errs,
-                     para.errs));
+                     para.errs, rowset.errs));
 })();
