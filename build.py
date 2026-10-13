@@ -37,6 +37,13 @@ def dumps(payload):
 
 css = open(os.path.join(HERE, 'app.css'), encoding='utf-8').read()
 js = open(os.path.join(HERE, 'app.js'), encoding='utf-8').read()
+
+# What this build is, as a hash of the two files that make the page behave.
+# It goes into the page and, separately, into docs/build.txt, so an open page
+# can ask the server what is there now and compare it with what it is. Hashing
+# the sources rather than the built page avoids the circle: a stamp written
+# into the page would change the page that was hashed to make it.
+BUILD = hashlib.sha1((css + js).encode('utf-8')).hexdigest()[:12]
 for name, text in (('app.css', css), ('app.js', js)):
     for bad in ('</style', '</script'):
         assert bad not in text, name + ' contains ' + bad
@@ -139,6 +146,7 @@ open(index, 'w', encoding='utf-8').write(
     '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n'
     '<meta name="viewport" content="width=device-width, initial-scale=1, '
     'viewport-fit=cover">\n'
+    '<meta name="build" content="' + BUILD + '">\n'
     '<meta name="description" content="Look up ' + '{:,}'.format(len(entries))
     + ' English-Vietnamese entries: phonetics, English definitions, '
       'Vietnamese meanings.">\n'
@@ -155,6 +163,11 @@ open(index, 'w', encoding='utf-8').write(
 bookify = os.path.join(site, 'bookify.js')
 open(bookify, 'w', encoding='utf-8', newline='').write(
     open(os.path.join(HERE, 'bookify.js'), encoding='utf-8').read())
+
+# The same stamp on its own, for an open page to fetch and compare itself
+# with. One line, no cache worth speaking of, and nothing else in it.
+open(os.path.join(site, 'build.txt'), 'w', encoding='utf-8',
+     newline='').write(BUILD + '\n')
 
 # --- the service worker, stamped with what it is caching ---
 stamp = hashlib.sha1()
@@ -174,4 +187,5 @@ print('docs/index.html %5d KB  static shell' % kb(index))
 print('docs/data.json  %5d KB  public data' % kb(dat))
 print('docs/sw.js      %5d KB  installable, version %s'
       % (kb(sw), stamp.hexdigest()[:12]))
+print('docs/build.txt      1 KB  this build is %s' % BUILD)
 print('docs/bookify.js %5d KB  reads an uploaded PDF or EPUB' % kb(bookify))

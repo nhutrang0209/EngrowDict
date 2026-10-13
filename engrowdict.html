@@ -3501,6 +3501,66 @@ a.btn[hidden] { display: none; }
     return document.querySelector(".top");
   }
 
+  /* ---- whether the page on the server is still this page -------------------
+
+     A browser keeps what it was given for as long as it was told to, and a
+     service worker keeps it longer than that. So a reader can be looking at
+     a page that was put right days ago, pressing the thing that was fixed
+     and watching it do what it used to do — and nothing on the screen says
+     which of the two they have. They reload, and reloading asks the cache,
+     and the cache is the thing that is wrong.
+
+     The build writes what it built into the page and, separately, into a
+     file beside it. The page fetches that file and compares. Two strings:
+     different means somebody has deployed since this tab opened, and the
+     tab says so rather than leaving it to be worked out.
+
+     Asked when the page opens and whenever it is come back to, which is when
+     a reader has been away long enough for a deploy to have happened. Not on
+     a timer: a page left open overnight does not need to have asked four
+     hundred times by morning. */
+  var BUILD_EVERY = 60000;
+  var buildAsked = 0;
+
+  function thisBuild() {
+    var m = document.querySelector('meta[name="build"]');
+    return (m && m.content) || "";
+  }
+
+  function watchBuild() {
+    if (MODE !== "static" || !thisBuild()) return;
+    function look() {
+      var now = Date.now();
+      if (document.hidden || now - buildAsked < BUILD_EVERY) return;
+      buildAsked = now;
+      /* With a question on the end, so the service worker lets it past and
+         the browser has nothing of its own to answer it with. */
+      fetch("build.txt?ts=" + now, { cache: "no-store" }).then(function (r) {
+        return r.ok ? r.text() : "";
+      }).then(function (said) {
+        var there = String(said || "").trim();
+        if (!there || there === thisBuild()) return;
+        banner("A newer version of this page has been published. What you "
+          + "are looking at is the copy your browser kept.", "Reload", freshStart);
+      }, function () { /* offline: the page it has is the page there is */ });
+    }
+    look();
+    window.addEventListener("focus", look);
+  }
+
+  /* Let go of what is being held, and then go back for it. Reloading on its
+     own asks the cache, and the cache is what is wrong. */
+  function freshStart() {
+    function go() { location.reload(); }
+    if (!navigator.serviceWorker || !navigator.serviceWorker.getRegistrations) {
+      go();
+      return;
+    }
+    navigator.serviceWorker.getRegistrations().then(function (all) {
+      return Promise.all(all.map(function (r) { return r.unregister(); }));
+    }).then(go, go);
+  }
+
   /* ---- the screen a phone has left once the keyboard is up ----------------
 
      A phone is 640 points tall and the keyboard takes 300 of them, with
@@ -11198,6 +11258,7 @@ a.btn[hidden] { display: none; }
     detail.addEventListener("scroll", syncAiScroll, { passive: true });
     measureBar();
     watchKeys();
+    watchBuild();
     // the bar is a different height once its own fonts arrive
     if (document.fonts && document.fonts.ready && document.fonts.ready.then) {
       document.fonts.ready.then(measureBar);

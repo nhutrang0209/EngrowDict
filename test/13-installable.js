@@ -57,9 +57,20 @@ function pngSize(rel) {
      /<link rel="manifest" href="manifest\.webmanifest">/.test(index) &&
      /navigator\.serviceWorker\.register\("sw\.js"\)/.test(index));
 
+  /* The machinery, not the word. The page itself mentions a service worker
+     now — it lets go of one before reloading, when it finds it is holding a
+     copy the server has moved past — and that line ships in both copies and
+     does nothing in the one that was never installed. What must not be in
+     the artifact is the installing: a manifest, a registration, a viewport
+     that reaches under a notch there is none of. */
   ok('none of it is put in the artifact copy, which has no origin to install from',
-     !/manifest\.webmanifest/.test(artifact) && !/serviceWorker/.test(artifact) &&
-     !/viewport-fit/.test(artifact));
+     !/manifest\.webmanifest/.test(artifact)
+     && !/serviceWorker\.register/.test(artifact)
+     && !/viewport-fit/.test(artifact));
+  ok('  and it does not go looking for a newer copy of itself either',
+     !/name="build" content=/.test(artifact)
+     && /MODE !== "static"/.test(read('app.js')),
+     'nothing to compare itself with');
 
   // --- the worker ---------------------------------------------------------
   ok('the worker is stamped with a version rather than the placeholder',
@@ -101,5 +112,57 @@ function pngSize(rel) {
   await wait(900);
   ok('nobody else is bothered with it', !desktop.doc.getElementById('a2hs'));
 
-  done(phone.errs.concat(again.errs, desktop.errs));
+  /* --- knowing it is not the newest copy of itself ------------------------
+
+     A browser keeps what it was given for as long as it was told to, and a
+     service worker keeps it longer than that. So a reader can be pressing
+     the thing that was fixed and watching it do what it used to do, with
+     nothing on the screen to say which of the two copies they have — and
+     reloading asks the cache, which is the thing that is wrong.
+
+     The build writes what it built into the page and into a file beside it.
+     Two strings: different means somebody has published since this tab
+     opened. */
+  const stamp = (index.match(/name="build" content="([a-f0-9]+)"/) || [])[1];
+  ok('the build writes what it built into the page',
+     !!stamp && stamp.length === 12, stamp || 'no stamp');
+  ok('  and the same, on its own, into a file beside it',
+     read('docs/build.txt').trim() === stamp, read('docs/build.txt').trim());
+
+  const asked = [];
+  const served = said => boot({
+    html: shell, full: true, ua: DESKTOP, store: {},
+    url: 'https://nhutrang0209.github.io/EngrowDict/',
+    fetchStub: url => {
+      const u = String(url);
+      if (u.includes('build.txt')) {
+        asked.push(u);
+        return Promise.resolve({ ok: true, status: 200,
+                                 text: () => Promise.resolve(said) });
+      }
+      return Promise.resolve({ ok: true, status: 200,
+        json: () => Promise.resolve(JSON.parse(read('docs/data.json'))) });
+    },
+  });
+
+  const same = served(stamp + '\n');
+  await wait(900);
+  ok('a page that is the newest copy of itself says nothing about it',
+     same.doc.getElementById('banner').hidden,
+     same.doc.getElementById('banner').textContent.slice(0, 40) || 'quiet');
+  ok('  having asked the server with a question on the end, so nothing answers'
+     + ' it out of a cache',
+     asked.length === 1 && /build\.txt\?ts=\d+/.test(asked[0]), asked[0] || 'never asked');
+
+  const stale = served('0123456789ab\n');
+  await wait(900);
+  const said = stale.doc.getElementById('banner');
+  ok('a page the server has moved past says so, rather than leaving it to be found',
+     !said.hidden && /newer version/.test(said.textContent),
+     said.textContent.slice(0, 54));
+  ok('  and offers the one thing that gets the newer one',
+     [...said.querySelectorAll('button')].some(b => b.textContent === 'Reload'),
+     [...said.querySelectorAll('button')].map(b => b.textContent).join(', '));
+
+  done(phone.errs.concat(again.errs, desktop.errs, same.errs, stale.errs));
 })();
