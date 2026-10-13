@@ -5143,7 +5143,9 @@
       var mend = mendMarks(raw);
       if (!mend) {
         quizMsg("That is already written in marks, and nothing in it needs "
-          + "putting right.", "");
+          + "putting right. If it still reads wrongly, clear the box and "
+          + "paste the original again — what can be read out of a paste has "
+          + "changed since this one was written.", "");
         return;
       }
       box.value = mend.text;
@@ -5777,6 +5779,21 @@
     table:   { shape: "body" }
   };
 
+  /* How many answers the instruction says this task has. A paper writes it
+     down — "in boxes 6-7 on your answer sheet" — and that is a count nobody
+     has to be trusted for: it can be held against the number of places this
+     page found to put an answer in.
+
+     Worth holding, because the two came apart more than once and neither the
+     page nor the reader could see it. A gap lost out of a summary left a
+     question printed with nothing to answer it, and the only sign was a
+     sentence that stopped halfway. */
+  function boxesIn(tell) {
+    var m = /\bboxes?\s+(\d{1,2})\s*(?:[-–—]|to)\s*(\d{1,2})\b/i.exec(tell || "");
+    if (m) return Math.abs(Number(m[2]) - Number(m[1])) + 1;
+    return /\bbox\s+\d{1,2}\b/i.test(tell || "") ? 1 : 0;
+  }
+
   function qShape(kind) {
     return (QKINDS[kind] || QKINDS.notes).shape;
   }
@@ -5860,7 +5877,8 @@
 
     function open(kind, from) {
       if (from > 0) nextN = from;
-      task = { kind: QKINDS[kind] ? kind : "notes", tell: "", bank: [], rows: [] };
+      task = { kind: QKINDS[kind] ? kind : "notes", tell: "", bank: [], rows: [],
+               slots: [] };
       while (held.length) {
         var bit = held.shift();
         if (bit.tell) task.tell = bit.tell; else task.rows.push(bit.row);
@@ -5884,6 +5902,7 @@
     function slot(ans) {
       var s = { n: nextN++, ans: ansOf(ans, task.kind), pick: pickFor(task) };
       set.slots.push(s);
+      task.slots.push(s);
       return s;
     }
 
@@ -6069,6 +6088,14 @@
   function taskNode(t, r) {
     var box = el("section", "task");
     if (t.tell) box.appendChild(el("p", "tell", t.tell));
+    var want = boxesIn(t.tell);
+    var got = (t.slots || []).length;
+    if (want && got !== want) {
+      box.appendChild(el("p", "task-off",
+        "Its instruction asks for " + plural(want, "answer", "answers")
+        + ", and " + (got === 1 ? "one place was found to put one"
+          : got + " places were found to put them") + "."));
+    }
     if (t.bank.length) {
       /* Two to a row for a box of single words, one to a row for a list of
          headings: a heading is a sentence, and two sentences side by side in

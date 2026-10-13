@@ -1751,6 +1751,15 @@ a.btn[hidden] { display: none; }
 }
 .qfig:hover { border-color: var(--accent); }
 
+/* The count a paper writes into its own instruction, held against what was
+   found here and disagreeing. Said under the instruction it disagrees with,
+   because that is the only place it means anything. */
+.task-off {
+  margin-top: 7px; padding: 7px 13px;
+  border-left: 2px solid var(--mark); background: var(--flag-soft);
+  font-size: 12.5px; line-height: 1.5; color: var(--flag);
+}
+
 .qbody { margin-top: 12px; }
 .qhead { font-family: var(--serif); font-size: 16px; font-weight: 600; margin-top: 14px; }
 .qbody.notes {

@@ -1401,6 +1401,61 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
      sums.doc.querySelectorAll('#quiz-preview .qline').length === 2,
      sums.doc.querySelectorAll('#quiz-preview .qline').length + ' lines');
 
+  /* --- counting the boxes the instruction asks for -------------------------
+
+     A paper writes down how many answers it wants — "in boxes 6-7 on your
+     answer sheet" — and that is a count nobody has to be trusted for. Held
+     against the number of places this page found to put an answer in, it
+     catches the thing that has gone wrong most often here and been hardest
+     to see: a gap lost somewhere in the reading, leaving a question printed
+     with nothing to answer it and a sentence that stops halfway. */
+  const SHORT = [
+    '! Complete the summary. Write your answers in boxes 6-7 on your answer sheet.',
+    '? summary 6',
+    'The one who studied them first is called ___{}. He sorted them. The work '
+      + 'was used in medicine as early as the year of',
+  ].join('\n');
+
+  const boxed = mk(null, unlockedStore());
+  await wait(900);
+  click(boxed.window, tabQ(boxed));
+  await wait(50);
+  click(boxed.window, boxed.doc.getElementById('add-word'));
+  await wait(40);
+  const typeOff = v => {
+    boxed.doc.getElementById('quiz-body').value = v;
+    boxed.doc.getElementById('quiz-body').dispatchEvent(new boxed.window.Event('input'));
+  };
+
+  typeOff(SHORT);
+  await wait(320);
+  const warn = () => boxed.doc.querySelector('#quiz-preview .task-off');
+  ok('a task short of a box is said to be short of one',
+     !!warn() && /asks for 2 answers/.test(warn().textContent)
+     && /one place was found/.test(warn().textContent),
+     warn() ? warn().textContent : 'said nothing');
+  ok('  under the instruction it disagrees with, where it means something',
+     warn().previousElementSibling.classList.contains('tell'),
+     warn().previousElementSibling.className);
+
+  typeOff(SHORT + ' ___{}');
+  await wait(320);
+  ok('and once the boxes and the instruction agree, it says nothing at all',
+     !warn(), warn() ? warn().textContent : 'quiet');
+
+  typeOff('! Complete the summary.\n? summary\nA sentence with ___{} in it.');
+  await wait(320);
+  ok('  as it does where the instruction never said a number',
+     !warn(), warn() ? warn().textContent : 'quiet');
+
+  /* The dead end at the end of a repair. */
+  click(boxed.window, boxed.doc.getElementById('quiz-tidy'));
+  await wait(60);
+  ok('a set with nothing to put right is told what to do if it still reads wrongly',
+     /paste the original again/
+       .test(boxed.doc.getElementById('quiz-msg').textContent),
+     boxed.doc.getElementById('quiz-msg').textContent.slice(-58));
+
   /* --- labelling a diagram ------------------------------------------------
 
      The one task where the answer comes before the words: a box, then what
@@ -1587,5 +1642,5 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
                      old88.errs, down.errs, dark.errs, stale.errs, fresh.errs,
                      band.errs, other.errs, fig.errs, named.errs, heads.errs,
                      lab.errs, listed.errs, stuck.errs, apart.errs, look.errs,
-                     para.errs, rowset.errs, sums.errs));
+                     para.errs, rowset.errs, sums.errs, boxed.errs));
 })();
