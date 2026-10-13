@@ -5006,6 +5006,55 @@
      same list as eight numerals inside one line, broken differently. */
   var ROMAN_ONE = new RegExp("^(" + ROMANS + ")[.)]\\s+(\\S.*)$");
 
+  /* A task whose instruction asks for one more answer than it has places to
+     put one, and whose last line stops without a place and without a full
+     stop: the gap that went missing was the last of them, and it went
+     missing at the end.
+
+     This is a guess about where, and a small one. "…used in a medical
+     application in as early as the year of" is not a sentence, and the
+     paper's own count says one is owing. Guessing wrong puts a box a few
+     words from where it belongs, which a reader can see and move; not
+     guessing leaves a question printed on the page that nothing can
+     answer, which a reader can see and do nothing about. */
+  function mendShort(lines) {
+    var mended = 0, tell = "", pending = "", at = -1, gaps = 0, body = false;
+
+    function close() {
+      if (!body || at < 0) return;
+      var want = boxesIn(tell);
+      if (!want || want - gaps !== 1) return;
+      if (/___\{[^}]*\}\s*$/.test(lines[at]) || /[.!?:;]\s*$/.test(lines[at])) return;
+      lines[at] = lines[at].replace(/\s+$/, "") + " ___{}";
+      mended++;
+    }
+
+    lines.forEach(function (line, i) {
+      var m = /^\s*\?\s*([A-Za-z]+)/.exec(line);
+      if (m) {
+        close();
+        tell = pending;
+        pending = "";
+        at = -1;
+        gaps = 0;
+        body = qShape(m[1].toLowerCase()) === "body";
+        return;
+      }
+      var t = /^\s*!\s*(.*)$/.exec(line);
+      /* Held for the task it introduces, which is the one after it. Given to
+         the task already open only where that task has none — an instruction
+         written under its ? line rather than over it. Taken either way, the
+         next task's instruction replaced the one belonging to the task being
+         measured, a line before it was measured. */
+      if (t) { pending = t[1]; if (body && !tell) tell = t[1]; return; }
+      if (!line.trim() || /^\s*[*@#>]/.test(line)) return;
+      gaps += (line.match(/___\{[^}]*\}/g) || []).length;
+      at = i;
+    });
+    close();
+    return mended;
+  }
+
   function mendMarks(text) {
     var lines = String(text).split(/\r?\n/);
     var out = [], kindAt = -1, mended = 0, i = 0;
@@ -5104,6 +5153,7 @@
       i++;
     }
 
+    mended += mendShort(out);
     return mended ? { text: out.join("\n"), mended: mended } : null;
   }
 
@@ -5142,6 +5192,7 @@
          untrue about a thing the reader could see was wrong. */
       var mend = mendMarks(raw);
       if (!mend) {
+        drawQuizPreview();
         quizMsg("That is already written in marks, and nothing in it needs "
           + "putting right. If it still reads wrongly, clear the box and "
           + "paste the original again — what can be read out of a paste has "
@@ -5157,6 +5208,7 @@
     var said = tidyQuiz(raw);
     var set = parseQuiz(said, []);
     if (!set.slots.length) {
+      drawQuizPreview();
       quizMsg("Nothing in that looked like questions. Leaving it as it is.", "");
       return;
     }
@@ -6139,7 +6191,24 @@
 
   function taskNode(t, r) {
     var box = el("section", "task");
+    /* Several answers to one instruction have no line of their own to carry
+       a number, so the task carries it — the way a paper heads the block
+       "Questions 8 – 10" and then numbers nothing inside it. Everywhere else
+       each question says its own number in the margin and a heading would
+       only say it twice. */
+    var many = null;
+    t.rows.forEach(function (x) { if (x.kind === "many") many = x; });
+    if (many && many.slots.length) {
+      var ns = many.slots.map(function (x) { return x.n; });
+      box.appendChild(el("p", "task-head", ns.length > 1
+        ? "Questions " + ns[0] + " – " + ns[ns.length - 1]
+        : "Question " + ns[0]));
+    }
     if (t.tell) box.appendChild(el("p", "tell", t.tell));
+    /* And how many are still to choose, under the instruction that asked for
+       them rather than under the list they are chosen from. */
+    var tally = many ? el("p", "many-count") : null;
+    if (tally) box.appendChild(tally);
     var want = boxesIn(t.tell);
     var got = (t.slots || []).length;
     if (want && got !== want) {
@@ -6172,7 +6241,7 @@
       box.appendChild(bank);
     }
     var body = el("div", "qbody" + (qShape(t.kind) === "body" ? " notes" : ""));
-    t.rows.forEach(function (row) { body.appendChild(rowNode(row, r)); });
+    t.rows.forEach(function (row) { body.appendChild(rowNode(row, r, tally)); });
     box.appendChild(body);
     return box;
   }
@@ -6184,9 +6253,9 @@
      box to write the number in. */
   var AS_LIST = 4;
 
-  function rowNode(row, r) {
+  function rowNode(row, r, tally) {
     if (row.kind === "img") return figNode(row);
-    if (row.kind === "many") return manyNode(row, r);
+    if (row.kind === "many") return manyNode(row, r, tally);
     if (row.kind === "h") {
       var h = el("h3", "qhead" + (row.depth ? " in" + row.depth : ""));
       inlineInto(h, String(row.parts[0] || ""));
@@ -6287,14 +6356,10 @@
      all the boxes are full does nothing: a reader who has chosen three and
      wants a different three takes one off first, which is the same thing
      the paper makes them do. */
-  function manyNode(row, r) {
-    var wrap = el("div", "qrow many");
-    var ns = row.slots.map(function (x) { return x.n; });
-    wrap.appendChild(el("span", "qnum",
-      (ns.length > 1 ? ns[0] + "–" + ns[ns.length - 1] : ns[0]) + "."));
-
-    var box = el("div", "opts");
-    var tally = el("p", "many-count");
+  function manyNode(row, r, tally) {
+    var wrap = el("div", "manyrow");
+    var box = el("div", "opts stack");
+    if (!tally) { tally = el("p", "many-count"); wrap.appendChild(tally); }
 
     /* What is in each box, held here as well as written down. The preview in
        the form draws against a passage with no id, so that nothing a writer
@@ -6330,10 +6395,14 @@
 
     row.opts.forEach(function (text, i) {
       var v = letterAt(i);
-      var b = el("button", "opt");
+      var b = el("button", "opt box");
       b.type = "button";
       b.dataset.v = v;
-      b.appendChild(el("span", "opt-l", v));
+      /* Something to tick rather than something to light up: three of six
+         are being taken, and a row of chips says nothing about how many of
+         them may be. */
+      b.appendChild(el("span", "tick"));
+      b.appendChild(el("span", "opt-l", v + "."));
       var said = el("span", "opt-t");
       inlineInto(said, text);
       b.appendChild(said);
@@ -6342,7 +6411,6 @@
     });
 
     wrap.appendChild(box);
-    wrap.appendChild(tally);
     draw();
     return wrap;
   }

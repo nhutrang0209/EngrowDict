@@ -1489,11 +1489,21 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
   const downs = () => [...trio.doc.querySelectorAll(seat + '.opt[aria-pressed="true"]')]
     .map(b => b.dataset.v).join(',');
 
+  /* The block says which boxes it fills, because nothing inside it has a
+     line of its own to say it on — which is how a paper heads one. */
   ok('three answers to one instruction are three questions, not one',
-     trio.doc.querySelector(seat + '.qnum').textContent === '8–10.'
+     trio.doc.querySelector(seat + '.task-head').textContent === 'Questions 8 – 10'
      && opts().length === 6,
-     trio.doc.querySelector(seat + '.qnum').textContent + ' over '
+     trio.doc.querySelector(seat + '.task-head').textContent + ' over '
        + opts().length + ' to choose from');
+  ok('  set out as a column of things to tick, not a row of chips',
+     !!trio.doc.querySelector(seat + '.opts.stack')
+     && trio.doc.querySelectorAll(seat + '.opt.box .tick').length === 6,
+     trio.doc.querySelectorAll(seat + '.tick').length + ' to tick');
+  ok('  with the count under the instruction that asked for them',
+     trio.doc.querySelector(seat + '.many-count').previousElementSibling
+       .classList.contains('tell'),
+     trio.doc.querySelector(seat + '.many-count').previousElementSibling.className);
   ok('  so the instruction\u2019s own count has nothing to disagree with',
      !trio.doc.querySelector(seat + '.task-off'),
      (trio.doc.querySelector(seat + '.task-off') || {}).textContent || 'agreed');
@@ -1575,9 +1585,12 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
   held.doc.getElementById('quiz-body')
     .dispatchEvent(new held.window.Event('input'));
   await wait(340);
+  /* Margins where a question has one, and the block's own heading where it
+     has not: several answers to one instruction are numbered once, above. */
   const seen = () => [...held.doc.querySelectorAll(
-    '#quiz-preview .qnum, #quiz-preview .gap-n')]
-    .map(n => n.textContent.replace('.', '')).join(' ');
+    '#quiz-preview .task-head, #quiz-preview .qnum, #quiz-preview .gap-n')]
+    .map(n => n.textContent.replace('Questions ', '').replace(/\s/g, '')
+      .replace('.', '')).join(' ');
 
   ok('a task short of an answer does not move the tasks after it',
      seen() === '6 8–10 11 12', seen());
@@ -1596,6 +1609,70 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
   await wait(340);
   ok('  while a number written against the task itself still wins',
      seen() === '30', seen());
+
+  /* --- putting back a gap the instruction says is owing -------------------
+
+     The one thing in all of this that could not be mended, and the reason it
+     could not was that nobody had asked the paper. The instruction says the
+     answers go in boxes 6-7; the task has one place to put one; the last
+     line stops at "the year of", which is not a sentence. One is owing and
+     it went missing at the end.
+
+     Putting it there is a guess about where, and a small one. Guessing wrong
+     leaves a box a few words from where it belongs, which a reader can see
+     and move. Not guessing leaves a question printed with nothing that can
+     answer it, which a reader can see and do nothing about. */
+  const LOST = [
+    '! Complete the following summary. Write your answers in boxes 6-7 on '
+      + 'your answer sheet.',
+    '? summary 6',
+    'The one who studied them first is called ___{}. He sorted them. The work '
+      + 'was used in medicine as early as the year of',
+    '',
+    '! Choose the correct letters. Write your answers in boxes 8-10 on your '
+      + 'answer sheet. Please choose THREE fields.',
+    '? choice',
+    '- A. The first field',
+    '- B. The second field',
+  ].join('\n');
+
+  const owing = mk(null, unlockedStore());
+  await wait(900);
+  click(owing.window, tabQ(owing));
+  await wait(50);
+  click(owing.window, owing.doc.getElementById('add-word'));
+  await wait(40);
+  owing.doc.getElementById('quiz-body').value = LOST;
+  click(owing.window, owing.doc.getElementById('quiz-tidy'));
+  await wait(120);
+  const wgot = owing.doc.getElementById('quiz-body').value;
+
+  ok('a gap the instruction says is owing is put back at the end it went from',
+     /year of ___\{\}$/m.test(wgot),
+     (wgot.match(/^The one who.*/m) || [])[0].slice(-34));
+  ok('  and nothing else is touched',
+     (wgot.match(/___\{\}/g) || []).length === 2
+     && /^- A\. The first field$/m.test(wgot),
+     (wgot.match(/___\{\}/g) || []).length + ' gaps');
+  ok('  so the question that could not be answered can be',
+     /5 questions/.test(owing.doc.getElementById('quiz-tally').textContent)
+     && /6–10/.test(owing.doc.getElementById('quiz-tally').textContent),
+     owing.doc.getElementById('quiz-tally').textContent);
+  ok('  and the instruction has nothing left to disagree with',
+     !owing.doc.querySelector('#quiz-preview .task-off'),
+     (owing.doc.querySelector('#quiz-preview .task-off') || {}).textContent || 'agreed');
+
+  /* A sentence that finished is a sentence that finished, however many boxes
+     the instruction names. Two owing is not one owing either. */
+  owing.doc.getElementById('quiz-body').value =
+    '! Complete the summary. Write your answers in boxes 6-7.\n? summary 6\n'
+    + 'A sentence with ___{} in it that ends properly.';
+  click(owing.window, owing.doc.getElementById('quiz-tidy'));
+  await wait(90);
+  ok('a sentence that finished is left alone, whatever the instruction asks for',
+     (owing.doc.getElementById('quiz-body').value.match(/___\{\}/g) || []).length === 1
+     && !!owing.doc.querySelector('#quiz-preview .task-off'),
+     'said, not guessed at');
 
   /* --- labelling a diagram ------------------------------------------------
 
@@ -1783,5 +1860,5 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
                      old88.errs, down.errs, dark.errs, stale.errs, fresh.errs,
                      band.errs, other.errs, fig.errs, named.errs, heads.errs,
                      lab.errs, listed.errs, stuck.errs, apart.errs, look.errs,
-                     para.errs, rowset.errs, sums.errs, boxed.errs, trio.errs, revisit.errs, held.errs));
+                     para.errs, rowset.errs, sums.errs, boxed.errs, trio.errs, revisit.errs, held.errs, owing.errs));
 })();
