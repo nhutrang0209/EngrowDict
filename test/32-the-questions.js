@@ -1213,6 +1213,76 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
        .test(apart.doc.getElementById('quiz-msg').textContent),
      apart.doc.getElementById('quiz-msg').textContent.slice(0, 44));
 
+  /* --- matching a paragraph to a statement --------------------------------
+
+     Answered with a letter and nothing else: the set is A to K, and there is
+     no word against any of them, because the words are the paragraphs. The
+     row of letters was read as a question of its own, and the questions
+     under it had nothing to be answered with. */
+  const PARAS = [
+    'The Reading Passage has seven paragraphs A-K. Which paragraph contains '
+      + 'the following information? Write the correct letter A-K.',
+    '',
+    'Options',
+    'A B C D E F G H I J K',
+    '',
+    '1.',
+    'A statement about the first thing',
+    '--',
+    '2.',
+    'A statement about the second thing',
+    '--',
+    '',
+    'Complete the following summary of the paragraphs of Reading Passage. '
+      + 'Using NO MORE THAN TWO WORDS for each answer.',
+    '',
+    '6.',
+    'The one who did it first is called',
+    '...',
+    '. He went on from there.',
+  ].join('\n');
+
+  const para = mk(null, unlockedStore());
+  await wait(900);
+  click(para.window, tabQ(para));
+  await wait(50);
+  click(para.window, para.doc.getElementById('add-word'));
+  await wait(40);
+  para.doc.getElementById('quiz-body').value = PARAS;
+  click(para.window, para.doc.getElementById('quiz-tidy'));
+  await wait(90);
+  const pgot = para.doc.getElementById('quiz-body').value;
+
+  ok('a row of letters is the answer set, not a question of its own',
+     (pgot.match(/^\* [A-K]$/gm) || []).length === 11 && /^\? match$/m.test(pgot),
+     (pgot.match(/^\* [A-K]$/gm) || []).length + ' letters');
+  ok('  and the word over the row is not one either',
+     !/^Options/m.test(pgot) && !/^A B C/m.test(pgot),
+     (pgot.match(/^[A-Z].*/m) || [])[0] || 'none left');
+  ok('  leaving the statements as the questions, answered from that set',
+     (pgot.match(/^A statement about.* = $/gm) || []).length === 2,
+     (pgot.match(/^A statement.*/gm) || []).length + ' statements');
+  ok('  drawn as counters rather than a table with one column empty',
+     !!para.doc.querySelector('#quiz-preview .bank.chips')
+     && para.doc.querySelectorAll('#quiz-preview .bank-t').length === 0,
+     para.doc.querySelector('#quiz-preview .bank.chips') ? 'counters' : 'a table');
+  ok('  and eleven of them is a list to choose from',
+     para.doc.querySelectorAll('#quiz-preview .opts select').length === 2,
+     para.doc.querySelectorAll('#quiz-preview .opts select').length + ' lists');
+
+  /* The instruction after it has words of its own inside the phrase. */
+  ok('"Complete the following summary" is the same instruction as without it',
+     /^\? summary$/m.test(pgot)
+     && /^! Complete the following summary/m.test(pgot),
+     (pgot.match(/^\?.*/gm) || []).join(' | '));
+  ok('  and the box left waiting by the task before it does not leak in',
+     !/^___\{\} The one who did it first/m.test(pgot),
+     (pgot.match(/^The one who.*/m) || [])[0] || 'missing');
+  ok('  while half a sentence with the box in the middle is not a title',
+     /^The one who did it first is called ___\{\}\. He went on from there\.$/m
+       .test(pgot) && !/^# /m.test(pgot),
+     (pgot.match(/^The one who.*/m) || [])[0] || 'missing');
+
   /* --- labelling a diagram ------------------------------------------------
 
      The one task where the answer comes before the words: a box, then what
@@ -1398,5 +1468,6 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
                      w.errs, back.errs, late.errs, t.errs, d2.errs,
                      old88.errs, down.errs, dark.errs, stale.errs, fresh.errs,
                      band.errs, other.errs, fig.errs, named.errs, heads.errs,
-                     lab.errs, listed.errs, stuck.errs, apart.errs, look.errs));
+                     lab.errs, listed.errs, stuck.errs, apart.errs, look.errs,
+                     para.errs));
 })();

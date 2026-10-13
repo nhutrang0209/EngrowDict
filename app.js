@@ -4278,8 +4278,12 @@
     [/^(true|false|not given)\b.*\bif\b/i, "tfng"],
     [/choose the correct letter/i, "choice"],
     [/choose (one|two|three|four) letters/i, "choice"],
-    [/complete the summary/i, "summary"],
-    [/complete the (notes|table|flow-?chart|sentences|diagram)/i, "notes"],
+    /* "Complete the summary" and "Complete the following summary of the
+       paragraphs of Reading Passage" are the same instruction. Room is left
+       for the words a page puts in between, and no more than that: the
+       instruction is still the thing that has to be recognised. */
+    [/complete the (\w+\s+){0,3}summary/i, "summary"],
+    [/complete the (\w+\s+){0,3}(notes|table|flow-?chart|sentences|diagram)/i, "notes"],
     [/label the (diagram|map|plan|picture)/i, "notes"],
     [/choose the correct heading/i, "match"],
     [/list of headings/i, "match"],
@@ -4292,7 +4296,7 @@
   /* What the other page left behind that means nothing here: its own report
      link, the row of letters standing in for a box, the second line of an
      instruction that only says again how to write the answer down. */
-  var QNOISE = /^(!|report|[A-Z]\s*[-–]\s*[A-Z]|write (the|your) (correct )?(letter|answer)s?\b.*|questions?\s+\d+\s*[-–]\s*\d+|(list of )?headings?|list of words)$/i;
+  var QNOISE = /^(!|report|[A-Z]\s*[-–]\s*[A-Z]|write (the|your) (correct )?(letter|answer)s?\b.*|questions?\s+\d+\s*[-–]\s*\d+|(list of )?headings?|list of words|options?|select \d+ answers?.*)$/i;
 
   /* "27." is the number over a question. "(31)" is a box in the middle of a
      sentence that the paste broke onto a line of its own. The brackets are
@@ -4324,6 +4328,12 @@
     if (items.length < 3) return null;
     return { head: line.slice(0, marks[0].at).trim(), items: items };
   }
+
+  /* The answer set of a matching task, printed as a row of letters under the
+     word Options: A B C D E F G H I J K. It is not a question — it is what
+     the questions are answered with. Three at the least, or two initials in
+     a line of prose would be read as a set. */
+  var LETTER_SET = /^(?:options?\s*[:.]?\s*)?([A-Za-z](?:\s*[,、·]?\s+[A-Za-z]){2,})$/i;
 
   var QNUM = /^(\d{1,2})\s*[.):]?$/;                // 27.  27)  27
   var QGAP = /^\((\d{1,2})\)$/;                     // (31)
@@ -4430,6 +4440,10 @@
       kindAt = -1;
       bank = 0;
       seenBlank = false;
+      /* A box left waiting by the task before this one has nothing to label
+         here. It was the dashes under the last of that task's questions,
+         where a list has no use for one. */
+      boxNext = false;
     }
 
     /* What this task turns out to be, said late. */
@@ -4463,7 +4477,21 @@
       });
     }
 
-    lines.forEach(function (raw2) {
+    /* Whether the line after this one carries straight on from it: a box
+       where the rest of the sentence should be, or the punctuation that
+       followed the box. A line that runs on is half a sentence, however
+       short it is and whatever it does not end with — and half a sentence
+       is not the title of anything. */
+    function runsOn(i) {
+      for (var j = i + 1; j < lines.length; j++) {
+        var next = lines[j].trim();
+        if (!next) continue;
+        return DOTS.test(next) || !!DOTS_LEAD.exec(next) || /^[.,;:)]/.test(next);
+      }
+      return false;
+    }
+
+    lines.forEach(function (raw2, at) {
       var line = raw2.replace(/\s+/g, " ").trim();
       if (!line || QNOISE.test(line)) return;
 
@@ -4511,6 +4539,17 @@
       }
 
       var m;
+
+      if ((m = LETTER_SET.exec(line)) && (!kind || kind === "match")) {
+        var set = m[1].split(/[^A-Za-z]+/).filter(Boolean);
+        if (set.length > 2) {
+          if (kind !== "match") sayKind("match");
+          sawQ = true;
+          ensureOpen();
+          set.forEach(function (L) { out.push("* " + L.toUpperCase()); });
+          return;
+        }
+      }
 
       /* The box, alone on its line or at the start of one. Labelling a
          diagram is the one task where the answer comes before the words,
@@ -4577,7 +4616,7 @@
            it is the thing the box is labelling, and the shortness is only
            because a label on a diagram is short. */
         if (!boxNext && !seenBlank && !bank && body.length === 0
-            && line.length < 70 && !/[.:;,]$/.test(line)) {
+            && line.length < 70 && !/[.:;,]$/.test(line) && !runsOn(at)) {
           ensureOpen();
           out.push("# " + line);           // the title over a set of notes
           return;
@@ -5663,6 +5702,10 @@
      "The benefits of asking" names nothing and means all four words. */
   function bankItem(rest, n) {
     if (!rest) return null;
+    /* Matching a paragraph to a statement is answered with a letter and
+       nothing else: the set is A to K, and there is no word against any of
+       them because the words are the paragraphs. */
+    if (/^([A-Za-z]|\d{1,2})$/.test(rest)) return { letter: rest, text: "" };
     var m = /^([A-Za-z]{1,6}|\d{1,2})[.)]\s+(.+)$/.exec(rest);
     if (!m) m = /^([A-Za-z])\s+(.+)$/.exec(rest);
     if (!m) return { letter: letterAt(n), text: rest };
@@ -5925,13 +5968,18 @@
       /* Two to a row for a box of single words, one to a row for a list of
          headings: a heading is a sentence, and two sentences side by side in
          a narrow column are four lines of torn text. */
-      var wordy = false;
-      t.bank.forEach(function (b) { if (b.text.length > 34) wordy = true; });
-      var bank = el("div", "bank" + (wordy ? " tall" : ""));
+      var wordy = false, bare = true;
+      t.bank.forEach(function (b) {
+        if (b.text.length > 34) wordy = true;
+        if (b.text) bare = false;
+      });
+      /* Letters with no words against them are a row of counters, not a
+         table of two columns with one of them empty. */
+      var bank = el("div", "bank" + (bare ? " chips" : wordy ? " tall" : ""));
       t.bank.forEach(function (b) {
         var one = el("div", "bank-item");
         one.appendChild(el("span", "bank-l", b.letter));
-        one.appendChild(el("span", "bank-t", b.text));
+        if (b.text) one.appendChild(el("span", "bank-t", b.text));
         bank.appendChild(one);
       });
       box.appendChild(bank);
