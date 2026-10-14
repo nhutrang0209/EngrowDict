@@ -6383,6 +6383,11 @@ a.btn[hidden] { display: none; }
     [/complete the (\w+\s+){0,3}(notes|table|flow-?chart|sentences|diagram)/i, "notes"],
     [/label the (diagram|map|plan|picture)/i, "notes"],
     [/choose the correct heading/i, "match"],
+    /* Two lists side by side, matched against each other: "Match the year
+       with the correct event in the history of the can." Nothing in that
+       says heading or paragraph, and a matching task that is not about
+       paragraphs is still a matching task. */
+    [/\bmatch (the|each)\b[^.]*\b(with|to|against)\b/i, "match"],
     [/list of headings/i, "match"],
     [/which (paragraph|section)\b/i, "match"],
     [/^(reading passage|the passage) has \w+ (paragraphs|sections)/i, "match"],
@@ -6465,6 +6470,17 @@ a.btn[hidden] { display: none; }
      where the task says it is, and the dots are the box it was drawn in. */
   var DOTS_TAIL = /\s+[.\u2026_\u2013\u2014\-]{2,}\s*$/;
 
+  /* The boxes a line says its answers go in. "questions 33-38" and "boxes
+     33-38" are the same claim made twice in the same breath, and the first
+     of them is enough to know which task is being talked about. */
+  var QRANGE =
+    /\b(?:boxes?|questions?)\s+(\d{1,2})\s*(?:[-\u2013\u2014]|to)\s*(\d{1,2})\b/i;
+
+  function rangeIn(text) {
+    var m = QRANGE.exec(text || "");
+    return m ? { from: Number(m[1]), to: Number(m[2]) } : null;
+  }
+
   var QJUDGE = /^(true|false|not given|yes|no)$/i;
   var QJUDGE3 = /^(true\s+false|yes\s+no)\s+not\s*given$/i;
   /* And the same three where a page printed them on the end of the statement
@@ -6492,6 +6508,13 @@ a.btn[hidden] { display: none; }
     var body = [];            // a summary being gathered, likewise
     var bank = 0;             // how many words the open task's box has taken
     var seenBlank = false;    // whether this task's body has started
+    /* The open task's own instruction, kept so that the next instruction can
+       be told from a line of it. */
+    var tellNow = "";
+    /* How many questions have been taken under it. Nothing taken yet is what
+       separates a list to choose from, which comes over the questions, from
+       a list of answers, which comes under one. */
+    var took = 0;
 
     function flushSaid() {
       if (!said.length) return;
@@ -6509,12 +6532,14 @@ a.btn[hidden] { display: none; }
       /* The answer is not in what was copied — the page was not showing it —
          so the place for it is left open rather than guessed at. */
       out.push(text + " = ");
+      took++;
       said = [];
     }
 
     function flushBody() {
       if (!body.length) return;
       out.push(mend(body.join(" ")));
+      took++;
       body = [];
     }
 
@@ -6536,6 +6561,8 @@ a.btn[hidden] { display: none; }
       opened = false;
       kindAt = -1;
       bank = 0;
+      took = 0;
+      tellNow = "";
       seenBlank = false;
       /* A box left waiting by the task before this one has nothing to label
          here. It was the dashes under the last of that task's questions,
@@ -6607,7 +6634,7 @@ a.btn[hidden] { display: none; }
         openTask(told ? told[1] : "match");
         if (out.length) out.push("");
         var lead = heads.head.replace(/\b(list of )?headings?\b[\s:]*$/i, "").trim();
-        if (lead) out.push("! " + lead);
+        if (lead) { out.push("! " + lead); tellNow = lead; }
         ensureOpen();
         heads.items.forEach(function (h) {
           out.push("* " + h.lab + ". " + h.text);
@@ -6619,7 +6646,43 @@ a.btn[hidden] { display: none; }
         openTask(told[1]);
         out.push(out.length ? "" : null);
         out.push("! " + line);
+        tellNow = line;
         return;
+      }
+
+      /* Not recognised, but it names the boxes its answers go in, and they
+         are not the boxes the open task named. That is a second instruction,
+         however it chose to word itself, and what follows belongs to it.
+
+         Without this the second task's list of options piles onto the first
+         task's list of headings and its questions carry on the first task's
+         numbering — which the count under the instruction then reports as a
+         disagreement it can see and cannot do anything about. */
+      var mine = line.length > 40 ? rangeIn(line) : null;
+      if (mine) {
+        var his = rangeIn(tellNow);
+        /* An instruction wide enough to need two lines, the boxes named on
+           the second of them. Nothing has been asked under it yet, so there
+           is nothing for this to be the start of: it is the rest of what is
+           already written, and joining it on is what lets the line after it
+           be compared against the whole instruction. */
+        if (!his && tellNow && !took && !said.length && !bank && !body.length) {
+          for (var k = out.length - 1; k >= 0; k--) {
+            if (out[k] && out[k].charAt(0) === "!") {
+              out[k] = out[k] + " " + line;
+              break;
+            }
+          }
+          tellNow = tellNow + " " + line;
+          return;
+        }
+        if (his ? his.from !== mine.from : took > 0) {
+          openTask("");
+          out.push(out.length ? "" : null);
+          out.push("! " + line);
+          tellNow = line;
+          return;
+        }
       }
 
       /* The three words a paper prints under a statement were three buttons,
@@ -6679,6 +6742,7 @@ a.btn[hidden] { display: none; }
         if (!firstN) firstN = Number(m[1]);
         seenBlank = true;
         sawQ = true;
+        took++;
         ensureOpen();
         if (kind === "summary") body.push("___{}");
         else out.push("___{}");
@@ -6687,6 +6751,7 @@ a.btn[hidden] { display: none; }
       if ((m = QNUM.exec(line))) {
         if (!firstN) firstN = Number(m[1]);
         sawQ = true;
+        took++;
         ensureOpen();
         flushSaid();
         /* And the paragraph as well as the question. A summary numbered 6
@@ -6712,10 +6777,22 @@ a.btn[hidden] { display: none; }
             bank++;
             return;
           }
+        } else if (!kind && !took && !said.length) {
+          /* A to G under an instruction that has not asked anything yet.
+             Options belong under the question they answer, so a lettered
+             list with no question over it is the bank the questions draw
+             from, and the task is a matching one. */
+          sawQ = true;
+          ensureOpen();
+          sayKind("match");
+          out.push("* " + m[1] + ". " + m[2]);
+          bank++;
+          return;
         } else if (kind || sawQ) {
           ensureOpen();
           flushSaid();
           out.push("- " + m[1].toUpperCase() + ". " + m[2]);
+          took++;
           return;
         }
       }
@@ -6738,7 +6815,7 @@ a.btn[hidden] { display: none; }
         var said2 = blanks(line.replace(DOTS_TAIL, " ___{}"));
         if (said2 !== blanks(line)) seenBlank = true;
         if (boxNext) { said2 = "___{} " + said2; boxNext = false; seenBlank = true; }
-        if (kind === "notes") { out.push("- " + said2); seenBlank = true; }
+        if (kind === "notes") { out.push("- " + said2); took++; seenBlank = true; }
         else body.push(said2);
         return;
       }

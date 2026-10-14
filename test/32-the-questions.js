@@ -1674,6 +1674,134 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
      && !!owing.doc.querySelector('#quiz-preview .task-off'),
      'said, not guessed at');
 
+  /* --- where one task ends and the next begins ----------------------------
+
+     A paper puts two matching tasks one under the other: headings for the
+     paragraphs in boxes 27-32, then years against events in boxes 33-38.
+     Nothing between them says stop — the page's own Report link and the word
+     Options is all that stands there — so the second task's list of events
+     piled onto the first task's list of headings and its six questions
+     carried on the first task's numbering. Twelve questions under one
+     instruction that asked for six.
+
+     Two things say where the break is, and the paper said them both. The
+     wording: matching a year with an event is a matching task, though it
+     never says heading or paragraph. And failing that, the boxes: a line
+     naming 33-38 under an instruction that named 27-32 is not part of it. */
+  const TWO = [
+    'Reading Passage has seven paragraphs A \u2013 G. From the list of headings '
+      + 'below choose the most suitable headings for paragraphs B \u2013 G. Write '
+      + 'the appropriate number (i \u2013 xi) in boxes 27-28 on your answer sheet.',
+    '',
+    'Headings',
+    '',
+    'i. The Invention of the Aluminium Can',
+    'ii. Technological Breakthroughs',
+    'iii. Canning and the Beer Industry',
+    'iv. The Invention',
+    'v. Canning and War',
+    'vi. Further Manufacturing Advances',
+    '27.',
+    'Paragraph B',
+    '',
+    '--',
+    '28.',
+    'Paragraph C',
+    '',
+    '--',
+    '',
+    '!',
+    'Report',
+    'The first list (questions 33-34) is a list of dates of events in Reading '
+      + 'Passage. The second list (A - G) is a list of the events. $MATCH'
+      + 'Write your answers in boxes 33-34 on your answer sheet.',
+    '',
+    'Options',
+    '',
+    'A. Mass production techniques revolutionized the canning process.',
+    'B. Tinned food was tested by military authorities.',
+    'C. Today\'s canning material was first introduced.',
+    '33.',
+    '1922',
+    '',
+    '--',
+    '34.',
+    '1812',
+    '',
+    '--',
+  ].join('\n');
+
+  async function pasted(g, text) {
+    g.doc.getElementById('quiz-body').value = text;
+    click(g.window, g.doc.getElementById('quiz-tidy'));
+    await wait(140);
+    return g.doc.getElementById('quiz-body').value;
+  }
+
+  const two = mk(null, unlockedStore());
+  await wait(900);
+  click(two.window, tabQ(two));
+  await wait(50);
+  click(two.window, two.doc.getElementById('add-word'));
+  await wait(40);
+
+  const byWord = await pasted(two, TWO.replace('$MATCH',
+    'Match the year with the correct event in the history of the can. '));
+  const tellsOf = t => [...t.querySelectorAll('.task')]
+    .map(n => ((n.querySelector('.tell') || {}).textContent || '').slice(0, 24));
+
+  ok('a second instruction starts a second task, however it worded itself',
+     (byWord.match(/^! /gm) || []).length === 2
+     && /\n! The first list/.test(byWord),
+     (byWord.match(/^! /gm) || []).length + ' instructions');
+  ok('  so the list it brought belongs to it and not to the task above',
+     /^\* A\. Mass production/m.test(byWord)
+     && byWord.indexOf('* A. Mass') > byWord.indexOf('! The first list'),
+     'under its own instruction');
+  const prevTasks = () => [...two.doc.querySelectorAll('#quiz-preview .task')];
+  ok('  which the preview draws as two tasks, not one',
+     prevTasks().length === 2, tellsOf(two.doc.getElementById('quiz-preview')).join(' / '));
+  ok('  each offering what its own instruction offered',
+     /Technological Breakthroughs/.test(prevTasks()[0].textContent)
+     && !/Mass production/.test(prevTasks()[0].textContent)
+     && /Mass production/.test(prevTasks()[1].textContent)
+     && !/Technological Breakthroughs/.test(prevTasks()[1].textContent),
+     'headings here, events there');
+  ok('  and neither of them is left disagreeing with its own instruction',
+     !two.doc.querySelector('#quiz-preview .task-off'),
+     (two.doc.querySelector('#quiz-preview .task-off') || {}).textContent || 'agreed');
+  ok('  numbered 27 up and then 33 up, as the two instructions asked',
+     [...two.doc.querySelectorAll('#quiz-preview .qnum')]
+       .map(n => n.textContent.replace('.', '')).join(',') === '27,28,33,34',
+     [...two.doc.querySelectorAll('#quiz-preview .qnum')]
+       .map(n => n.textContent.replace('.', '')).join(','));
+
+  /* And with the words that said what kind of task it is taken out of it,
+     leaving nothing but the boxes to go on. */
+  const byBoxes = await pasted(two, TWO.replace('$MATCH', ''));
+  ok('a line naming boxes the open task did not name is a new instruction',
+     (byBoxes.match(/^! /gm) || []).length === 2
+     && /^\* A\. Mass production/m.test(byBoxes),
+     (byBoxes.match(/^! /gm) || []).length + ' instructions');
+  ok('  and the same two tasks come out of it',
+     two.doc.querySelectorAll('#quiz-preview .task').length === 2
+     && !two.doc.querySelector('#quiz-preview .task-off'),
+     'split on what the paper said about its own boxes');
+
+  /* A line repeating the boxes the open task already named is that task
+     still talking, and splitting on it would halve every set in the box. */
+  const overAgain = await pasted(two, [
+    'Do the following statements agree with the information given?',
+    'In boxes 27-28 on your answer sheet the answers to questions 27-28 go.',
+    '27.',
+    'The first claim.',
+    'TRUE',
+    'FALSE',
+    'NOT GIVEN',
+  ].join('\n'));
+  ok('an instruction saying its own boxes over again does not start a task',
+     (overAgain.match(/^! /gm) || []).length === 1, overAgain.split('\n')[0].slice(0, 40));
+
   /* --- labelling a diagram ------------------------------------------------
 
      The one task where the answer comes before the words: a box, then what
@@ -1860,5 +1988,5 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
                      old88.errs, down.errs, dark.errs, stale.errs, fresh.errs,
                      band.errs, other.errs, fig.errs, named.errs, heads.errs,
                      lab.errs, listed.errs, stuck.errs, apart.errs, look.errs,
-                     para.errs, rowset.errs, sums.errs, boxed.errs, trio.errs, revisit.errs, held.errs, owing.errs));
+                     para.errs, rowset.errs, sums.errs, boxed.errs, trio.errs, revisit.errs, held.errs, owing.errs, two.errs));
 })();
