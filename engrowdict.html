@@ -7169,6 +7169,135 @@ a.btn[hidden] { display: none; }
     return mended;
   }
 
+  /* A label on an item in the box of words a task is answered from: the i of
+     a list of headings, the A of a list of events. Lettered as the paper
+     lettered it, or standing alone where the box held bare words. */
+  var BANK_LAB = /^\s*\*\s*([A-Za-z]{1,4}|\d{1,2})(?:[.)]\s+\S.*|\s*)$/;
+
+  function bankLab(line) {
+    var m = BANK_LAB.exec(line);
+    return m ? m[1].toLowerCase() : "";
+  }
+
+  var ROMAN_SEQ = ["i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix",
+                   "x", "xi", "xii", "xiii", "xiv", "xv"];
+
+  /* Whether this label carries on from the one before it. A box of words
+     lettered A to K has an I in the middle of it, and i is also the first
+     numeral a list of headings is numbered with — so what makes a label the
+     start of something is not its spelling but that nothing it could be
+     carrying on from came before it. */
+  function labRuns(prev, lab) {
+    if (!prev) return true;
+    if (/^\d+$/.test(prev)) return lab === String(Number(prev) + 1);
+    var r = ROMAN_SEQ.indexOf(prev);
+    if (r > -1 && ROMAN_SEQ[r + 1] === lab) return true;
+    return prev.length === 1 && lab.length === 1
+      && lab.charCodeAt(0) === prev.charCodeAt(0) + 1;
+  }
+
+  /* Two tasks saved as one, which is what the build before this one made of
+     a paper that printed one matching task under another with nothing
+     between them but a Report link.
+
+     The box of words gives it away. A box is one run of labels — i to xi, or
+     A to G — so a label that starts a run again, under a box that already
+     has a run in it, is a second box, and a second box belongs to a second
+     task. Nothing else in a reading paper does that.
+
+     What the second task's instruction is stuck to the end of the first
+     task's last question, where the paste ran them together. Where the
+     questions above it are all the same shape — six lines reading Paragraph
+     B to Paragraph G, which is how a matching task is printed — that shape
+     says where the question stops and the instruction starts. Where they are
+     not, the split is still made and the instruction is left where it is,
+     because a task in the wrong place is worse than an instruction in the
+     wrong place. */
+  function gluedTell(said, sibs, his) {
+    var mine = rangeIn(said);
+    if (!mine || (his && his.from === mine.from)) return null;
+    if (sibs.length < 2) return null;
+    var w = sibs.map(function (x) { return x.split(/\s+/); });
+    var n = w[0].length, head = w[0][0], k;
+    for (k = 1; k < w.length; k++) {
+      if (w[k].length !== n || w[k][0] !== head) return null;
+    }
+    var mw = said.split(/\s+/);
+    if (mw.length <= n || mw[0] !== head) return null;
+    var tell = mw.slice(n).join(" ");
+    return rangeIn(tell) ? { row: mw.slice(0, n).join(" "), tell: tell } : null;
+  }
+
+  function mendTwo(lines) {
+    function isQ(l) { return /^\s*\?\s*[A-Za-z]/.test(l); }
+    function isTell(l) { return /^\s*!/.test(l); }
+    function bare(l) {
+      var t = TAIL_RE.exec(l);
+      return (t ? l.slice(0, t.index) : l).trim();
+    }
+
+    for (var i = 0; i < lines.length; i++) {
+      if (!isQ(lines[i])) continue;
+      var kind = (/^\s*\?\s*([A-Za-z]+)/.exec(lines[i]) || [])[1] || "match";
+      var tell = "", k;
+      for (k = i - 1; k >= 0; k--) {
+        if (isQ(lines[k])) break;
+        var t = /^\s*!\s*(.*)$/.exec(lines[k]);
+        if (t) { tell = t[1]; break; }
+      }
+
+      /* Where the second run of labels starts, and what was asked before it. */
+      var cutAt = -1, banked = 0, was = "", sibs = [], j;
+      for (j = i + 1; j < lines.length; j++) {
+        if (isQ(lines[j]) || isTell(lines[j])) break;
+        var lab = bankLab(lines[j]);
+        if (lab) {
+          if (banked > 1 && !labRuns(was, lab)
+              && (lab === "a" || lab === "i" || lab === "1")) {
+            cutAt = j;
+            break;
+          }
+          banked++;
+          was = lab;
+        } else if (/^\s*[*#@>-]/.test(lines[j])) {
+          banked = banked;            // another mark, neither a label nor a row
+        } else if (bare(lines[j])) {
+          sibs.push(bare(lines[j]));
+        }
+      }
+      if (cutAt < 0) continue;
+
+      /* The first thing asked under the second box, which is where the
+         instruction for it ended up. */
+      var glued = null, at = -1;
+      for (j = cutAt; j < lines.length; j++) {
+        if (isQ(lines[j]) || isTell(lines[j])) break;
+        if (bankLab(lines[j]) || /^\s*[*#@>-]/.test(lines[j]) || !lines[j].trim()) continue;
+        glued = gluedTell(bare(lines[j]), sibs, rangeIn(tell));
+        at = j;
+        break;
+      }
+
+      var head = lines.slice(0, cutAt);
+      var rest = lines.slice(cutAt);
+      var block = [""];
+      if (glued) {
+        var ans = TAIL_RE.exec(lines[at]);
+        head.push(glued.row + (ans ? lines[at].slice(ans.index) : " = "));
+        rest.splice(at - cutAt, 1);
+        block.push("! " + glued.tell);
+        block.push("? match");
+      } else {
+        block.push("? " + kind);
+      }
+      var made = head.concat(block, rest);
+      lines.length = 0;
+      Array.prototype.push.apply(lines, made);
+      return true;
+    }
+    return false;
+  }
+
   function mendMarks(text) {
     var lines = String(text).split(/\r?\n/);
     var out = [], kindAt = -1, mended = 0, i = 0;
@@ -7267,6 +7396,10 @@ a.btn[hidden] { display: none; }
       i++;
     }
 
+    /* One split at a time, and each one leaves the rest to be looked at
+       again: a paper that ran three tasks together runs them apart in
+       three passes. */
+    for (var g = 0; g < 20 && mendTwo(out); g++) mended++;
     mended += mendShort(out);
     return mended ? { text: out.join("\n"), mended: mended } : null;
   }

@@ -1802,6 +1802,71 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
   ok('an instruction saying its own boxes over again does not start a task',
      (overAgain.match(/^! /gm) || []).length === 1, overAgain.split('\n')[0].slice(0, 40));
 
+  /* And a set already saved with the two run together, which is what the
+     build before the one that could tell them apart wrote into the sheet.
+     Pasting the original again would do it, but the original is not what is
+     in the box — the marks are, and the marks still say enough.
+
+     The box of words says it: a box is one run of labels, so a label that
+     starts a run again under a box that already has one is a second box, and
+     a second box belongs to a second task. The second task's instruction is
+     stuck to the end of the first task's last question, and the questions
+     above that one — six lines all reading Paragraph and a letter — say
+     where the question stops and the instruction starts. */
+  const GLUED = [
+    '! Reading Passage has seven paragraphs A \u2013 G. From the list of '
+      + 'headings below choose the most suitable headings. Write the '
+      + 'appropriate number (i \u2013 xi) in boxes 27-29 on your answer sheet.',
+    '? match 27',
+    '* i. The Invention of the Aluminium Can',
+    '* ii. Technological Breakthroughs',
+    '* iii. Canning and the Beer Industry',
+    'Paragraph B = ',
+    'Paragraph C = ',
+    '* A. Mass production techniques revolutionized the canning process.',
+    '* B. Tinned food was tested by military authorities.',
+    '* C. Today\'s canning material was first introduced.',
+    'Paragraph D The first list (questions 33-34) is a list of dates of events '
+      + 'in Reading Passage. Write your answers in boxes 33-34 on your answer '
+      + 'sheet. = ',
+    '1922 = ',
+    '1812 = ',
+  ].join('\n');
+
+  const unglued = await pasted(two, GLUED);
+
+  ok('a set saved with two tasks run together is told apart from its marks',
+     (unglued.match(/^! /gm) || []).length === 2
+     && /^! The first list/m.test(unglued),
+     (unglued.match(/^! /gm) || []).length + ' instructions');
+  ok('  the question the instruction was stuck to keeps its own words',
+     /^Paragraph D = $/m.test(unglued) && !/Paragraph D The first/.test(unglued),
+     (unglued.match(/^Paragraph D.*/m) || [])[0]);
+  ok('  and the second box of words goes with the second task',
+     unglued.indexOf('* A. Mass production') > unglued.indexOf('! The first list')
+     && unglued.indexOf('* iii. Canning') < unglued.indexOf('! The first list'),
+     'each box over its own questions');
+  ok('  which leaves two tasks numbered as their instructions asked',
+     [...two.doc.querySelectorAll('#quiz-preview .qnum')]
+       .map(n => n.textContent.replace('.', '')).join(',') === '27,28,29,33,34',
+     [...two.doc.querySelectorAll('#quiz-preview .qnum')]
+       .map(n => n.textContent.replace('.', '')).join(','));
+  ok('  and neither of them disagreeing with its own instruction',
+     !two.doc.querySelector('#quiz-preview .task-off'),
+     (two.doc.querySelector('#quiz-preview .task-off') || {}).textContent || 'agreed');
+
+  /* A box of words lettered A to K has an I in the middle of it, and i is
+     the first numeral a list of headings is numbered with. What makes a
+     label the start of something is not its spelling. */
+  const runOn = await pasted(two, [
+    '! Which paragraph contains the following information?',
+    '? match',
+    '* G', '* H', '* I', '* J', '* K',
+    'A statement about the first thing = ',
+  ].join('\n'));
+  ok('the I in a box lettered to K is not the start of a second box',
+     (runOn.match(/^\? /gm) || []).length === 1, runOn.replace(/\n/g, ' / ').slice(0, 60));
+
   /* --- labelling a diagram ------------------------------------------------
 
      The one task where the answer comes before the words: a box, then what
@@ -1987,6 +2052,6 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
                      w.errs, back.errs, late.errs, t.errs, d2.errs,
                      old88.errs, down.errs, dark.errs, stale.errs, fresh.errs,
                      band.errs, other.errs, fig.errs, named.errs, heads.errs,
-                     lab.errs, listed.errs, stuck.errs, apart.errs, look.errs,
+                     lab.errs, listed.errs, unglued.errs, apart.errs, look.errs,
                      para.errs, rowset.errs, sums.errs, boxed.errs, trio.errs, revisit.errs, held.errs, owing.errs, two.errs));
 })();
