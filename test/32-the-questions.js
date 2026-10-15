@@ -1867,6 +1867,79 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
   ok('the I in a box lettered to K is not the start of a second box',
      (runOn.match(/^\? /gm) || []).length === 1, runOn.replace(/\n/g, ' / ').slice(0, 60));
 
+  /* --- and without being asked ---------------------------------------------
+
+     The button was always there and always worked. What it could not do was
+     be pressed by somebody who did not know there was anything to press it
+     for: a set saved by an older build opened beside a preview drawn from
+     it, the preview said question 19 is "Options A B C D E F G H", and the
+     page knew better and said nothing until asked.
+
+     So it is done as the form opens. Nothing is written by it — the box is a
+     draft until Save is pressed — and what was changed is said out loud. */
+  const SAVED = [
+    '! Which paragraph contains the following information? Write the correct '
+      + 'letter A-H, in boxes 19-20 on your answer sheet.',
+    '? match 19',
+    'Options A B C D E F G H = ',
+    'the difficulty identifying the actual meaning of facial expressions = ',
+    'the importance of culture on facial expressions is initially described = ',
+  ].join('\n');
+
+  const older = mk(SAVED, unlockedStore());
+  await wait(900);
+  click(older.window, tabQ(older));
+  await wait(50);
+  click(older.window, older.doc.querySelector('.hit'));
+  await wait(80);
+  click(older.window, older.doc.getElementById('quiz-edit'));
+  await wait(90);
+  const opened = older.doc.getElementById('quiz-body').value;
+
+  ok('a set an older build could not wholly read is put right as it opens',
+     (opened.match(/^\* [A-H]$/gm) || []).length === 8
+     && !/^Options/m.test(opened),
+     (opened.match(/^\* [A-H]$/gm) || []).length + ' letters');
+  ok('  and the form says what it did, because it did it unasked',
+     /put right as this opened/.test(older.doc.getElementById('quiz-msg').textContent),
+     older.doc.getElementById('quiz-msg').textContent.slice(0, 48));
+  ok('  which leaves the preview drawing the questions, not the box of words',
+     [...older.doc.querySelectorAll('#quiz-preview .qrow')]
+       .every(n => !/Options/.test(n.textContent)),
+     [...older.doc.querySelectorAll('#quiz-preview .qrow')].length + ' questions');
+  ok('  numbered from where its instruction says, with none over',
+     [...older.doc.querySelectorAll('#quiz-preview .qnum')]
+       .map(n => n.textContent.replace('.', '')).join(',') === '19,20'
+     && !older.doc.querySelector('#quiz-preview .task-off'),
+     [...older.doc.querySelectorAll('#quiz-preview .qnum')]
+       .map(n => n.textContent.replace('.', '')).join(','));
+
+  /* Nothing is saved by opening it. Shut again without pressing Save and the
+     set is still the one that was saved. */
+  click(older.window, older.doc.getElementById('quiz-cancel')
+    || older.doc.querySelector('#quiz-dlg .btn'));
+  await wait(60);
+  click(older.window, older.doc.getElementById('quiz-edit'));
+  await wait(90);
+  ok('  and opening it twice is the same as opening it once',
+     older.doc.getElementById('quiz-body').value === opened,
+     'the same both times');
+
+  /* A set with nothing to put right opens quietly, which is every set
+     written since. */
+  const fine = mk(QUIZ, unlockedStore());
+  await wait(900);
+  click(fine.window, tabQ(fine));
+  await wait(50);
+  click(fine.window, fine.doc.querySelector('.hit'));
+  await wait(80);
+  click(fine.window, fine.doc.getElementById('quiz-edit'));
+  await wait(90);
+  ok('a set with nothing wrong with it opens as it was saved, and silently',
+     fine.doc.getElementById('quiz-body').value === QUIZ
+     && !/put right/.test(fine.doc.getElementById('quiz-msg').textContent),
+     fine.doc.getElementById('quiz-msg').textContent || 'nothing said');
+
   /* --- labelling a diagram ------------------------------------------------
 
      The one task where the answer comes before the words: a box, then what
@@ -2053,5 +2126,5 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
                      old88.errs, down.errs, dark.errs, stale.errs, fresh.errs,
                      band.errs, other.errs, fig.errs, named.errs, heads.errs,
                      lab.errs, listed.errs, unglued.errs, apart.errs, look.errs,
-                     para.errs, rowset.errs, sums.errs, boxed.errs, trio.errs, revisit.errs, held.errs, owing.errs, two.errs));
+                     para.errs, rowset.errs, sums.errs, boxed.errs, trio.errs, revisit.errs, held.errs, owing.errs, two.errs, older.errs, fine.errs));
 })();

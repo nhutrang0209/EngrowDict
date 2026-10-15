@@ -4954,6 +4954,7 @@
     foot.appendChild(drop);
     var cancel = el("button", "btn", "Cancel");
     cancel.type = "button";
+    cancel.id = "quiz-cancel";
     cancel.addEventListener("click", function () { dlg.close(); });
     foot.appendChild(cancel);
     var save = el("button", "btn btn-primary", "Save questions");
@@ -5451,9 +5452,11 @@
          It need not act, either: a save that fails now says why and keeps the
          work on this device regardless. Trying and being told beats being
          told without trying, when the telling might be wrong. */
-      quizMsg("This sheet's Apps Script may be older than the page: it did not "
-        + "say it can file questions. Saving will try anyway, and will keep "
-        + "them here if it cannot.", "warn");
+      var msg = document.getElementById("quiz-msg");
+      var said = msg && msg.textContent ? msg.textContent + " " : "";
+      quizMsg(said + "This sheet's Apps Script may be older than the page: it "
+        + "did not say it can file questions. Saving will try anyway, and will "
+        + "keep them here if it cannot.", "warn");
     }, function () { /* the save will say so, with the reason */ });
   }
 
@@ -5579,12 +5582,26 @@
     sel.disabled = !!existing;
 
     quizBox().value = existing ? String(existing.quiz || "") : "";
+    /* A set saved by a build that could not read part of what it was given
+       carries that part still unread, and the reader is looking at it now
+       with a preview drawn from it standing alongside. Waiting to be asked
+       meant the preview said something the page already knew was wrong, and
+       a button had to be found before it would stop saying it.
+
+       Nothing is written anywhere by this. The box is a draft until Save is
+       pressed, and Cancel leaves what was saved exactly as it was. */
+    var mend = quizBox().value.trim() ? mendMarks(quizBox().value) : null;
+    if (mend) quizBox().value = mend.text;
     document.getElementById("quiz-head").textContent = existing && hasQuiz(existing)
       ? "Edit the questions" : "Add questions";
     document.getElementById("quiz-drop").hidden = !(existing && hasQuiz(existing));
     var row = document.getElementById("quiz-to-sheet-row");
     if (row) row.hidden = !canWriteSheet();
-    quizMsg("", "");
+    quizMsg(mend
+      ? plural(mend.mended, "line", "lines") + " put right as this opened — "
+        + "what can be read out of a set has changed since it was saved. "
+        + "Nothing is written until you save."
+      : "", mend ? "warn" : "");
     drawQuizPreview();
     askCanFile();
     dlg.showModal();
