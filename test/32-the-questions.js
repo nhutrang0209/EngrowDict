@@ -2044,6 +2044,88 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
        .join(',') === '21,22',
      [...summ.querySelectorAll('.gap-n')].map(n => n.textContent.trim()).join(','));
 
+  /* And the same table, already saved by the build that could not read it.
+
+     Nearly all of it is still legible in what that build wrote. Two blanks
+     with no words between them were one blank. A blank alone on a line was
+     the end of the line above it — unless that line names a row, which takes
+     no answer, and then it was the beginning of the line below, where a copy
+     of it is already standing. A heading is the thing over a block, so the
+     rest of the block is the block.
+
+     One thing is not legible and is not guessed at: the tab that divided the
+     column names. It was collapsed before anything was saved, so the row of
+     names stays the single line it was reduced to, and that much wants the
+     original pasting again. */
+  const WASTABLE = [
+    '! Complete the table. Choose NO MORE THAN THREE WORDS from the passage '
+      + 'for each answer.',
+    '? notes',
+    '# Cave Diving Protocols',
+    '# Protocol Detail',
+    '# 1st',
+    '# have sufficient training and experience',
+    '# Progression not permitted unless there is',
+    '___{}',
+    '- ___{} 2nd',
+    '___{}',
+    '- ___{} must be followed.',
+    '- must have sufficient',
+    '___{}',
+    '- ___{} 3rd',
+    '- must use a',
+    '___{}',
+    '',
+    '! Complete the summary. Choose NO MORE THAN THREE WORDS from the '
+      + 'passage for each answer.',
+    '? summary',
+    '# After she',
+    '___{} ___{} from her diving companion, Agnes Milowka died, yet there '
+      + 'are ___{} ___{} which prove it is acceptably safe.',
+  ].join('\n');
+
+  const mended = await pasted(tbl, WASTABLE);
+
+  ok('a table saved as notes is read back as a table',
+     /^\? table$/m.test(mended)
+     && !!tbl.doc.querySelector('#quiz-preview table.qtable'),
+     (mended.match(/^\? \w+.*/m) || [])[0]);
+  ok('  with its labels down the side and what they label beside them',
+     /^\| 1st \| have sufficient training and experience$/m.test(mended)
+     && /^\|  \| Progression not permitted unless there is ___\{\}$/m.test(mended),
+     (mended.match(/^\|  \| Progression.*/m) || [])[0]);
+  ok('  the box a label cannot take going to the words under it instead',
+     /^\| 2nd \| ___\{\} must be followed\.$/m.test(mended),
+     (mended.match(/^\| 2nd.*/m) || [])[0]);
+  ok('  and the stack of headings read back as the block it was',
+     (mended.match(/^# /gm) || []).length === 1,
+     (mended.match(/^# .*/gm) || []).join(' / '));
+  ok('  which asks once for each box the paper drew, not twice',
+     /^6 questions/.test(tbl.doc.getElementById('quiz-tally').textContent),
+     tbl.doc.getElementById('quiz-tally').textContent);
+  ok('  and the summary under it likewise, with no title over half of it',
+     /^After she ___\{\} from her diving companion/m.test(mended)
+     && (mended.match(/___\{\}/g) || []).length === 6,
+     (mended.match(/^After she.*/m) || [])[0].slice(0, 40));
+
+  /* A heading standing before the next task's instruction belongs to that
+     task, and is not part of the block above it. */
+  const twoBlocks = await pasted(tbl, [
+    '! Complete the notes below.',
+    '? notes',
+    '# The Uffington White Horse',
+    '- close to an ancient trackway called the ___{}',
+    '',
+    '# Questions 8-9',
+    '! Do the following statements agree with the information given?',
+    '? tfng',
+    'A statement to judge. = ',
+  ].join('\n'));
+  ok('a heading over the next instruction is left to the task it heads',
+     /^# Questions 8-9$/m.test(twoBlocks)
+     && /^# The Uffington White Horse$/m.test(twoBlocks),
+     (twoBlocks.match(/^# .*/gm) || []).join(' / '));
+
   /* --- labelling a diagram ------------------------------------------------
 
      The one task where the answer comes before the words: a box, then what

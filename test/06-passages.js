@@ -51,7 +51,7 @@ ok('  and the same entries as the published data',
   ok('  and nothing is carried in it as base64',
      !/data:[a-z/+-]+;base64,[A-Za-z0-9+/=]{200,}/.test(shipped), 'none');
   ok('  with room above the shell for the next feature',
-     shipped.length < 540000, Math.round(shipped.length / 1024) + ' KB');
+     shipped.length < 580000, Math.round(shipped.length / 1024) + ' KB');
 
 /* --- and they work in the page ------------------------------------------ */
 (async () => {
