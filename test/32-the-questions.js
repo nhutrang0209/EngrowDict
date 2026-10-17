@@ -1940,6 +1940,110 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
      && !/put right/.test(fine.doc.getElementById('quiz-msg').textContent),
      fine.doc.getElementById('quiz-msg').textContent || 'nothing said');
 
+  /* --- a table ---------------------------------------------------------
+
+     A paper sets out a table: a column of labels down the side, and against
+     each of them the things to be completed. Read as a set of notes it came
+     out as a stack of headings with the labels stranded among them, and
+     every box in it was counted twice.
+
+     Twice, because a page prints a box as a number and then as the space to
+     write in — "(17)" on one line and "..." on the next — and both of them
+     were read as a place for an answer. A summary of three gaps became six,
+     and the three questions after it moved three along. */
+  const TABLE = [
+    'Complete the table. Choose NO MORE THAN THREE WORDS from the passage '
+      + 'for each answer.',
+    '',
+    'Cave Diving Protocols',
+    'Protocol\tDetail',
+    '1st',
+    'have sufficient training and experience',
+    'Progression not permitted unless there is',
+    '(17)',
+    '...',
+    '2nd',
+    '(18)',
+    '...',
+    'must be followed.',
+    'must have sufficient',
+    '(19)',
+    '...',
+    '3rd',
+    'must use a',
+    '(20)',
+    '...',
+    '',
+    'Complete the summary. Choose NO MORE THAN THREE WORDS from the passage '
+      + 'for each answer.',
+    '',
+    'After she',
+    '(21)',
+    '...',
+    'from her diving companion, Agnes Milowka died, yet there are',
+    '(22)',
+    '...',
+    'which prove it is acceptably safe.',
+  ].join('\n');
+
+  const tbl = mk(null, unlockedStore());
+  await wait(900);
+  click(tbl.window, tabQ(tbl));
+  await wait(50);
+  click(tbl.window, tbl.doc.getElementById('add-word'));
+  await wait(40);
+  tbl.doc.getElementById('quiz-body').value = TABLE;
+  click(tbl.window, tbl.doc.getElementById('quiz-tidy'));
+  await wait(160);
+  const tgot = tbl.doc.getElementById('quiz-body').value;
+  const grid = () => tbl.doc.querySelector('#quiz-preview table.qtable');
+  const cells = tr => [...tr.children].map(
+    c => c.textContent.replace(/\s+/g, ' ').trim());
+
+  ok('"Complete the table" is a table, and not a set of notes with a title',
+     /^\? table 17$/m.test(tgot) && !!grid(),
+     (tgot.match(/^\? \w+.*/m) || [])[0]);
+  ok('  the box a page printed twice is one box',
+     (tgot.match(/___\{\}/g) || []).length === 6,
+     (tgot.match(/___\{\}/g) || []).length + ' boxes for 6 questions');
+  ok('  so what follows it is numbered from where its own instruction says',
+     /^6 questions/.test(tbl.doc.getElementById('quiz-tally').textContent)
+     && /17–22/.test(tbl.doc.getElementById('quiz-tally').textContent),
+     tbl.doc.getElementById('quiz-tally').textContent);
+  ok('  the tab between two things on a line is where its columns divide',
+     cells(grid().querySelectorAll('thead tr')[0]).join(' / ') === 'Protocol / Detail',
+     cells(grid().querySelectorAll('thead tr')[0]).join(' / '));
+  ok('  the name over the table is the title, and the rest of it is not',
+     (tgot.match(/^# /gm) || []).length === 1
+     && /^# Cave Diving Protocols$/m.test(tgot),
+     (tgot.match(/^# .*/gm) || []).join(' / '));
+  ok('  a label stands against every row it labels, drawn once down the side',
+     grid().querySelector('tbody td.qt-lab').rowSpan === 2,
+     'rowspan ' + grid().querySelector('tbody td.qt-lab').rowSpan);
+  ok('  a box at the end of a line stays at the end of that line',
+     /^\|  \| Progression not permitted unless there is ___\{\}$/m.test(tgot),
+     (tgot.match(/^\|  \| Progression.*/m) || [])[0]);
+  ok('  and one under a label it cannot belong to goes to the words instead',
+     /^\| 2nd \| ___\{\} must be followed\.$/m.test(tgot),
+     (tgot.match(/^\| 2nd.*/m) || [])[0]);
+  ok('  which leaves the questions numbered down the table, in reading order',
+     [...grid().querySelectorAll('tbody .gap-n')]
+       .map(n => n.textContent.trim()).join(',') === '17,18,19,20',
+     [...grid().querySelectorAll('tbody .gap-n')]
+       .map(n => n.textContent.trim()).join(','));
+
+  /* The summary under it, where the doubling showed up as a sentence with
+     two boxes wherever the paper had one. */
+  const summ = [...tbl.doc.querySelectorAll('#quiz-preview .task')][1];
+  ok('a line that runs on into a numbered box is not a title over it',
+     !summ.querySelector('.qhead')
+     && /^After she ___\{\} from her diving companion/m.test(tgot),
+     (tgot.match(/^After she.*/m) || [])[0].slice(0, 44));
+  ok('  leaving the summary asking once for each box the paper drew',
+     [...summ.querySelectorAll('.gap-n')].map(n => n.textContent.trim())
+       .join(',') === '21,22',
+     [...summ.querySelectorAll('.gap-n')].map(n => n.textContent.trim()).join(','));
+
   /* --- labelling a diagram ------------------------------------------------
 
      The one task where the answer comes before the words: a box, then what
@@ -2126,5 +2230,5 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
                      old88.errs, down.errs, dark.errs, stale.errs, fresh.errs,
                      band.errs, other.errs, fig.errs, named.errs, heads.errs,
                      lab.errs, listed.errs, unglued.errs, apart.errs, look.errs,
-                     para.errs, rowset.errs, sums.errs, boxed.errs, trio.errs, revisit.errs, held.errs, owing.errs, two.errs, older.errs, fine.errs));
+                     para.errs, rowset.errs, sums.errs, boxed.errs, trio.errs, revisit.errs, held.errs, owing.errs, two.errs, older.errs, fine.errs, tbl.errs));
 })();

@@ -4297,6 +4297,7 @@
     ["? tfng 27", "Starts at…", "The number this set's first question takes"],
     ["? notes", "Note completion", "Notes with ___{} blanks typed into"],
     ["? summary", "Summary completion", "A summary with ___{} blanks in it"],
+    ["? table", "Table completion", "Rows written | label | what is asked"],
     ["? match", "Matching", "Answered with the passage's own A, B, C"],
     ["? short", "Short answer", "A question, an answer typed in"],
     ["@ ", "Figure", "A diagram or a map — or paste one straight into the box"],
@@ -4343,7 +4344,10 @@
        for the words a page puts in between, and no more than that: the
        instruction is still the thing that has to be recognised. */
     [/complete the (\w+\s+){0,3}summary/i, "summary"],
-    [/complete the (\w+\s+){0,3}(notes|table|flow-?chart|sentences|diagram)/i, "notes"],
+    /* A table is rows against a column of labels, and read as notes it comes
+       out as one long list with the labels stranded in it. */
+    [/complete the (\w+\s+){0,3}table/i, "table"],
+    [/complete the (\w+\s+){0,3}(notes|flow-?chart|sentences|diagram)/i, "notes"],
     [/label the (diagram|map|plan|picture)/i, "notes"],
     [/choose the correct heading/i, "match"],
     /* Two lists side by side, matched against each other: "Match the year
@@ -4444,6 +4448,16 @@
     return m ? { from: Number(m[1]), to: Number(m[2]) } : null;
   }
 
+  /* The label down the side of a table: 1st, 2nd, Stage 3, Second. It says
+     which row this is, so it is never a place an answer goes and never the
+     thing a box at the end of it belongs to. */
+  var ROW_LAB =
+    /^(?:\d{1,2}(?:st|nd|rd|th)|first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|\d{1,2}|(?:stage|step|phase|day|week|year|type|part)\s+\w{1,8})$/i;
+
+  function rowLab(text) {
+    return String(text || "").length < 20 && ROW_LAB.test(String(text || "").trim());
+  }
+
   var QJUDGE = /^(true|false|not given|yes|no)$/i;
   var QJUDGE3 = /^(true\s+false|yes\s+no)\s+not\s*given$/i;
   /* And the same three where a page printed them on the end of the statement
@@ -4471,6 +4485,20 @@
     var body = [];            // a summary being gathered, likewise
     var bank = 0;             // how many words the open task's box has taken
     var seenBlank = false;    // whether this task's body has started
+    /* A box already read, waiting to see whether the next line is the dots
+       the page drew it with. A page prints "(17)" and then the box itself,
+       and both of them are the one box — counted twice, a summary of three
+       gaps became six and every question after it moved three along. */
+    var justGap = false;
+    /* How much of this task has been written down, and whether a blank line
+       stands just behind. A title is the thing over a block, so it is the
+       first line of one — anywhere else a short line without a full stop is
+       a line of the block, and reading every one of them as a title turned
+       a table into a stack of headings. */
+    var laid = 0, afterGap = true;
+    /* The label of the table row being filled, held until the line it labels
+       arrives: a paper puts it on a line of its own above them. */
+    var tabLab = "";
     /* The open task's own instruction, kept so that the next instruction can
        be told from a line of it. */
     var tellNow = "";
@@ -4526,6 +4554,10 @@
       bank = 0;
       took = 0;
       tellNow = "";
+      laid = 0;
+      afterGap = true;
+      tabLab = "";
+      justGap = false;
       seenBlank = false;
       /* A box left waiting by the task before this one has nothing to label
          here. It was the dashes under the last of that task's questions,
@@ -4557,6 +4589,25 @@
       opened = true;
     }
 
+    /* Put the box back on the end of the line it was taken off. A heading is
+       not a place for an answer and neither is a table's row label, so
+       neither of them takes it: what it belongs to is then the line after,
+       and boxNext is how that is said. */
+    function backBox() {
+      for (var k = out.length - 1; k >= 0; k--) {
+        var l = out[k];
+        if (!l || !l.trim()) return false;
+        var cell = /^\|/.test(l) ? l.slice(l.lastIndexOf("|") + 1).trim() : "";
+        if (/^[?!*@#]/.test(l)) return false;
+        if (/^\|/.test(l) && !cell) return false;
+        if (!/^[-|]/.test(l)) return false;
+        if (rowLab(cell || l.replace(/^-\s*/, ""))) return false;
+        out[k] = l.replace(/\s+$/, "") + " ___{}";
+        return true;
+      }
+      return false;
+    }
+
     function blanks(text) {
       return text.replace(/\((\d{1,2})\)/g, function (all, n) {
         if (!firstN) firstN = Number(n);
@@ -4573,14 +4624,25 @@
       for (var j = i + 1; j < lines.length; j++) {
         var next = lines[j].trim();
         if (!next) continue;
-        return DOTS.test(next) || !!DOTS_LEAD.exec(next) || /^[.,;:)]/.test(next);
+        return DOTS.test(next) || !!DOTS_LEAD.exec(next) || QGAP.test(next)
+          || /^[.,;:)]/.test(next);
       }
       return false;
     }
 
     lines.forEach(function (raw2, at) {
+      /* A tab between two things on one line is the gap between two columns.
+         Collapsed into a space with the rest of the whitespace it was the
+         one part of a pasted table that said where its columns were. */
+      var cols = raw2.indexOf("\t") > -1
+        ? raw2.split("\t").map(function (c) { return c.replace(/\s+/g, " ").trim(); })
+          .filter(function (c) { return c; })
+        : null;
       var line = raw2.replace(/\s+/g, " ").trim();
-      if (!line || QNOISE.test(line)) return;
+      if (!line) { afterGap = true; justGap = false; return; }
+      if (QNOISE.test(line)) return;
+      var wasGap = justGap;
+      justGap = false;
 
       /* An instruction opens a task and says what kind it is. */
       var told = null;
@@ -4688,6 +4750,9 @@
          it to label and was simply lost — which is a question the reader can
          see on the page and cannot answer. */
       if (DOTS.test(line)) {
+        /* The box this page drew for the number on the line before. One box,
+           printed as a number and then as the space to write in. */
+        if (wasGap) { justGap = true; return; }
         sawQ = true;
         if (!kind) sayKind("notes");
         if (kind === "summary") { ensureOpen(); body.push("___{}"); seenBlank = true; }
@@ -4695,10 +4760,13 @@
         return;
       }
       if ((m = DOTS_LEAD.exec(line))) {
+        if (wasGap) { line = m[1]; }      // the same box, and then the words
+        else {
         sawQ = true;
         if (!kind) sayKind("notes");
         if (kind === "summary") { line = "___{} " + m[1]; seenBlank = true; }
         else { boxNext = true; line = m[1]; }
+        }
       }
 
       if ((m = QGAP.exec(line))) {
@@ -4706,9 +4774,13 @@
         seenBlank = true;
         sawQ = true;
         took++;
+        justGap = true;
         ensureOpen();
-        if (kind === "summary") body.push("___{}");
-        else out.push("___{}");
+        if (kind === "summary") { body.push("___{}"); return; }
+        /* A row whose label has arrived and whose words have not: the box is
+           in the words, which are the line after this one. */
+        if (!tabLab && backBox()) return;
+        boxNext = true;
         return;
       }
       if ((m = QNUM.exec(line))) {
@@ -4763,18 +4835,51 @@
       var hasBlank = /\(\d{1,2}\)/.test(line);
       if (hasBlank) seenBlank = true;
 
+      if (kind === "table") {
+        ensureOpen();
+        var cell = blanks(line.replace(DOTS_TAIL, " ___{}"));
+        /* Columns the paste kept: a header row, or a whole row on one line. */
+        if (cols && cols.length > 1) {
+          out.push("| " + cols.map(function (c) {
+            return blanks(c.replace(DOTS_TAIL, " ___{}"));
+          }).join(" | "));
+          laid++;
+          tabLab = "";
+          afterGap = false;
+          return;
+        }
+        if (!laid && !/[.:;,]$/.test(cell) && cell.length < 70 && !runsOn(at)) {
+          out.push("# " + cell);         // the name over the table
+          laid++;
+          afterGap = false;
+          return;
+        }
+        if (rowLab(cell)) { tabLab = cell; afterGap = false; return; }
+        if (boxNext) { cell = "___{} " + cell; boxNext = false; seenBlank = true; }
+        out.push("| " + tabLab + " | " + cell);
+        tabLab = "";
+        laid++;
+        afterGap = false;
+        return;
+      }
+
       if (kind === "summary" || kind === "notes") {
         /* A short line with no stop at the end of it is a title over a set
            of notes — unless a box is standing in front of it, in which case
            it is the thing the box is labelling, and the shortness is only
            because a label on a diagram is short. */
         if (!boxNext && !seenBlank && !bank && body.length === 0
+            && (!laid || afterGap)
             && line.length < 70 && !/[.:;,]$/.test(line) && !runsOn(at)) {
           ensureOpen();
           out.push("# " + line);           // the title over a set of notes
+          laid++;
+          afterGap = false;
           return;
         }
         ensureOpen();
+        laid++;
+        afterGap = false;
         var said2 = blanks(line.replace(DOTS_TAIL, " ___{}"));
         if (said2 !== blanks(line)) seenBlank = true;
         if (boxNext) { said2 = "___{} " + said2; boxNext = false; seenBlank = true; }
@@ -6294,6 +6399,15 @@
         return;
       }
 
+      /* A row of a table, its cells divided by the bar. The cells are read
+         left to right, which is the order they are answered in, so the
+         numbering falls out of the reading without being counted. */
+      if (qShape(task.kind) === "body" && line.charAt(0) === "|") {
+        task.rows.push({ kind: "tr", cells: line.slice(1).split("|")
+          .map(function (c) { return partsOf(c.trim()); }) });
+        return;
+      }
+
       var b = blockOf(line);
       if (b.kind === "h") { task.rows.push({ kind: "h", depth: b.depth, parts: [b.text] }); return; }
 
@@ -6468,9 +6582,81 @@
       box.appendChild(bank);
     }
     var body = el("div", "qbody" + (qShape(t.kind) === "body" ? " notes" : ""));
-    t.rows.forEach(function (row) { body.appendChild(rowNode(row, r, tally)); });
+    /* Rows of a table are one table, so they are gathered up rather than
+       drawn one at a time: a row on its own is a row of nothing. */
+    for (var i = 0; i < t.rows.length; i++) {
+      if (t.rows[i].kind !== "tr") {
+        body.appendChild(rowNode(t.rows[i], r, tally));
+        continue;
+      }
+      var run = [];
+      while (i < t.rows.length && t.rows[i].kind === "tr") run.push(t.rows[i++]);
+      i--;
+      body.appendChild(tableNode(run, r));
+    }
     box.appendChild(body);
     return box;
+  }
+
+  /* The cells of a table, as they are read: words and the places an answer
+     goes, in one row each. */
+  function partsInto(node, parts, r) {
+    parts.forEach(function (bit) {
+      if (typeof bit === "string") inlineInto(node, bit);
+      else node.appendChild(slotNode(bit, r));
+    });
+  }
+
+  function cellEmpty(parts) {
+    return !parts.length
+      || (parts.length === 1 && typeof parts[0] === "string" && !parts[0].trim());
+  }
+
+  function rowAsks(row) {
+    var asks = false;
+    row.cells.forEach(function (c) {
+      c.forEach(function (bit) { if (typeof bit !== "string") asks = true; });
+    });
+    return asks;
+  }
+
+  function tableNode(rows, r) {
+    var tab = el("table", "qtable");
+    var from = 0;
+    /* A first row with nothing to answer in it is the row of column names,
+       which is what a paper puts there and never asks about. */
+    if (rows.length > 1 && !rowAsks(rows[0])) {
+      var thead = el("thead"), hr = el("tr");
+      rows[0].cells.forEach(function (c) {
+        var th = el("th");
+        partsInto(th, c, r);
+        hr.appendChild(th);
+      });
+      thead.appendChild(hr);
+      tab.appendChild(thead);
+      from = 1;
+    }
+    var tb = el("tbody");
+    /* A label stands against every row it labels, and a paper draws it once
+       down the side of all of them. An empty first cell is that cell still
+       going, not a cell with nothing in it. */
+    var down = null;
+    for (var k = from; k < rows.length; k++) {
+      var tr = el("tr");
+      rows[k].cells.forEach(function (c, ci) {
+        if (ci === 0 && down && cellEmpty(c)) {
+          down.rowSpan = (down.rowSpan || 1) + 1;
+          return;
+        }
+        var td = el("td", ci === 0 ? "qt-lab" : null);
+        partsInto(td, c, r);
+        tr.appendChild(td);
+        if (ci === 0) down = td;
+      });
+      tb.appendChild(tr);
+    }
+    tab.appendChild(tb);
+    return tab;
   }
 
   /* Past this many, a row of buttons is a wall. Three words to judge a
