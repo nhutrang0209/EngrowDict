@@ -6352,6 +6352,7 @@ a.btn[hidden] { display: none; }
     ["? choice", "Multiple choice", "A question, then its answers as - lines"],
     ["? tfng 27", "Starts at…", "The number this set's first question takes"],
     ["? notes", "Note completion", "Notes with ___{} blanks typed into"],
+    ["? sentence", "Sentence completion", "One sentence a line, each with a ___{}"],
     ["? summary", "Summary completion", "A summary with ___{} blanks in it"],
     ["? table", "Table completion", "Rows written | label | what is asked"],
     ["? match", "Matching", "Answered with the passage's own A, B, C"],
@@ -6403,7 +6404,8 @@ a.btn[hidden] { display: none; }
     /* A table is rows against a column of labels, and read as notes it comes
        out as one long list with the labels stranded in it. */
     [/complete the (\w+\s+){0,3}table/i, "table"],
-    [/complete the (\w+\s+){0,3}(notes|flow-?chart|sentences|diagram)/i, "notes"],
+    [/complete the (\w+\s+){0,3}sentences/i, "sentence"],
+    [/complete the (\w+\s+){0,3}(notes|flow-?chart|diagram)/i, "notes"],
     [/label the (diagram|map|plan|picture)/i, "notes"],
     [/choose the correct heading/i, "match"],
     /* Two lists side by side, matched against each other: "Match the year
@@ -6919,7 +6921,7 @@ a.btn[hidden] { display: none; }
         return;
       }
 
-      if (kind === "summary" || kind === "notes") {
+      if (kind === "summary" || kind === "notes" || kind === "sentence") {
         /* A short line with no stop at the end of it is a title over a set
            of notes — unless a box is standing in front of it, in which case
            it is the thing the box is labelling, and the shortness is only
@@ -6939,8 +6941,9 @@ a.btn[hidden] { display: none; }
         var said2 = blanks(line.replace(DOTS_TAIL, " ___{}"));
         if (said2 !== blanks(line)) seenBlank = true;
         if (boxNext) { said2 = "___{} " + said2; boxNext = false; seenBlank = true; }
-        if (kind === "notes") { out.push("- " + said2); took++; seenBlank = true; }
-        else body.push(said2);
+        if (kind === "notes" || kind === "sentence") {
+          out.push("- " + said2); took++; seenBlank = true;
+        } else body.push(said2);
         return;
       }
 
@@ -6983,7 +6986,12 @@ a.btn[hidden] { display: none; }
         }
       }
     }
-    return out.filter(function (x) { return x !== null; }).join("\n").trim() + "\n";
+    /* The same reading the repair pass does, done here as well: a paste and
+       a set saved by an older build are the same marks arriving by two
+       doors, and a rule that holds at one of them holds at the other. */
+    var said3 = out.filter(function (x) { return x !== null; });
+    mendBody(said3);
+    return said3.join("\n").trim() + "\n";
   }
 
   var editingQuiz = null;        // the passage whose questions are being written
@@ -7473,6 +7481,49 @@ a.btn[hidden] { display: none; }
         mended++;
       }
       joined = false;
+
+      /* A sentence to complete is numbered before it and has its box after
+         it, so the box the paste broke onto its own line belongs to the end
+         of the line above. Put in front of the line below instead, every
+         sentence in the task came out holding the box of the one before it,
+         and the last box of all had nothing left to be put in front of and
+         was simply dropped.
+
+         The line above says so itself: it has no box of its own and it
+         stops without stopping — "having to deal with the potential risk
+         of" is not a sentence, and nothing but a box goes there. */
+      if (/^\s*(?:-\s*)?___\{\}\s+\S/.test(lines[i])) {
+        var up = -1;
+        for (j = i - 1; j >= 0; j--) {
+          if (!lines[j] || !lines[j].trim()) break;
+          if (!isBody(lines[j]) || /^\s*[#|]/.test(lines[j])) break;
+          up = j;
+          break;
+        }
+        if (up > -1 && lines[up].indexOf("___{") < 0
+            && !/[.!?:;]\s*$/.test(lines[up])
+            && !rowLab(words(lines[up]))) {
+          lines[up] = lines[up].replace(/\s+$/, "") + " ___{}";
+          lines[i] = lines[i].replace(/^(\s*(?:-\s*)?)___\{\}\s+/, "$1");
+          mended++;
+        }
+      }
+    }
+
+    /* And a line that begins in the middle of a sentence, with nothing in
+       front of it to begin it: "is one example of a psychological technique"
+       has no subject, and the only thing that goes where a subject is
+       missing is the box that was there. The mirror of a line that stops
+       halfway, and the box dropped above has to land somewhere. */
+    kind = "";
+    for (var n = 0; n < lines.length; n++) {
+      var q2 = /^\s*\?\s*([A-Za-z]+)/.exec(lines[n]);
+      if (q2) { kind = q2[1].toLowerCase(); continue; }
+      if (kind !== "notes" && kind !== "sentence") continue;
+      var li2 = /^(\s*-\s+)([a-z]\S*\s.*[.!?])\s*$/.exec(lines[n]);
+      if (!li2 || lines[n].indexOf("___{") > -1) continue;
+      lines[n] = li2[1] + "___{} " + li2[2];
+      mended++;
     }
     return mended;
   }
@@ -7482,6 +7533,27 @@ a.btn[hidden] { display: none; }
      with the lines it labels under it. That is the table, and it is only
      the row of column names that cannot be put back, because the tab that
      divided them is not in what was saved. */
+  /* Sentence completion saved as note completion, which is what it was read
+     as before the two were told apart. The instruction says which it is, and
+     saying so is the whole of the difference: a sentence is a question and
+     carries its number in the margin, where a paper prints it. */
+  function mendSaid(lines) {
+    var mended = 0;
+    for (var i = 0; i < lines.length; i++) {
+      if (!/^\s*\?\s*notes\b/.test(lines[i])) continue;
+      var tell = "", j;
+      for (j = i - 1; j >= 0; j--) {
+        if (/^\s*\?\s*[A-Za-z]/.test(lines[j])) break;
+        var t = /^\s*!\s*(.*)$/.exec(lines[j]);
+        if (t) { tell = t[1]; break; }
+      }
+      if (!/\bsentences\b/i.test(tell)) continue;
+      lines[i] = lines[i].replace(/^(\s*\?\s*)notes/, "$1sentence");
+      mended++;
+    }
+    return mended;
+  }
+
   function mendTable(lines) {
     var mended = 0;
 
@@ -7694,6 +7766,7 @@ a.btn[hidden] { display: none; }
        three passes. */
     for (var g = 0; g < 20 && mendTwo(out); g++) mended++;
     mended += mendBody(out);
+    mended += mendSaid(out);
     mended += mendTable(out);
     mended += mendShort(out);
     return mended ? { text: out.join("\n"), mended: mended } : null;
@@ -7704,7 +7777,21 @@ a.btn[hidden] { display: none; }
   function autoTidy() {
     var box = quizBox();
     var raw = String(box.value || "");
-    if (!raw.trim() || /^\s*\?\s*[A-Za-z]/m.test(raw)) { queuePreview(); return; }
+    if (!raw.trim()) { queuePreview(); return; }
+    /* Marks pasted in are a set written somewhere else, carrying whatever
+       the build that wrote it could not read. Marks arrive three ways — the
+       button, the form opening on a saved set, and a paste — and the paste
+       was the one doing nothing about it. The same reading, at the moment
+       the reader is looking straight at the result of it. */
+    if (/^\s*\?\s*[A-Za-z]/m.test(raw)) {
+      var mend = mendMarks(raw);
+      if (!mend) { queuePreview(); return; }
+      box.value = mend.text;
+      drawQuizPreview();
+      quizMsg(plural(mend.mended, "line", "lines") + " put right — the rest is "
+        + "left exactly as it was.", "warn");
+      return;
+    }
     var said = tidyQuiz(raw);
     var set = parseQuiz(said, []);
     if (!set.slots.length) { queuePreview(); return; }
@@ -8385,6 +8472,7 @@ a.btn[hidden] { display: none; }
     match:   { shape: "list", opts: null },   // the bank, or the passage's letters
     short:   { shape: "list", opts: null },   // typed
     notes:   { shape: "body" },
+    sentence: { shape: "body" },
     summary: { shape: "body" },
     table:   { shape: "body" }
   };
@@ -8637,6 +8725,11 @@ a.btn[hidden] { display: none; }
       var b = blockOf(line);
       if (b.kind === "h") { task.rows.push({ kind: "h", depth: b.depth, parts: [b.text] }); return; }
 
+      if (task.kind === "sentence") {
+        task.rows.push({ kind: "q", depth: b.depth, parts: partsOf(b.text),
+                         opts: [] });
+        return;
+      }
       if (qShape(task.kind) === "body") {
         task.rows.push({ kind: b.kind === "li" ? "li" : "p", depth: b.depth,
                          parts: partsOf(b.text) });
@@ -8688,6 +8781,18 @@ a.btn[hidden] { display: none; }
 
       var tail = TAIL_RE.exec(b.text);
       var said = tail ? b.text.slice(0, tail.index) : b.text;
+      /* "Choose TWO letters, A-E" over a question is two answers to that
+         question, written into two boxes on the answer sheet. One question
+         with one box under it left the paper's own count disagreeing with
+         the page, and the second answer with nowhere to go. */
+      var asks = task.kind === "choice" ? wantsIn(task.tell) : 1;
+      if (asks > 1) {
+        var ours = [];
+        for (var w = 0; w < asks; w++) ours.push(slot(""));
+        task.rows.push({ kind: "many", depth: b.depth, opts: [],
+                         parts: [said], slots: ours });
+        return;
+      }
       var row = { kind: "q", depth: b.depth, parts: [said], opts: [] };
       /* The question's own blank. A line with a blank written into it has
          said where it wants one; a line without gets one at its end, which is
@@ -8916,9 +9021,10 @@ a.btn[hidden] { display: none; }
       node.appendChild(el("span", "qnum", String(firstSlot(row) || "") + "."));
     }
     var text = el("span", "qtext");
+    var inMargin = row.kind === "q" ? firstSlot(row) : 0;
     row.parts.forEach(function (bit) {
       if (typeof bit === "string") inlineInto(text, bit);
-      else text.appendChild(slotNode(bit, r));
+      else text.appendChild(slotNode(bit, r, bit.n === inMargin));
     });
     node.appendChild(text);
 
@@ -9005,6 +9111,16 @@ a.btn[hidden] { display: none; }
      the paper makes them do. */
   function manyNode(row, r, tally) {
     var wrap = el("div", "manyrow");
+    /* The question itself, where it has one. "Choose TWO letters" is the
+       instruction; "Which TWO facts about the withdrawal are mentioned?" is
+       what is being asked, and it stands over the list as a paper has it. */
+    if (row.parts && row.parts.length) {
+      var stem = el("p", "many-stem");
+      row.parts.forEach(function (bit) {
+        if (typeof bit === "string") inlineInto(stem, bit);
+      });
+      if (stem.textContent.trim()) wrap.appendChild(stem);
+    }
     var box = el("div", "opts stack");
     if (!tally) { tally = el("p", "many-count"); wrap.appendChild(tally); }
 
@@ -9074,9 +9190,12 @@ a.btn[hidden] { display: none; }
   /* A blank inside a line of notes: the number it answers, and room to put
      the answer in. Lettered where the task hands it a set to choose from,
      typed where it does not. */
-  function slotNode(s, r) {
+  function slotNode(s, r, said) {
     var box = el("span", "gap");
-    box.appendChild(el("span", "gap-n", String(s.n)));
+    /* Unless the row already says it. A sentence to complete carries its
+       number in the margin, the way a paper prints it, and the box inside
+       the sentence saying it over again is the same number twice. */
+    if (!said) box.appendChild(el("span", "gap-n", String(s.n)));
     if (s.pick && s.pick.length) box.appendChild(pickOne(s, s.pick, r));
     else box.appendChild(typeIn(s, r, true));
     return box;

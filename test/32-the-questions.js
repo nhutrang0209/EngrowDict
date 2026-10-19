@@ -2126,6 +2126,116 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
      && /^# The Uffington White Horse$/m.test(twoBlocks),
      (twoBlocks.match(/^# .*/gm) || []).join(' / '));
 
+  /* --- sentences, and two letters to one question --------------------------
+
+     Marks arrive three ways: the button, the form opening on a saved set,
+     and a paste. The first two read what they are given; the third did not,
+     so a set pasted in from somewhere else was drawn in the preview exactly
+     as the build that wrote it had left it.
+
+     What it had left: a sentence to complete is numbered before it and has
+     its box after it, and the box the paste broke onto its own line was put
+     in front of the line below instead of on the end of the line above. So
+     every sentence carried the box of the one before it, and the last box
+     of all had nothing to be put in front of and was dropped.
+
+     And "Choose TWO letters, A-E" over a question is two answers to that
+     question. It was getting one. */
+  const SPORT = [
+    '! Which paragraph includes each of the following? Write the correct '
+      + 'letter, A-F, in boxes 14-15 on your answer sheet.',
+    '? match 14',
+    'A B C D E F = ',
+    'mention of two chemical substances that affect performance = ',
+    'examples of methods used to reduce the impact of stress = ',
+    '',
+    '! Complete the sentences below. Choose ONE WORD ONLY for each answer.',
+    '? notes',
+    '- Stress places many demands on an athlete, including the potential '
+      + 'risk of',
+    '- ___{} Cortisol can lead tennis players to hit fewer successful',
+    '- ___{} Psychologists can reframe responses as a positive emotion '
+      + 'such as',
+    '- ___{} is one example of a technique that can lessen stress responses.',
+    '',
+    '! Choose TWO letters, A-E.',
+    '? choice',
+    'Which TWO facts about the withdrawal are mentioned in the text? = ',
+    '- A. the point in the tournament at which she withdrew',
+    '- B. the physical signs of her stress during the tournament',
+    '- C. steps she had taken to control her stress levels',
+  ].join('\n');
+
+  const sport = mk(null, unlockedStore());
+  await wait(900);
+  click(sport.window, tabQ(sport));
+  await wait(50);
+  click(sport.window, sport.doc.getElementById('add-word'));
+  await wait(40);
+  const sbox = sport.doc.getElementById('quiz-body');
+  sbox.value = SPORT;
+  sbox.dispatchEvent(new sport.window.Event('paste', { bubbles: true }));
+  await wait(220);
+  const sgot2 = sbox.value;
+  const sTasks = () => [...sport.doc.querySelectorAll('#quiz-preview .task')];
+
+  ok('marks pasted in are read the way the button and the form read them',
+     /put right/.test(sport.doc.getElementById('quiz-msg').textContent),
+     sport.doc.getElementById('quiz-msg').textContent.slice(0, 40));
+  ok('  so a row of letters pasted in is the box they are chosen from',
+     (sgot2.match(/^\* [A-F]$/gm) || []).length === 6
+     && !/^A B C/m.test(sgot2),
+     (sgot2.match(/^\* [A-F]$/gm) || []).length + ' letters');
+
+  ok('a sentence keeps the box that was printed after it, not before it',
+     /risk of ___\{\}$/m.test(sgot2)
+     && /fewer successful ___\{\}$/m.test(sgot2),
+     (sgot2.match(/^- Stress.*/m) || [])[0].slice(-24));
+  ok('  and the one that began in the middle of a sentence keeps its own',
+     /^- ___\{\} is one example of a technique/m.test(sgot2),
+     (sgot2.match(/^- ___\{\} is one.*/m) || [])[0] || 'lost');
+  ok('  which is four boxes for four sentences, none of them dropped',
+     (sgot2.match(/___\{\}/g) || []).length === 4,
+     (sgot2.match(/___\{\}/g) || []).length + ' boxes');
+  ok('"Complete the sentences" is sentences, which are questions',
+     /^\? sentence$/m.test(sgot2),
+     (sgot2.match(/^\? \w+$/gm) || []).join(' / '));
+  ok('  so each carries its number in the margin, as a paper prints it',
+     [...sTasks()[1].querySelectorAll('.qrow .qnum')]
+       .map(n => n.textContent.replace('.', '')).join(',') === '16,17,18,19',
+     [...sTasks()[1].querySelectorAll('.qrow .qnum')]
+       .map(n => n.textContent.replace('.', '')).join(','));
+  ok('  and says it once, not again inside the box beside it',
+     !sTasks()[1].querySelector('.qrow .gap-n'),
+     (sTasks()[1].querySelector('.qrow .gap-n') || {}).textContent || 'once');
+
+  ok('"Choose TWO letters" over a question is two answers to it',
+     /^Questions 20 – 21$/.test(
+       (sTasks()[2].querySelector('.task-head') || {}).textContent || ''),
+     (sTasks()[2].querySelector('.task-head') || {}).textContent);
+  ok('  with the question standing over the list, and the list ticked',
+     /Which TWO facts/.test(
+       (sTasks()[2].querySelector('.many-stem') || {}).textContent || '')
+     && sTasks()[2].querySelectorAll('.opts.stack .opt .tick').length === 3,
+     sTasks()[2].querySelectorAll('.opts.stack .opt').length + ' to tick');
+  ok('  and how many are still owing said under the instruction',
+     /0 of 2 chosen/.test(
+       (sTasks()[2].querySelector('.many-count') || {}).textContent || ''),
+     (sTasks()[2].querySelector('.many-count') || {}).textContent);
+
+  /* A note that is a note keeps its bullet and its number at the gap: a
+     block with gaps in it is read as a block, which is what notes are. */
+  const kept = mk(QUIZ, unlockedStore());
+  await wait(900);
+  click(kept.window, tabQ(kept));
+  await wait(50);
+  click(kept.window, kept.doc.querySelector('.hit'));
+  await wait(120);
+  ok('note completion is still a block of notes, numbered at its gaps',
+     !!kept.doc.querySelector('#quiz-pane .qline.bullet')
+     && !!kept.doc.querySelector('#quiz-pane .qline .gap-n'),
+     'bulleted, and numbered where the gaps are');
+
   /* --- labelling a diagram ------------------------------------------------
 
      The one task where the answer comes before the words: a box, then what
@@ -2312,5 +2422,5 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
                      old88.errs, down.errs, dark.errs, stale.errs, fresh.errs,
                      band.errs, other.errs, fig.errs, named.errs, heads.errs,
                      lab.errs, listed.errs, unglued.errs, apart.errs, look.errs,
-                     para.errs, rowset.errs, sums.errs, boxed.errs, trio.errs, revisit.errs, held.errs, owing.errs, two.errs, older.errs, fine.errs, tbl.errs));
+                     para.errs, rowset.errs, sums.errs, boxed.errs, trio.errs, revisit.errs, held.errs, owing.errs, two.errs, older.errs, fine.errs, tbl.errs, sport.errs, kept.errs));
 })();
