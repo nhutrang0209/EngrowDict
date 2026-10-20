@@ -2351,6 +2351,44 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
      + 'for the space beside it',
      !/___\{\}\s+___\{\}/.test(fgot), 'once each');
 
+  /* One mark to a line. A paper prints its notes against its own mark and
+     the paste brings the mark along, so the line arrived carrying a "*" —
+     and was then drawn as a list item, which puts a mark in the margin, with
+     a dot written in front of that. Three marks saying the same thing, two
+     of them ours and neither of them on the paper. */
+  const MARKED = [
+    '! Complete the notes below. Write ONE WORD ONLY for each answer.',
+    '? notes 7',
+    '# The Small Blue butterfly',
+    '- * forms sizeable ___{}',
+    '- * breeds more than once annually',
+    '',
+    '! Complete the notes below. Write ONE WORD ONLY for each answer.',
+    '? notes',
+    '# The Uffington White Horse',
+    '- close to an ancient trackway called the ___{}',
+  ].join('\n');
+
+  const bul = mk(MARKED, unlockedStore());
+  await wait(900);
+  click(bul.window, tabQ(bul));
+  await wait(50);
+  click(bul.window, bul.doc.querySelector('.hit'));
+  await wait(120);
+  const lines = () => [...bul.doc.querySelectorAll('#quiz-pane .qline')];
+
+  const ownLines = lines().filter(n => /own/.test(n.className));
+  const bulLines = lines().filter(n => /bullet/.test(n.className));
+  ok('a line that came with the page’s own mark is not given another',
+     ownLines.length === 2 && bulLines.length === 1,
+     lines().map(n => n.className).join(' / '));
+  ok('  and one that came without keeps the one this page draws',
+     bulLines.length === 1 && /ancient trackway/.test(bulLines[0].textContent),
+     (bulLines[0] || {}).textContent || 'none');
+  ok('  with nothing drawn out in the margin by the list item itself',
+     /\.qline \{ list-style: none/.test(read('app.css')),
+     'list-style off');
+
   /* --- labelling a diagram ------------------------------------------------
 
      The one task where the answer comes before the words: a box, then what
@@ -2537,5 +2575,5 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
                      old88.errs, down.errs, dark.errs, stale.errs, fresh.errs,
                      band.errs, other.errs, fig.errs, named.errs, heads.errs,
                      lab.errs, listed.errs, unglued.errs, apart.errs, look.errs,
-                     para.errs, rowset.errs, sums.errs, boxed.errs, trio.errs, revisit.errs, held.errs, owing.errs, two.errs, older.errs, fine.errs, tbl.errs, sport.errs, kept.errs, page.errs, flat.errs));
+                     para.errs, rowset.errs, sums.errs, boxed.errs, trio.errs, revisit.errs, held.errs, owing.errs, two.errs, older.errs, fine.errs, tbl.errs, sport.errs, kept.errs, page.errs, flat.errs, bul.errs));
 })();

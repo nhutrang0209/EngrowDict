@@ -7135,6 +7135,9 @@
      box to write the number in. */
   var AS_LIST = 4;
 
+  /* The marks a page sets its notes against, as the paste brings them. */
+  var PAGE_BUL = /^\s*[*\u2022\u2023\u00b7\u25cf\u25aa\u2043]\s/;
+
   function rowNode(row, r, tally) {
     if (row.kind === "img") return figNode(row);
     if (row.kind === "many") return manyNode(row, r, tally);
@@ -7144,8 +7147,14 @@
       return h;
     }
     var tag = row.kind === "q" ? "div" : (row.kind === "li" ? "li" : "p");
+    /* Unless the line came with one. A paper prints its notes against its
+       own mark and the paste brings the mark along, so a line that already
+       says "*" wants nothing in front of it. */
+    var own = row.kind === "li"
+      && typeof row.parts[0] === "string" && PAGE_BUL.test(row.parts[0]);
     var node = el(tag, (row.kind === "q" ? "qrow" : "qline")
-      + (row.kind === "li" ? " bullet" : "") + (row.depth ? " in" + row.depth : ""));
+      + (row.kind === "li" ? (own ? " own" : " bullet") : "")
+      + (row.depth ? " in" + row.depth : ""));
 
     if (row.kind === "q") {
       node.appendChild(el("span", "qnum", String(firstSlot(row) || "") + "."));

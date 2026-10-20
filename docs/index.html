@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="build" content="5476b43e0d48">
+<meta name="build" content="d3a53ab14e31">
 <meta name="description" content="Look up 11,558 English-Vietnamese entries: phonetics, English definitions, Vietnamese meanings.">
 <link rel="preload" href="data.json" as="fetch" crossorigin>
 <link rel="manifest" href="manifest.webmanifest">
@@ -1807,8 +1807,13 @@ a.btn[hidden] { display: none; }
 /* Inside a cell a box is a box and not a line of its own, and two of them in
    one cell sit one under the other because the cell is narrow. */
 .qtable td .gap-in { margin-top: 6px; }
+/* A line of notes is drawn as a list item, which draws a mark of its own out
+   in the margin on top of whatever this puts there. One mark to a line. */
+.qline { list-style: none; }
 .qline.bullet { padding-left: 14px; position: relative; }
 .qline.bullet::before { content: "·"; position: absolute; left: 3px; color: var(--faint); }
+/* And none at all where the page sent its own along with the words. */
+.qline.own { padding-left: 0; }
 
 /* A question: its number in the margin, the words beside it, and whatever it
    is answered with under them. */
@@ -9208,6 +9213,9 @@ a.btn[hidden] { display: none; }
      box to write the number in. */
   var AS_LIST = 4;
 
+  /* The marks a page sets its notes against, as the paste brings them. */
+  var PAGE_BUL = /^\s*[*\u2022\u2023\u00b7\u25cf\u25aa\u2043]\s/;
+
   function rowNode(row, r, tally) {
     if (row.kind === "img") return figNode(row);
     if (row.kind === "many") return manyNode(row, r, tally);
@@ -9217,8 +9225,14 @@ a.btn[hidden] { display: none; }
       return h;
     }
     var tag = row.kind === "q" ? "div" : (row.kind === "li" ? "li" : "p");
+    /* Unless the line came with one. A paper prints its notes against its
+       own mark and the paste brings the mark along, so a line that already
+       says "*" wants nothing in front of it. */
+    var own = row.kind === "li"
+      && typeof row.parts[0] === "string" && PAGE_BUL.test(row.parts[0]);
     var node = el(tag, (row.kind === "q" ? "qrow" : "qline")
-      + (row.kind === "li" ? " bullet" : "") + (row.depth ? " in" + row.depth : ""));
+      + (row.kind === "li" ? (own ? " own" : " bullet") : "")
+      + (row.depth ? " in" + row.depth : ""));
 
     if (row.kind === "q") {
       node.appendChild(el("span", "qnum", String(firstSlot(row) || "") + "."));
