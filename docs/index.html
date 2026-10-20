@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="build" content="a1c51a4baee3">
+<meta name="build" content="5476b43e0d48">
 <meta name="description" content="Look up 11,558 English-Vietnamese entries: phonetics, English definitions, Vietnamese meanings.">
 <link rel="preload" href="data.json" as="fetch" crossorigin>
 <link rel="manifest" href="manifest.webmanifest">
@@ -6539,6 +6539,120 @@ a.btn[hidden] { display: none; }
      rather than under it. */
   var QJUDGE_TAIL = /[\s.]+((?:true\s+false|yes\s+no)\s+not\s*given)\s*$/i;
 
+  /* ---- a paste, as the page had it ---------------------------------------
+
+     Every reading below this point is an attempt to work out, from plain
+     text, something the page it came off knew and the plain text threw away:
+     which lines were one row of a table, which were headings, where a box
+     stood and what number it had. Copying a web page flattens all of that
+     into characters, and the flattening loses a different thing on every
+     paper — which is why each new kind of task has arrived with a new way of
+     coming out wrong.
+
+     It need not be worked out. A copy from a browser carries the page as
+     well as the text: the clipboard holds text/html beside text/plain, and
+     the html still has the rows, the cells, the headings and the boxes. Read
+     that instead and there is nothing to guess.
+
+     What comes out of here is not marks. It is the same plain text the other
+     path gets, only flattened the way the page meant it rather than the way
+     the clipboard managed — one line to a row, boxes where boxes were — and
+     the reading that follows is the reading that was already there. */
+
+  /* The words of one block, with anything that was a box written as a box. */
+  function sayHtml(node) {
+    var said = "";
+    (function go(n) {
+      if (n.nodeType === 3) { said += n.nodeValue; return; }
+      if (n.nodeType !== 1) return;
+      var tag = (n.tagName || "").toLowerCase();
+      if (tag === "script" || tag === "style" || tag === "noscript") return;
+      /* The places a page gives somebody to write in. */
+      if (tag === "input" || tag === "select" || tag === "textarea") {
+        said += " ... ";
+        return;
+      }
+      if (tag === "br") { said += " "; return; }
+      /* And the box it drew rather than offered: an element of its own whose
+         whole content is the faint something a page writes inside a box. */
+      if (!n.children.length && DOTS.test((n.textContent || "").trim())) {
+        said += " ... ";
+        return;
+      }
+      for (var i = 0; i < n.childNodes.length; i++) go(n.childNodes[i]);
+    })(node);
+    return said.replace(/\s+/g, " ").trim();
+  }
+
+  /* A number in brackets and the box drawn beside it are one box, and the
+     number is the part worth keeping: it is what says where the task's
+     numbering starts. */
+  function oneBox(line) {
+    return line.replace(/(\(\d{1,2}\))\s*[.\u2026_\u2013\u2014-]{2,}/g, "$1")
+      .replace(/[.\u2026_\u2013\u2014-]{2,}\s*(\(\d{1,2}\))/g, "$1")
+      .replace(/(\S)(\(\d{1,2}\))/g, "$1 $2");
+  }
+
+  var HTML_BLOCK = "p,li,td,th,h1,h2,h3,h4,h5,h6,blockquote,figcaption,dt,dd";
+
+  function fromHtml(html) {
+    if (!html || !window.DOMParser) return "";
+    var doc;
+    try { doc = new DOMParser().parseFromString(html, "text/html"); }
+    catch (err) { return ""; }
+    if (!doc || !doc.body) return "";
+
+    var out = [], seen = [];
+
+    /* A row of a table is a row, its cells divided by tabs — which is what
+       the reading below already takes a tab to mean. A block anywhere else
+       is a line. Taken in document order, and never twice: a cell inside a
+       row is the row's, not a block of its own. */
+    function already(node) {
+      for (var i = 0; i < seen.length; i++) {
+        if (seen[i] === node || seen[i].contains(node)) return true;
+      }
+      return false;
+    }
+
+    var rows = doc.body.querySelectorAll("tr");
+    var blocks = doc.body.querySelectorAll(HTML_BLOCK);
+    var all = [];
+    var i;
+    for (i = 0; i < rows.length; i++) all.push(rows[i]);
+    for (i = 0; i < blocks.length; i++) all.push(blocks[i]);
+    /* Document order, so a table in the middle of a page stays in the
+       middle of what comes out of it. */
+    all.sort(function (a, b) {
+      if (a === b) return 0;
+      var how = a.compareDocumentPosition(b);
+      return (how & 4) ? -1 : 1;              // 4: b follows a
+    });
+
+    for (i = 0; i < all.length; i++) {
+      var node = all[i];
+      if (already(node)) continue;
+      var said;
+      if ((node.tagName || "").toLowerCase() === "tr") {
+        var cells = node.children, bits = [];
+        for (var c = 0; c < cells.length; c++) {
+          bits.push(oneBox(sayHtml(cells[c])));
+        }
+        while (bits.length && !bits[bits.length - 1]) bits.pop();
+        said = bits.join("\t");
+      } else {
+        said = oneBox(sayHtml(node));
+      }
+      seen.push(node);
+      if (said) out.push(said);
+    }
+
+    /* Nothing with a block in it: a copy of a run of words out of the
+       middle of a paragraph, which the text of the paste says better. */
+    if (!out.length) return "";
+    return out.join("\n");
+  }
+
   function tidyQuiz(raw) {
     var lines = String(raw || "").split(/\r?\n/);
     var out = [], kind = "", opened = false, firstN = 0;
@@ -6571,6 +6685,8 @@ a.btn[hidden] { display: none; }
        a line of the block, and reading every one of them as a title turned
        a table into a stack of headings. */
     var laid = 0, afterGap = true;
+    /* How many lines of this task came in carrying the page's own bullet. */
+    var starred = 0;
     /* The label of the table row being filled, held until the line it labels
        arrives: a paper puts it on a line of its own above them. */
     var tabLab = "";
@@ -6631,6 +6747,7 @@ a.btn[hidden] { display: none; }
       tellNow = "";
       laid = 0;
       afterGap = true;
+      starred = 0;
       tabLab = "";
       justGap = false;
       seenBlank = false;
@@ -6952,6 +7069,21 @@ a.btn[hidden] { display: none; }
           afterGap = false;
           return;
         }
+        /* And the heading over the next block of them. The page bulleted its
+           notes and did not bullet this, which is the page saying so; a line
+           that opens in the middle of a sentence is not a heading however it
+           is punctuated, and neither is one with a box in it. */
+        if (kind === "notes" && starred && !/^[*\u2022]\s/.test(line)
+            && line.length < 60 && !boxNext
+            && !/\(\d{1,2}\)|___\{/.test(line)
+            && /^[A-Z"'\u201c]/.test(line) && !/[.:;,]$/.test(line)) {
+          ensureOpen();
+          out.push("# " + line);
+          laid++;
+          afterGap = false;
+          return;
+        }
+        if (/^[*\u2022]\s/.test(line)) starred++;
         ensureOpen();
         laid++;
         afterGap = false;
@@ -7076,7 +7208,15 @@ a.btn[hidden] { display: none; }
          questions. */
       var pic = pictureIn(ev.clipboardData);
       if (pic) { ev.preventDefault(); takeFigure(pic); return; }
-      setTimeout(function () { autoTidy(); }, 0);
+      /* Read now: the clipboard is only the clipboard while the paste is
+         happening, and by the time a timeout runs there is nothing left on
+         it to ask. */
+      var page = "";
+      try {
+        page = ev.clipboardData
+          ? fromHtml(ev.clipboardData.getData("text/html")) : "";
+      } catch (err) { page = ""; }
+      setTimeout(function () { autoTidy(page); }, 0);
     });
     box.addEventListener("dragover", function (ev) {
       if (pictureIn(ev.dataTransfer)) ev.preventDefault();
@@ -7446,7 +7586,9 @@ a.btn[hidden] { display: none; }
           mended++;
           continue;
         }
-        /* And the rest of a block is the block, not a stack of headings. */
+        /* And the rest of a block is the block, not a stack of headings —
+           a stack being headings with nothing between them. One standing
+           over notes of its own is the heading it looks like. */
         if (heads > 1) { lines[i] = "- " + head[1]; mended++; }
         else { joined = false; continue; }
       }
@@ -7498,6 +7640,10 @@ a.btn[hidden] { display: none; }
         mended++;
       }
       joined = false;
+      /* A line of the block ends whatever run of headings came before it.
+         A heading does not, even once it has been read as a line: what the
+         run is counting is headings written one after another. */
+      if (!head) heads = 0;
 
       /* A sentence to complete is numbered before it and has its box after
          it, so the box the paste broke onto its own line belongs to the end
@@ -7568,6 +7714,40 @@ a.btn[hidden] { display: none; }
       lines[i] = lines[i].replace(/^(\s*\?\s*)notes/, "$1sentence");
       mended++;
     }
+    return mended;
+  }
+
+  /* A block of notes under one heading and then another block under
+     another, saved as one long list because nothing was looking for the
+     second heading. The page says which lines are the notes by putting its
+     own bullet on them, and a line among them without one, carrying no box
+     and starting a sentence it does not finish, is the heading over the
+     next lot. */
+  function mendHeads(lines) {
+    var mended = 0, kind = "", starred = 0, mine = [];
+
+    function flush() {
+      if (starred > 1) {
+        mine.forEach(function (at) { lines[at] = lines[at].replace(/^(\s*)-\s+/, "$1# "); mended++; });
+      }
+      mine = [];
+      starred = 0;
+    }
+
+    for (var i = 0; i < lines.length; i++) {
+      var q = /^\s*\?\s*([A-Za-z]+)/.exec(lines[i]);
+      if (q) { flush(); kind = q[1].toLowerCase(); continue; }
+      if (kind !== "notes") continue;
+      var li = /^\s*-\s+(.*)$/.exec(lines[i]);
+      if (!li) { if (lines[i].trim() && !/^\s*#/.test(lines[i])) flush(); continue; }
+      if (/^[*\u2022]\s/.test(li[1])) { starred++; continue; }
+      if (li[1].length < 60 && !/___\{/.test(li[1])
+          && /\s/.test(li[1].trim())
+          && /^[A-Z"'\u201c]/.test(li[1]) && !/[.:;,]$/.test(li[1])) {
+        mine.push(i);
+      }
+    }
+    flush();
     return mended;
   }
 
@@ -7783,6 +7963,7 @@ a.btn[hidden] { display: none; }
        three passes. */
     for (var g = 0; g < 20 && mendTwo(out); g++) mended++;
     mended += mendBody(out);
+    mended += mendHeads(out);
     mended += mendSaid(out);
     mended += mendTable(out);
     mended += mendShort(out);
@@ -7791,9 +7972,14 @@ a.btn[hidden] { display: none; }
 
   /* The same reading the button does, done without being asked, and silent
      about everything except what it found. */
-  function autoTidy() {
+  function autoTidy(page) {
     var box = quizBox();
     var raw = String(box.value || "");
+    /* What the page itself said, where the clipboard was carrying it. The
+       box holds the flattened text either way — that is what a textarea
+       takes — so this is the same paste, set out the way the page had it
+       rather than the way the copying managed. */
+    if (page && !/^\s*\?\s*[A-Za-z]/m.test(raw)) raw = page;
     if (!raw.trim()) { queuePreview(); return; }
     /* Marks pasted in are a set written somewhere else, carrying whatever
        the build that wrote it could not read. Marks arrive three ways — the

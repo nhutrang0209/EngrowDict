@@ -2236,6 +2236,121 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
      && !!kept.doc.querySelector('#quiz-pane .qline .gap-n'),
      'bulleted, and numbered where the gaps are');
 
+  /* --- the page, not just the words off it ---------------------------------
+
+     Every reading in the importer is an attempt to work out, from plain
+     text, something the page knew and the plain text threw away: which lines
+     were one row, which were headings, where a box stood and what number it
+     had. Copying a web page flattens all of that into characters, and the
+     flattening loses a different thing on every paper — which is why each
+     new kind of task arrived with a new way of coming out wrong.
+
+     It need not be worked out. A copy from a browser carries the page as
+     well as the words: the clipboard holds text/html beside text/plain, and
+     the html still has the rows, the cells, the headings and the boxes.
+
+     The notes below are the case the words alone cannot settle. "* occurs in
+     (12) ... England" is one row of a table; so is "* its caterpillars are
+     confined to a narrow range of (10) ...", and the line after that one is
+     a heading. Flattened, those two are the same shape — a line ending in a
+     box, then a line starting with a capital — and no rule about the words
+     tells them apart. The row does. */
+  const PAGE = [
+    '<p>Complete the notes below. Write ONE WORD ONLY for each answer.</p>',
+    '<table><tbody>',
+    '<tr><td>The Small Blue butterfly</td></tr>',
+    '<tr><td>* forms sizeable<span>(7)</span> <span>...</span></td></tr>',
+    '<tr><td>* breeds more than once annually</td></tr>',
+    '<tr><td>The High Brown Fritillary butterfly</td></tr>',
+    '<tr><td>* is regarded as more<span>(8)</span> <span>...</span>',
+    'than other species</td></tr>',
+    '<tr><td>* its caterpillars keep to a narrow range of<span>(9)</span>',
+    ' <span>...</span></td></tr>',
+    '<tr><td>The White Admiral butterfly</td></tr>',
+    '<tr><td>* occurs in<span>(10)</span> <span>...</span>',
+    'England</td></tr>',
+    '</tbody></table>',
+  ].join('\n');
+
+  /* What a textarea is given, which is all the old reading ever saw. */
+  const FLAT = [
+    'Complete the notes below. Write ONE WORD ONLY for each answer.',
+    'The Small Blue butterfly',
+    '* forms sizeable', '(7)', '...',
+    '* breeds more than once annually',
+    'The High Brown Fritillary butterfly',
+    '* is regarded as more', '(8)', '...', 'than other species',
+    '* its caterpillars keep to a narrow range of', '(9)', '...',
+    'The White Admiral butterfly',
+    '* occurs in', '(10)', '...', 'England',
+  ].join('\n');
+
+  function pastePage(g, text, html) {
+    const box = g.doc.getElementById('quiz-body');
+    box.value = text;
+    const ev = new g.window.Event('paste', { bubbles: true });
+    ev.clipboardData = {
+      types: html ? ['text/html', 'text/plain'] : ['text/plain'],
+      items: [], files: [],
+      getData: t => (t === 'text/html' ? (html || '') : text),
+    };
+    box.dispatchEvent(ev);
+    return box;
+  }
+
+  const page = mk(null, unlockedStore());
+  await wait(900);
+  click(page.window, tabQ(page));
+  await wait(50);
+  click(page.window, page.doc.getElementById('add-word'));
+  await wait(40);
+  pastePage(page, FLAT, PAGE);
+  await wait(400);
+  const pageGot = page.doc.getElementById('quiz-body').value;
+
+  ok('a paste off a browser is read as the page, not as the words alone',
+     /^\? notes 7$/m.test(pageGot),
+     (pageGot.match(/^\? \w+.*/m) || [])[0]);
+  ok('  so a row that ran onto a second line is still one row',
+     /^- \* is regarded as more ___\{\} than other species$/m.test(pageGot),
+     (pageGot.match(/^- \* is regarded.*/m) || [])[0]);
+  ok('  and a word the row ended on stays in the row it ended',
+     /^- \* occurs in ___\{\} England$/m.test(pageGot),
+     (pageGot.match(/^- \* occurs in.*/m) || [])[0]);
+  ok('  while a heading in a row of its own is a heading',
+     (pageGot.match(/^# /gm) || []).length === 3
+     && /^# The White Admiral butterfly$/m.test(pageGot),
+     (pageGot.match(/^# .*/gm) || []).join(' / '));
+  ok('  with the number and the box it was drawn beside counted once',
+     (pageGot.match(/___\{\}/g) || []).length === 4
+     && /^4 questions · 7–10/.test(
+       page.doc.getElementById('quiz-tally').textContent),
+     page.doc.getElementById('quiz-tally').textContent);
+
+  /* And the words alone still read as well as words alone can: the rows that
+     ran on cannot be put back, because nothing in the text says they ran on,
+     but nothing else is lost. */
+  const flat = mk(null, unlockedStore());
+  await wait(900);
+  click(flat.window, tabQ(flat));
+  await wait(50);
+  click(flat.window, flat.doc.getElementById('add-word'));
+  await wait(40);
+  pastePage(flat, FLAT, '');
+  await wait(400);
+  const fgot = flat.doc.getElementById('quiz-body').value;
+
+  ok('a paste with no page behind it is still read for everything else',
+     /^\? notes 7$/m.test(fgot)
+     && (fgot.match(/___\{\}/g) || []).length === 4,
+     (fgot.match(/___\{\}/g) || []).length + ' boxes');
+  ok('  the headings among the bulleted notes among them',
+     /^# The High Brown Fritillary butterfly$/m.test(fgot),
+     (fgot.match(/^# .*/gm) || []).join(' / '));
+  ok('  and the box still counted once, not once for its number and once '
+     + 'for the space beside it',
+     !/___\{\}\s+___\{\}/.test(fgot), 'once each');
+
   /* --- labelling a diagram ------------------------------------------------
 
      The one task where the answer comes before the words: a box, then what
@@ -2422,5 +2537,5 @@ const nums = g => [...g.doc.querySelectorAll('#quiz-pane .qnum, #quiz-pane .gap-
                      old88.errs, down.errs, dark.errs, stale.errs, fresh.errs,
                      band.errs, other.errs, fig.errs, named.errs, heads.errs,
                      lab.errs, listed.errs, unglued.errs, apart.errs, look.errs,
-                     para.errs, rowset.errs, sums.errs, boxed.errs, trio.errs, revisit.errs, held.errs, owing.errs, two.errs, older.errs, fine.errs, tbl.errs, sport.errs, kept.errs));
+                     para.errs, rowset.errs, sums.errs, boxed.errs, trio.errs, revisit.errs, held.errs, owing.errs, two.errs, older.errs, fine.errs, tbl.errs, sport.errs, kept.errs, page.errs, flat.errs));
 })();
